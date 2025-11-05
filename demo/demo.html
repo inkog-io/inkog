@@ -397,18 +397,14 @@
             <div class="controls">
                 <button class="btn-scan" id="scanBtn">Scan Code</button>
                 <button class="btn-reset" id="resetBtn">Reset</button>
-                <select id="speedSelect">
-                    <option value="slow">Slow</option>
-                    <option value="normal" selected>Normal</option>
-                    <option value="fast">Fast</option>
-                </select>
             </div>
         </div>
 
         <!-- Tabs -->
         <div class="tabs">
-            <button class="tab active" data-tab="sample">Example Agent</button>
-            <button class="tab" data-tab="custom">Try Your Own</button>
+            <button class="tab active" data-tab="langchain">Example Langchain Agent</button>
+            <button class="tab" data-tab="crewai">Example CrewAI Agent</button>
+            <button class="tab" data-tab="custom">Bring your own Agent</button>
         </div>
 
         <!-- Main Content -->
@@ -417,9 +413,14 @@
             <div class="panel">
                 <div class="panel-title">Source Code</div>
 
-                <!-- Sample Code Tab -->
-                <div id="sample" class="tab-content active">
-                    <div class="code-container" id="codeContainer"></div>
+                <!-- Langchain Code Tab -->
+                <div id="langchain" class="tab-content active">
+                    <div class="code-container" id="codeContainerLangchain"></div>
+                </div>
+
+                <!-- CrewAI Code Tab -->
+                <div id="crewai" class="tab-content">
+                    <div class="code-container" id="codeContainerCrewai"></div>
                 </div>
 
                 <!-- Custom Code Tab -->
@@ -427,7 +428,8 @@
                     <textarea
                         id="customCode"
                         class="code-textarea"
-                        placeholder="Paste your Python code here...
+                        placeholder="Paste your Python agent code here...
+
 Example:
 import os
 from langchain.agents import AgentExecutor
@@ -468,7 +470,7 @@ prompt = f'Process: {user_input}'"></textarea>
     </div>
 
     <script>
-        const sampleCode = `import os
+        const langchainCode = `import os
 from langchain.agents import AgentExecutor, create_react_agent
 from langchain_openai import ChatOpenAI
 from langchain.tools import tool
@@ -503,7 +505,49 @@ def process_request(user_input: str):
 
 JWT_SECRET = "super-secret-key-12345"`;
 
-        const sampleFindings = [
+        const crewaiCode = `from crewai import Agent, Task, Crew
+from langchain_openai import ChatOpenAI
+
+# Hardcoded credentials - VULNERABLE
+OPENAI_API_KEY = "sk-proj-abcdefghij1234567890xyz"
+ANTHROPIC_API_KEY = "sk-ant-1234567890abcdefghij"
+
+class ResearchCrew:
+    def __init__(self, topic: str):
+        self.topic = topic
+        self.llm = ChatOpenAI(api_key=OPENAI_API_KEY)
+
+    def create_agents(self):
+        # Prompt injection vulnerabilities
+        researcher = Agent(
+            role="Researcher",
+            goal=f"Research topic: {self.topic}",
+            description=f"Execute user request: {self.user_input}",
+            llm=self.llm
+        )
+
+        return researcher
+
+    def execute(self):
+        # Infinite loop - VULNERABLE
+        while True:
+            try:
+                task = Task(
+                    description=f"Process: {self.topic}",
+                    agent=self.researcher
+                )
+                return task.execute()
+            except:
+                pass
+
+    def get_api_key(self):
+        # Unsafe environment access - VULNERABLE
+        return os.environ["API_KEY"]
+
+DATABASE_URL = os.environ["DATABASE_URL"]
+JWT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`;
+
+        const langchainFindings = [
             {
                 pattern: 'Hardcoded Credentials',
                 severity: 'high',
@@ -570,8 +614,75 @@ JWT_SECRET = "super-secret-key-12345"`;
             }
         ];
 
-        let currentCode = sampleCode;
-        let currentTab = 'sample';
+        const crewaiFindings = [
+            {
+                pattern: 'Hardcoded Credentials',
+                severity: 'high',
+                line: 5,
+                message: 'API key detected in source code',
+                cwe: 'CWE-798',
+                cvss: '9.1'
+            },
+            {
+                pattern: 'Hardcoded Credentials',
+                severity: 'high',
+                line: 6,
+                message: 'API key detected in source code',
+                cwe: 'CWE-798',
+                cvss: '9.1'
+            },
+            {
+                pattern: 'Prompt Injection',
+                severity: 'high',
+                line: 12,
+                message: 'User input directly interpolated in f-string',
+                cwe: 'CWE-94',
+                cvss: '8.8'
+            },
+            {
+                pattern: 'Prompt Injection',
+                severity: 'high',
+                line: 13,
+                message: 'User input directly interpolated in f-string',
+                cwe: 'CWE-94',
+                cvss: '8.8'
+            },
+            {
+                pattern: 'Infinite Loop',
+                severity: 'high',
+                line: 19,
+                message: 'Missing break condition in while loop',
+                cwe: 'CWE-835',
+                cvss: '7.5'
+            },
+            {
+                pattern: 'Unsafe Environment Access',
+                severity: 'medium',
+                line: 25,
+                message: 'Missing default value for environment variable',
+                cwe: 'CWE-665',
+                cvss: '6.5'
+            },
+            {
+                pattern: 'Unsafe Environment Access',
+                severity: 'medium',
+                line: 27,
+                message: 'Missing default value for environment variable',
+                cwe: 'CWE-665',
+                cvss: '6.5'
+            },
+            {
+                pattern: 'Hardcoded Credentials',
+                severity: 'high',
+                line: 28,
+                message: 'JWT token detected in source code',
+                cwe: 'CWE-798',
+                cvss: '9.1'
+            }
+        ];
+
+        let currentCode = langchainCode;
+        let currentTab = 'langchain';
 
         // Tab switching
         document.querySelectorAll('.tab').forEach(tab => {
@@ -581,16 +692,27 @@ JWT_SECRET = "super-secret-key-12345"`;
                 document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
                 e.target.classList.add('active');
                 document.getElementById(currentTab).classList.add('active');
+
+                // Display code for selected tab
+                if (currentTab === 'langchain') {
+                    displayCode(langchainCode, 'langchain');
+                } else if (currentTab === 'crewai') {
+                    displayCode(crewaiCode, 'crewai');
+                }
+
                 resetScan();
             });
         });
 
-        function displayCode(code) {
+        function displayCode(code, tab) {
             const lines = code.split('\n');
-            const codeContainer = document.getElementById('codeContainer');
-            codeContainer.innerHTML = lines.map((line, idx) => {
-                return `<div class="code-line" id="line-${idx + 1}">${(idx + 1).toString().padStart(2, '0')}  ${escapeHtml(line)}</div>`;
-            }).join('');
+            let containerId = 'codeContainer' + (tab.charAt(0).toUpperCase() + tab.slice(1));
+            const codeContainer = document.getElementById(containerId);
+            if (codeContainer) {
+                codeContainer.innerHTML = lines.map((line, idx) => {
+                    return `<div class="code-line" id="line-${idx + 1}">${(idx + 1).toString().padStart(2, '0')}  ${escapeHtml(line)}</div>`;
+                }).join('');
+            }
         }
 
         function escapeHtml(text) {
@@ -605,8 +727,7 @@ JWT_SECRET = "super-secret-key-12345"`;
         }
 
         function getSpeedMultiplier() {
-            const speeds = { slow: 1.0, normal: 0.6, fast: 0.3 };
-            return speeds[document.getElementById('speedSelect').value] || 0.6;
+            return 0.6; // Normal speed
         }
 
         function analyzeCustomCode(code) {
@@ -690,10 +811,14 @@ JWT_SECRET = "super-secret-key-12345"`;
             });
 
             let findings = [];
-            if (currentTab === 'sample') {
-                currentCode = sampleCode;
-                findings = sampleFindings;
-                displayCode(currentCode);
+            if (currentTab === 'langchain') {
+                currentCode = langchainCode;
+                findings = langchainFindings;
+                displayCode(currentCode, 'langchain');
+            } else if (currentTab === 'crewai') {
+                currentCode = crewaiCode;
+                findings = crewaiFindings;
+                displayCode(currentCode, 'crewai');
             } else {
                 const customText = document.getElementById('customCode').value;
                 if (!customText.trim()) {
@@ -703,7 +828,7 @@ JWT_SECRET = "super-secret-key-12345"`;
                 }
                 currentCode = customText;
                 findings = analyzeCustomCode(customText);
-                displayCode(customText);
+                displayCode(currentCode, 'custom');
             }
 
             const startTime = performance.now();
@@ -779,8 +904,9 @@ JWT_SECRET = "super-secret-key-12345"`;
             });
         }
 
-        // Initialize
-        displayCode(sampleCode);
+        // Initialize all code containers
+        displayCode(langchainCode, 'langchain');
+        displayCode(crewaiCode, 'crewai');
         document.getElementById('scanBtn').addEventListener('click', runScan);
         document.getElementById('resetBtn').addEventListener('click', resetScan);
     </script>
