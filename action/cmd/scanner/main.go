@@ -184,19 +184,44 @@ func scanFile(filePath string, content []byte) []Finding {
 		}
 	}
 
-	// Pattern 2: Hardcoded API Keys
-	apiKeyRegex := regexp.MustCompile(`(api[_-]?key|secret[_-]?key|token|password)\s*[=:]\s*["']([a-zA-Z0-9_-]{20,})["']`)
+	// Pattern 2: Hardcoded API Keys and Credentials
+	// Multiple patterns to catch different credential formats
+	apiKeyPatterns := []struct {
+		regex    *regexp.Regexp
+		name     string
+		severity string
+	}{
+		// Known API key prefixes (OpenAI, Stripe, GitHub, Anthropic, etc.)
+		{regexp.MustCompile(`(sk-|sk_|sk_live_|ghp_|sk-ant-)[a-zA-Z0-9_-]{20,}`), "Known API Key Format", "high"},
+		// Variable names with "key", "secret", "token", "password" with long values
+		{regexp.MustCompile(`(api_?key|secret_?key|secret|token|password|api_?secret)\s*[=:]\s*["']([a-zA-Z0-9_\-\.]{15,})["']`), "Hardcoded Credential", "high"},
+		// Credentials assigned without quotes (dangerous)
+		{regexp.MustCompile(`(OPENAI|STRIPE|GITHUB|ANTHROPIC|DATABASE|API|SECRET|TOKEN)_?(KEY|PASSWORD|SECRET|TOKEN)\s*=\s*["']([a-zA-Z0-9_\-\.]{15,})["']`), "Hardcoded Credential", "high"},
+		// JWT and other token patterns
+		{regexp.MustCompile(`(jwt|token|auth|bearer)\s*[=:]\s*["']([a-zA-Z0-9_\-\.]{20,})["']`), "Hardcoded Token", "high"},
+		// Database credentials
+		{regexp.MustCompile(`(db_?password|db_?user|db_?host|database_?url)\s*[=:]\s*["']([^"']{8,})["']`), "Hardcoded Database Credential", "high"},
+	}
+
 	for i, line := range lines {
-		if apiKeyRegex.MatchString(line) && !strings.HasPrefix(strings.TrimSpace(line), "#") {
-			findings = append(findings, Finding{
-				ID:       "hardcoded_key_" + fmt.Sprintf("%d", i),
-				Pattern:  "Hardcoded Credentials",
-				Severity: "high",
-				File:     filePath,
-				Line:     i + 1,
-				Message:  "Hardcoded API key or credential detected",
-				Code:     line,
-			})
+		trimmedLine := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmedLine, "#") || strings.HasPrefix(trimmedLine, "//") {
+			continue
+		}
+
+		for _, pattern := range apiKeyPatterns {
+			if pattern.regex.MatchString(line) {
+				findings = append(findings, Finding{
+					ID:       "hardcoded_credential_" + fmt.Sprintf("%d", i),
+					Pattern:  "Hardcoded Credentials",
+					Severity: "high",
+					File:     filePath,
+					Line:     i + 1,
+					Message:  "Hardcoded API key, credential, or token detected in source code",
+					Code:     line,
+				})
+				break // Only add once per line
+			}
 		}
 	}
 
