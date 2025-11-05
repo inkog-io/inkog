@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inkog Security Scanner Demo</title>
+    <title>Inkog Security Scanner - Interactive Demo</title>
     <style>
         * {
             margin: 0;
@@ -12,34 +12,67 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #f5f5f5;
-            padding: 20px;
-            color: #333;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1a202c 100%);
+            min-height: 100vh;
+            padding: 24px;
+            color: #e2e8f0;
         }
 
         .container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            background: #1e293b;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
             overflow: hidden;
+            border: 1px solid #334155;
         }
 
         .header {
-            background: #1e1e1e;
-            color: white;
-            padding: 20px 30px;
+            background: linear-gradient(135deg, #0f172a 0%, #1a1f3a 100%);
+            padding: 32px 40px;
+            border-bottom: 1px solid #334155;
+        }
+
+        .header-content {
             display: flex;
             justify-content: space-between;
             align-items: center;
+            gap: 20px;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .header-icon {
+            font-size: 28px;
+        }
+
+        .header-title {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
         }
 
         .title {
-            font-size: 24px;
-            font-weight: 600;
+            font-size: 26px;
+            font-weight: 700;
             letter-spacing: -0.5px;
+            background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            font-size: 12px;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
 
         .controls {
@@ -49,140 +82,165 @@
         }
 
         button {
-            padding: 10px 20px;
+            padding: 12px 24px;
             border: none;
-            border-radius: 4px;
+            border-radius: 8px;
             font-size: 13px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
         .btn-scan {
-            background: #667eea;
+            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
             color: white;
+            box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3);
         }
 
         .btn-scan:hover {
-            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 12px 28px rgba(59, 130, 246, 0.4);
         }
 
         .btn-scan:disabled {
-            background: #999;
+            background: #475569;
             cursor: not-allowed;
+            box-shadow: none;
+            transform: none;
         }
 
         .btn-reset {
-            background: #f0f0f0;
-            color: #333;
+            background: #334155;
+            color: #cbd5e1;
         }
 
         .btn-reset:hover {
-            background: #e0e0e0;
-        }
-
-        select {
-            padding: 8px 12px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 13px;
-            background: white;
-            cursor: pointer;
+            background: #475569;
+            color: #f1f5f9;
         }
 
         .tabs {
             display: flex;
-            border-bottom: 1px solid #e0e0e0;
-            background: #f9f9f9;
+            border-bottom: 1px solid #334155;
+            background: #0f172a;
+            padding: 0 40px;
         }
 
         .tab {
-            padding: 12px 24px;
+            padding: 16px 24px;
             background: none;
             border: none;
             cursor: pointer;
             font-size: 13px;
             font-weight: 600;
-            color: #666;
+            color: #94a3b8;
             border-bottom: 2px solid transparent;
             transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
         .tab:hover {
-            color: #333;
+            color: #cbd5e1;
         }
 
         .tab.active {
-            color: #667eea;
-            border-bottom-color: #667eea;
+            color: #60a5fa;
+            border-bottom-color: #3b82f6;
         }
 
         .content {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 0;
-            min-height: 600px;
+            min-height: 700px;
+            background: #1e293b;
         }
 
         .panel {
-            padding: 30px;
-            border-right: 1px solid #e0e0e0;
+            padding: 40px;
+            border-right: 1px solid #334155;
             display: flex;
             flex-direction: column;
+            overflow: hidden;
         }
 
         .panel:last-child {
             border-right: none;
+            background: #0f172a;
         }
 
         .panel-title {
-            font-size: 12px;
+            font-size: 11px;
             font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: 1px;
-            color: #999;
-            margin-bottom: 16px;
+            letter-spacing: 1.5px;
+            color: #64748b;
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #334155;
+        }
+
+        .tab-content {
+            display: none;
+            flex-direction: column;
+            flex: 1;
+        }
+
+        .tab-content.active {
+            display: flex;
         }
 
         .code-container {
             flex: 1;
-            background: #1e1e1e;
-            border-radius: 4px;
-            padding: 16px;
+            background: #0f172a;
+            border-radius: 8px;
+            padding: 20px;
             overflow: auto;
-            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-            font-size: 12px;
-            line-height: 1.6;
-            color: #d4d4d4;
+            font-family: 'Fira Code', 'Monaco', 'Menlo', monospace;
+            font-size: 13px;
+            line-height: 1.7;
+            color: #e2e8f0;
+            border: 1px solid #334155;
         }
 
         .code-line {
             display: block;
             white-space: pre-wrap;
             word-wrap: break-word;
-            padding: 2px 4px;
-            margin: 0 -4px;
-            border-radius: 2px;
-            transition: all 0.3s ease;
+            padding: 2px 8px;
+            margin: 0 -8px;
+            border-radius: 4px;
+            transition: all 0.2s ease;
         }
 
         .code-line.highlight {
-            background: rgba(220, 53, 69, 0.3);
-            border-left: 3px solid #dc3545;
-            padding-left: 8px;
+            background: rgba(239, 68, 68, 0.15);
+            border-left: 3px solid #ef4444;
+            padding-left: 12px;
+            box-shadow: inset 0 0 20px rgba(239, 68, 68, 0.1);
         }
 
         .code-textarea {
             flex: 1;
-            background: #1e1e1e;
-            border-radius: 4px;
-            padding: 16px;
-            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-            font-size: 12px;
-            line-height: 1.6;
-            color: #d4d4d4;
-            border: 1px solid #333;
+            background: #0f172a;
+            border-radius: 8px;
+            padding: 20px;
+            font-family: 'Fira Code', 'Monaco', 'Menlo', monospace;
+            font-size: 13px;
+            line-height: 1.7;
+            color: #e2e8f0;
+            border: 1px solid #334155;
             resize: none;
+            transition: all 0.3s ease;
+        }
+
+        .code-textarea:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.2);
         }
 
         .findings-container {
@@ -198,34 +256,56 @@
             align-items: center;
             justify-content: center;
             height: 100%;
-            color: #999;
+            color: #64748b;
             text-align: center;
             font-size: 14px;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .findings-empty-icon {
+            font-size: 40px;
+            opacity: 0.5;
         }
 
         .finding {
-            padding: 14px;
+            padding: 16px;
             border-left: 4px solid;
-            border-radius: 4px;
-            background: #f9f9f9;
-            border: 1px solid #e0e0e0;
-            animation: slideIn 0.4s ease-out;
+            border-radius: 6px;
+            background: #1e293b;
+            border: 1px solid #334155;
+            animation: slideInRight 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+            transition: all 0.3s ease;
+        }
+
+        .finding:hover {
+            background: #293548;
+            transform: translateX(4px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
         }
 
         .finding.high {
-            border-left-color: #dc3545;
-            background: #fff5f5;
+            border-left-color: #ef4444;
+            background: rgba(239, 68, 68, 0.05);
+        }
+
+        .finding.high:hover {
+            background: rgba(239, 68, 68, 0.1);
         }
 
         .finding.medium {
-            border-left-color: #ffc107;
-            background: #fffbf0;
+            border-left-color: #f59e0b;
+            background: rgba(245, 158, 11, 0.05);
         }
 
-        @keyframes slideIn {
+        .finding.medium:hover {
+            background: rgba(245, 158, 11, 0.1);
+        }
+
+        @keyframes slideInRight {
             from {
                 opacity: 0;
-                transform: translateX(-10px);
+                transform: translateX(-20px);
             }
             to {
                 opacity: 1;
@@ -236,106 +316,156 @@
         .finding-header {
             display: flex;
             align-items: center;
-            gap: 10px;
-            margin-bottom: 8px;
+            gap: 12px;
+            margin-bottom: 10px;
         }
 
         .finding-badge {
             display: inline-block;
-            font-size: 10px;
+            font-size: 9px;
             font-weight: 700;
-            padding: 3px 8px;
-            border-radius: 3px;
+            padding: 4px 10px;
+            border-radius: 4px;
             text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
         .finding-badge.high {
-            background: #dc3545;
-            color: white;
+            background: rgba(239, 68, 68, 0.2);
+            color: #fca5a5;
         }
 
         .finding-badge.medium {
-            background: #ffc107;
-            color: #333;
+            background: rgba(245, 158, 11, 0.2);
+            color: #fcd34d;
         }
 
         .finding-name {
             font-weight: 600;
-            color: #333;
-            font-size: 13px;
+            color: #f1f5f9;
+            font-size: 14px;
         }
 
         .finding-meta {
             font-size: 11px;
-            color: #999;
+            color: #94a3b8;
             display: flex;
-            gap: 8px;
-            margin-top: 6px;
+            gap: 12px;
+            margin-top: 8px;
+            flex-wrap: wrap;
+        }
+
+        .finding-meta span {
+            padding: 2px 8px;
+            background: #0f172a;
+            border-radius: 3px;
+            border: 1px solid #334155;
         }
 
         .finding-message {
             font-size: 12px;
-            color: #666;
+            color: #cbd5e1;
             line-height: 1.5;
-            margin-top: 6px;
+            margin-top: 8px;
         }
 
         .finding-standard {
             font-size: 10px;
-            color: #999;
-            margin-top: 6px;
-            padding-top: 6px;
-            border-top: 1px solid #e0e0e0;
+            color: #64748b;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid #334155;
         }
 
         .metrics {
-            padding: 20px 30px;
-            background: #f9f9f9;
-            border-top: 1px solid #e0e0e0;
+            padding: 32px 40px;
+            background: #0f172a;
+            border-top: 1px solid #334155;
             display: grid;
             grid-template-columns: repeat(4, 1fr);
-            gap: 20px;
-            text-align: center;
+            gap: 24px;
         }
 
         .metric {
             display: flex;
             flex-direction: column;
-            align-items: center;
+            align-items: flex-start;
         }
 
         .metric-value {
-            font-size: 24px;
+            font-size: 32px;
             font-weight: 700;
-            color: #667eea;
-            margin-bottom: 4px;
+            background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
         }
 
         .metric-label {
             font-size: 11px;
-            color: #999;
+            color: #64748b;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+            font-weight: 600;
         }
 
-        .tab-content {
-            display: none;
+        .metric-bar {
+            width: 100%;
+            height: 4px;
+            background: #334155;
+            border-radius: 2px;
+            margin-top: 8px;
+            overflow: hidden;
         }
 
-        .tab-content.active {
-            display: flex;
-            flex-direction: column;
-            flex: 1;
+        .metric-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%);
+            border-radius: 2px;
+            animation: fillBar 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
 
-        @media (max-width: 1024px) {
+        @keyframes fillBar {
+            from {
+                width: 0;
+            }
+            to {
+                width: var(--fill-percentage);
+            }
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+
+        @media (max-width: 1200px) {
             .content {
                 grid-template-columns: 1fr;
+                min-height: auto;
             }
 
             .panel {
                 border-right: none;
-                border-bottom: 1px solid #e0e0e0;
+                border-bottom: 1px solid #334155;
+            }
+
+            .panel:last-child {
+                border-bottom: none;
             }
 
             .metrics {
@@ -343,51 +473,55 @@
             }
         }
 
-        @media (max-width: 640px) {
+        @media (max-width: 768px) {
+            .container {
+                border-radius: 0;
+                margin: -24px;
+                width: calc(100% + 48px);
+                min-height: 100vh;
+            }
+
             .header {
+                padding: 24px;
+            }
+
+            .header-content {
                 flex-direction: column;
-                gap: 12px;
                 align-items: flex-start;
             }
 
-            .controls {
-                width: 100%;
-                flex-wrap: wrap;
+            .panel {
+                padding: 24px;
             }
 
-            button, select {
-                flex: 1;
-                min-width: 100px;
+            .controls {
+                flex-direction: column;
+                width: 100%;
+            }
+
+            button {
+                width: 100%;
+            }
+
+            .tabs {
+                padding: 0;
+                overflow-x: auto;
+            }
+
+            .tab {
+                padding: 12px 16px;
+                white-space: nowrap;
             }
 
             .metrics {
                 grid-template-columns: 1fr;
+                padding: 24px;
             }
 
-            .content {
-                min-height: 400px;
+            .code-container,
+            .code-textarea {
+                font-size: 12px;
             }
-
-            .panel {
-                padding: 20px;
-            }
-        }
-
-        ::-webkit-scrollbar {
-            width: 6px;
-        }
-
-        ::-webkit-scrollbar-track {
-            background: #f1f1f1;
-        }
-
-        ::-webkit-scrollbar-thumb {
-            background: #ccc;
-            border-radius: 3px;
-        }
-
-        ::-webkit-scrollbar-thumb:hover {
-            background: #999;
         }
     </style>
 </head>
@@ -395,10 +529,18 @@
     <div class="container">
         <!-- Header -->
         <div class="header">
-            <div class="title">Inkog Security Scanner</div>
-            <div class="controls">
-                <button class="btn-scan" id="scanBtn">Scan Code</button>
-                <button class="btn-reset" id="resetBtn">Reset</button>
+            <div class="header-content">
+                <div class="header-left">
+                    <div class="header-icon">🔒</div>
+                    <div class="header-title">
+                        <div class="title">Inkog</div>
+                        <div class="subtitle">AI Agent Security Scanner</div>
+                    </div>
+                </div>
+                <div class="controls">
+                    <button class="btn-scan" id="scanBtn">Scan Code</button>
+                    <button class="btn-reset" id="resetBtn">Reset</button>
+                </div>
             </div>
         </div>
 
@@ -430,14 +572,7 @@
                     <textarea
                         id="customCode"
                         class="code-textarea"
-                        placeholder="Paste your Python agent code here...
-
-Example:
-import os
-from langchain.agents import AgentExecutor
-
-OPENAI_API_KEY = 'sk-proj-...'
-prompt = f'Process: {user_input}'"></textarea>
+                        placeholder="Paste your Python agent code here...&#10;&#10;Example:&#10;import os&#10;OPENAI_API_KEY = 'sk-proj-...'&#10;prompt = f'Process: {user_input}'&#10;while True:&#10;    pass"></textarea>
                 </div>
             </div>
 
@@ -445,7 +580,10 @@ prompt = f'Process: {user_input}'"></textarea>
             <div class="panel">
                 <div class="panel-title">Scan Results</div>
                 <div class="findings-container" id="findingsContainer">
-                    <div class="findings-empty">Click "Scan Code" to analyze</div>
+                    <div class="findings-empty">
+                        <div class="findings-empty-icon">📋</div>
+                        <div>Click "Scan Code" to analyze</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -550,143 +688,32 @@ DATABASE_URL = os.environ["DATABASE_URL"]
 JWT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`;
 
         const langchainFindings = [
-            {
-                pattern: 'Hardcoded Credentials',
-                severity: 'high',
-                line: 7,
-                message: 'API key detected in source code',
-                cwe: 'CWE-798',
-                cvss: '9.1'
-            },
-            {
-                pattern: 'Hardcoded Credentials',
-                severity: 'high',
-                line: 8,
-                message: 'Database password exposed in source',
-                cwe: 'CWE-798',
-                cvss: '9.1'
-            },
-            {
-                pattern: 'Prompt Injection',
-                severity: 'high',
-                line: 15,
-                message: 'User input directly interpolated in f-string',
-                cwe: 'CWE-94',
-                cvss: '8.8'
-            },
-            {
-                pattern: 'Prompt Injection',
-                severity: 'high',
-                line: 16,
-                message: 'User input directly interpolated in f-string',
-                cwe: 'CWE-94',
-                cvss: '8.8'
-            },
-            {
-                pattern: 'Infinite Loop',
-                severity: 'high',
-                line: 20,
-                message: 'Missing break condition in while loop',
-                cwe: 'CWE-835',
-                cvss: '7.5'
-            },
-            {
-                pattern: 'Unsafe Environment Access',
-                severity: 'medium',
-                line: 24,
-                message: 'Missing default value for environment variable',
-                cwe: 'CWE-665',
-                cvss: '6.5'
-            },
-            {
-                pattern: 'Prompt Injection',
-                severity: 'high',
-                line: 28,
-                message: 'User input directly interpolated in f-string',
-                cwe: 'CWE-94',
-                cvss: '8.8'
-            },
-            {
-                pattern: 'Hardcoded Credentials',
-                severity: 'high',
-                line: 31,
-                message: 'JWT secret exposed in source code',
-                cwe: 'CWE-798',
-                cvss: '9.1'
-            }
+            { pattern: 'Hardcoded Credentials', severity: 'high', line: 7, message: 'API key detected in source code', cwe: 'CWE-798', cvss: '9.1' },
+            { pattern: 'Hardcoded Credentials', severity: 'high', line: 8, message: 'Database password exposed in source', cwe: 'CWE-798', cvss: '9.1' },
+            { pattern: 'Prompt Injection', severity: 'high', line: 15, message: 'User input directly interpolated in f-string', cwe: 'CWE-94', cvss: '8.8' },
+            { pattern: 'Prompt Injection', severity: 'high', line: 16, message: 'User input directly interpolated in f-string', cwe: 'CWE-94', cvss: '8.8' },
+            { pattern: 'Infinite Loop', severity: 'high', line: 20, message: 'Missing break condition in while loop', cwe: 'CWE-835', cvss: '7.5' },
+            { pattern: 'Unsafe Environment Access', severity: 'medium', line: 24, message: 'Missing default value for environment variable', cwe: 'CWE-665', cvss: '6.5' },
+            { pattern: 'Prompt Injection', severity: 'high', line: 28, message: 'User input directly interpolated in f-string', cwe: 'CWE-94', cvss: '8.8' },
+            { pattern: 'Hardcoded Credentials', severity: 'high', line: 31, message: 'JWT secret exposed in source code', cwe: 'CWE-798', cvss: '9.1' }
         ];
 
         const crewaiFindings = [
-            {
-                pattern: 'Hardcoded Credentials',
-                severity: 'high',
-                line: 5,
-                message: 'API key detected in source code',
-                cwe: 'CWE-798',
-                cvss: '9.1'
-            },
-            {
-                pattern: 'Hardcoded Credentials',
-                severity: 'high',
-                line: 6,
-                message: 'API key detected in source code',
-                cwe: 'CWE-798',
-                cvss: '9.1'
-            },
-            {
-                pattern: 'Prompt Injection',
-                severity: 'high',
-                line: 17,
-                message: 'User input directly interpolated in f-string',
-                cwe: 'CWE-94',
-                cvss: '8.8'
-            },
-            {
-                pattern: 'Prompt Injection',
-                severity: 'high',
-                line: 18,
-                message: 'User input directly interpolated in f-string',
-                cwe: 'CWE-94',
-                cvss: '8.8'
-            },
-            {
-                pattern: 'Infinite Loop',
-                severity: 'high',
-                line: 26,
-                message: 'Missing break condition in while loop',
-                cwe: 'CWE-835',
-                cvss: '7.5'
-            },
-            {
-                pattern: 'Unsafe Environment Access',
-                severity: 'medium',
-                line: 38,
-                message: 'Missing default value for environment variable',
-                cwe: 'CWE-665',
-                cvss: '6.5'
-            },
-            {
-                pattern: 'Unsafe Environment Access',
-                severity: 'medium',
-                line: 40,
-                message: 'Missing default value for environment variable',
-                cwe: 'CWE-665',
-                cvss: '6.5'
-            },
-            {
-                pattern: 'Hardcoded Credentials',
-                severity: 'high',
-                line: 41,
-                message: 'JWT token detected in source code',
-                cwe: 'CWE-798',
-                cvss: '9.1'
-            }
+            { pattern: 'Hardcoded Credentials', severity: 'high', line: 5, message: 'API key detected in source code', cwe: 'CWE-798', cvss: '9.1' },
+            { pattern: 'Hardcoded Credentials', severity: 'high', line: 6, message: 'API key detected in source code', cwe: 'CWE-798', cvss: '9.1' },
+            { pattern: 'Prompt Injection', severity: 'high', line: 17, message: 'User input directly interpolated in f-string', cwe: 'CWE-94', cvss: '8.8' },
+            { pattern: 'Prompt Injection', severity: 'high', line: 18, message: 'User input directly interpolated in f-string', cwe: 'CWE-94', cvss: '8.8' },
+            { pattern: 'Infinite Loop', severity: 'high', line: 26, message: 'Missing break condition in while loop', cwe: 'CWE-835', cvss: '7.5' },
+            { pattern: 'Unsafe Environment Access', severity: 'medium', line: 38, message: 'Missing default value for environment variable', cwe: 'CWE-665', cvss: '6.5' },
+            { pattern: 'Unsafe Environment Access', severity: 'medium', line: 40, message: 'Missing default value for environment variable', cwe: 'CWE-665', cvss: '6.5' },
+            { pattern: 'Hardcoded Credentials', severity: 'high', line: 41, message: 'JWT token detected in source code', cwe: 'CWE-798', cvss: '9.1' }
         ];
 
         let currentCode = langchainCode;
         let currentTab = 'langchain';
+        let currentFindings = langchainFindings;
 
-        // Tab switching
+        // Tab switching with proper state management
         document.querySelectorAll('.tab').forEach(tab => {
             tab.addEventListener('click', (e) => {
                 currentTab = e.target.dataset.tab;
@@ -695,11 +722,13 @@ JWT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`;
                 e.target.classList.add('active');
                 document.getElementById(currentTab).classList.add('active');
 
-                // Display code for selected tab
+                // Display appropriate code
                 if (currentTab === 'langchain') {
                     displayCode(langchainCode, 'langchain');
+                    currentFindings = langchainFindings;
                 } else if (currentTab === 'crewai') {
                     displayCode(crewaiCode, 'crewai');
+                    currentFindings = crewaiFindings;
                 }
 
                 resetScan();
@@ -708,36 +737,29 @@ JWT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`;
 
         function displayCode(code, tab) {
             const lines = code.split('\n');
-            let containerId = 'codeContainer' + (tab.charAt(0).toUpperCase() + tab.slice(1));
+            const containerId = tab === 'langchain' ? 'codeContainerLangchain' :
+                               tab === 'crewai' ? 'codeContainerCrewai' :
+                               'codeContainerCustom';
+
             const codeContainer = document.getElementById(containerId);
             if (codeContainer) {
                 codeContainer.innerHTML = lines.map((line, idx) => {
-                    return `<div class="code-line" id="line-${idx + 1}">${(idx + 1).toString().padStart(2, '0')}  ${escapeHtml(line)}</div>`;
+                    const lineNum = (idx + 1).toString().padStart(2, '0');
+                    const escapedLine = escapeHtml(line);
+                    return `<div class="code-line" data-line="${idx + 1}">${lineNum}  ${escapedLine}</div>`;
                 }).join('');
             }
         }
 
         function escapeHtml(text) {
-            const map = {
-                '&': '&amp;',
-                '<': '&lt;',
-                '>': '&gt;',
-                '"': '&quot;',
-                "'": '&#039;'
-            };
+            const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
             return text.replace(/[&<>"']/g, m => map[m]);
         }
 
-        function getSpeedMultiplier() {
-            return 0.6; // Normal speed
-        }
-
         function analyzeCustomCode(code) {
-            // Simple pattern matching for custom code
             const findings = [];
             const lines = code.split('\n');
 
-            // Pattern 1: Hardcoded credentials
             const credPatterns = [
                 /API_KEY\s*=\s*["']([^"']{15,})/i,
                 /PASSWORD\s*=\s*["']([^"']{8,})/i,
@@ -760,7 +782,6 @@ JWT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`;
                     }
                 });
 
-                // Pattern 2: Prompt injection (f-strings with variables)
                 if (/f["'].*\{.*\}.*["']/.test(line)) {
                     findings.push({
                         pattern: 'Prompt Injection',
@@ -772,7 +793,6 @@ JWT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`;
                     });
                 }
 
-                // Pattern 3: Infinite loops
                 if (/while\s+(True|true|1)\s*:/.test(line)) {
                     findings.push({
                         pattern: 'Infinite Loop',
@@ -784,7 +804,6 @@ JWT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`;
                     });
                 }
 
-                // Pattern 4: Unsafe environment access
                 if (/os\.environ\[/.test(line) && !/.get\(/.test(line)) {
                     findings.push({
                         pattern: 'Unsafe Environment Access',
@@ -805,7 +824,7 @@ JWT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`;
             const findingsContainer = document.getElementById('findingsContainer');
 
             scanBtn.disabled = true;
-            findingsContainer.innerHTML = '<div class="findings-empty">Scanning...</div>';
+            findingsContainer.innerHTML = '<div class="findings-empty"><div class="findings-empty-icon">🔍</div><div>Scanning...</div></div>';
 
             // Clear previous highlights
             document.querySelectorAll('.code-line.highlight').forEach(el => {
@@ -813,31 +832,28 @@ JWT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`;
             });
 
             let findings = [];
+
             if (currentTab === 'langchain') {
-                currentCode = langchainCode;
+                displayCode(langchainCode, 'langchain');
                 findings = langchainFindings;
-                displayCode(currentCode, 'langchain');
             } else if (currentTab === 'crewai') {
-                currentCode = crewaiCode;
+                displayCode(crewaiCode, 'crewai');
                 findings = crewaiFindings;
-                displayCode(currentCode, 'crewai');
             } else {
                 const customText = document.getElementById('customCode').value;
                 if (!customText.trim()) {
-                    findingsContainer.innerHTML = '<div class="findings-empty">No code to scan</div>';
+                    findingsContainer.innerHTML = '<div class="findings-empty"><div class="findings-empty-icon">📝</div><div>No code to scan</div></div>';
                     scanBtn.disabled = false;
                     return;
                 }
-                currentCode = customText;
+                displayCode(customText, 'custom');
                 findings = analyzeCustomCode(customText);
-                displayCode(currentCode, 'custom');
             }
 
             const startTime = performance.now();
-            const speedMultiplier = getSpeedMultiplier();
 
             if (findings.length === 0) {
-                findingsContainer.innerHTML = '<div class="findings-empty">No vulnerabilities detected</div>';
+                findingsContainer.innerHTML = '<div class="findings-empty"><div class="findings-empty-icon">✓</div><div>No vulnerabilities detected</div></div>';
                 document.getElementById('riskScore').textContent = '0/100';
                 document.getElementById('findingsCount').textContent = '0';
                 document.getElementById('scanTime').textContent = '0.0ms';
@@ -846,26 +862,26 @@ JWT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`;
             }
 
             findings.forEach((finding, index) => {
+                const delay = 200 + (index * 120);
                 setTimeout(() => {
                     if (index === 0) {
                         findingsContainer.innerHTML = '';
                     }
 
-                    // Highlight code line
-                    const lineEl = document.getElementById(`line-${finding.line}`);
-                    if (lineEl) {
-                        lineEl.classList.add('highlight');
-                    }
+                    // Highlight code line - Use data-line attribute instead of id
+                    const lineElements = document.querySelectorAll(`[data-line="${finding.line}"]`);
+                    lineElements.forEach(el => {
+                        el.classList.add('highlight');
+                        // Scroll into view if needed
+                        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    });
 
-                    // Add finding
+                    // Add finding element
                     const findingEl = document.createElement('div');
                     findingEl.className = `finding ${finding.severity}`;
-
                     findingEl.innerHTML = `
                         <div class="finding-header">
-                            <span class="finding-badge ${finding.severity}">
-                                ${finding.severity === 'high' ? 'High' : 'Medium'}
-                            </span>
+                            <span class="finding-badge ${finding.severity}">${finding.severity === 'high' ? 'High' : 'Medium'}</span>
                             <span class="finding-name">${finding.pattern}</span>
                         </div>
                         <div class="finding-meta">
@@ -876,28 +892,29 @@ JWT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`;
                         <div class="finding-message">${finding.message}</div>
                         <div class="finding-standard">Complies with OWASP Top 10, SANS Top 25</div>
                     `;
-
                     findingsContainer.appendChild(findingEl);
 
-                    // Update metrics after last finding
+                    // Update metrics on last finding
                     if (index === findings.length - 1) {
-                        const endTime = performance.now();
-                        const duration = endTime - startTime;
-                        const riskScore = Math.min(100, findings.filter(f => f.severity === 'high').length * 20 + findings.filter(f => f.severity === 'medium').length * 10);
-
                         setTimeout(() => {
+                            const endTime = performance.now();
+                            const duration = endTime - startTime;
+                            const highCount = findings.filter(f => f.severity === 'high').length;
+                            const mediumCount = findings.filter(f => f.severity === 'medium').length;
+                            const riskScore = Math.min(100, highCount * 20 + mediumCount * 10);
+
                             document.getElementById('riskScore').textContent = riskScore + '/100';
                             document.getElementById('findingsCount').textContent = findings.length;
                             document.getElementById('scanTime').textContent = duration.toFixed(1) + 'ms';
                             scanBtn.disabled = false;
-                        }, 200);
+                        }, 300);
                     }
-                }, (400 + index * 350) * speedMultiplier);
+                }, delay);
             });
         }
 
         function resetScan() {
-            document.getElementById('findingsContainer').innerHTML = '<div class="findings-empty">Click "Scan Code" to analyze</div>';
+            document.getElementById('findingsContainer').innerHTML = '<div class="findings-empty"><div class="findings-empty-icon">📋</div><div>Click "Scan Code" to analyze</div></div>';
             document.getElementById('riskScore').textContent = '--';
             document.getElementById('findingsCount').textContent = '0';
             document.getElementById('scanTime').textContent = '--';
@@ -906,7 +923,7 @@ JWT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`;
             });
         }
 
-        // Initialize all code containers
+        // Initialize
         displayCode(langchainCode, 'langchain');
         displayCode(crewaiCode, 'crewai');
         document.getElementById('scanBtn').addEventListener('click', runScan);
