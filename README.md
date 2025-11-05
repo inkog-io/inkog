@@ -50,8 +50,15 @@ jobs:
 - **Team:** $497/month
 - **Enterprise:** $50K/year with compliance
 
+## Getting Started
+
+For GitHub Actions integration, see the [GitHub Action Documentation](./action/README.md).
+
+For local CLI development, see [SETUP.md](./SETUP.md).
+
 ## Documentation
 
+- [GitHub Action](./action/README.md) - Integration guide & usage
 - [Architecture](./ARCHITECTURE.md) - Technical design
 - [Setup Guide](./SETUP.md) - Developer setup
 - [Roadmap](./ROADMAP.md) - What's coming next

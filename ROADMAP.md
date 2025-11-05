@@ -11,10 +11,10 @@ Our vision is to be the leading pre-deployment AI agent security scanner. Here's
 - Validate product-market fit
 
 **Key Milestones:**
-- [ ] Core scanner implementation
-- [ ] First security pattern detection (prompt injection)
-- [ ] GitHub Action MVP
-- [ ] Initial pattern library (5+ patterns)
+- [x] Core scanner implementation (AST-based with tree-sitter)
+- [x] First security pattern detection (prompt injection)
+- [x] GitHub Action MVP (production-ready)
+- [x] Initial pattern library (3 patterns: prompt injection, infinite loops, API keys)
 
 ## Phase 2: Market Traction
 
