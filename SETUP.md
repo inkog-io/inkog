@@ -293,14 +293,69 @@ Docker daemon is not running
 ```
 **Solution:** Start Docker Desktop or docker daemon.
 
+## Testing
+
+### Running Scanner Tests
+
+Test the scanner against real agent code:
+
+```bash
+cd action
+
+# Build the scanner
+go build -o inkog-scanner ./cmd/scanner
+
+# Test against LangChain example
+./inkog-scanner \
+  --path ../test-agents/langchain-example \
+  --framework langchain \
+  --json-report ../langchain-report.json
+
+# Test against CrewAI example
+./inkog-scanner \
+  --path ../test-agents/crewai-example \
+  --framework crewai \
+  --json-report ../crewai-report.json
+
+# View results
+cat ../langchain-report.json | jq '.'
+```
+
+### Test Agents
+
+Pre-built test agents with intentional vulnerabilities:
+
+- **LangChain**: `test-agents/langchain-example/agent.py` (8+ vulnerabilities)
+- **CrewAI**: `test-agents/crewai-example/crew.py` (8+ vulnerabilities)
+
+See `test-agents/README.md` for detailed vulnerability descriptions.
+
+### GitHub Actions Tests
+
+Tests run automatically on:
+- Pushes to `test-agents/` directory
+- Pushes to `action/` directory
+- Pushes to workflow files
+
+View results at: https://github.com/inkog-io/inkog/actions
+
+### Test Documentation
+
+See `TEST_RESULTS.md` for:
+- Detailed test setup and configuration
+- Expected findings and risk scores
+- Analysis commands
+- Success criteria
+
 ## Contributing
 
 1. Create a feature branch: `git checkout -b feature/my-feature`
 2. Make your changes and add tests
 3. Run tests and linting: `go test ./... && golangci-lint run`
-4. Commit: `git commit -am 'Add my feature'`
-5. Push: `git push origin feature/my-feature`
-6. Create a Pull Request on GitHub
+4. Test against test agents: `action/inkog-scanner --path test-agents`
+5. Commit: `git commit -am 'Add my feature'`
+6. Push: `git push origin feature/my-feature`
+7. Create a Pull Request on GitHub
 
 ## Additional Resources
 
