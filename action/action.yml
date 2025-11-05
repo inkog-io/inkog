@@ -1,0 +1,52 @@
+name: 'Inkog AI Agent Security Scanner'
+description: 'Detect behavioral risks in AI agents before deployment'
+author: 'Inkog'
+
+inputs:
+  risk-threshold:
+    description: 'Minimum risk level to fail the action (low, medium, high)'
+    required: false
+    default: 'high'
+
+  framework:
+    description: 'Agent framework (auto-detect, langchain, crewai, autogen)'
+    required: false
+    default: 'auto-detect'
+
+  path:
+    description: 'Path to scan (default: workspace root)'
+    required: false
+    default: '.'
+
+  json-report:
+    description: 'Output JSON report file path (optional)'
+    required: false
+    default: ''
+
+outputs:
+  risk-score:
+    description: 'Overall risk score (0-100)'
+
+  findings-count:
+    description: 'Total number of findings'
+
+  high-risk-count:
+    description: 'Number of high-risk findings'
+
+  report-path:
+    description: 'Path to JSON report if generated'
+
+runs:
+  using: 'docker'
+  image: 'docker://ghcr.io/inkog-io/inkog:latest'
+  args:
+    - '--risk-threshold'
+    - ${{ inputs.risk-threshold }}
+    - '--framework'
+    - ${{ inputs.framework }}
+    - '--path'
+    - ${{ inputs.path }}
+    - '--json-report'
+    - ${{ inputs.json-report }}
+    - '--github-output'
+    - ${{ github.output }}
