@@ -33,6 +33,7 @@ jobs:
         working-directory: action
         run: |
           go mod download
+          go mod verify
           go build -o inkog-scanner ./cmd/scanner
 
       - name: Scan LangChain Agent
@@ -46,7 +47,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload LangChain Report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: langchain-scan-report
           path: langchain-scan-report.json
@@ -72,6 +73,7 @@ jobs:
         working-directory: action
         run: |
           go mod download
+          go mod verify
           go build -o inkog-scanner ./cmd/scanner
 
       - name: Scan CrewAI Agent
@@ -85,7 +87,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload CrewAI Report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: crewai-scan-report
           path: crewai-scan-report.json
@@ -112,6 +114,7 @@ jobs:
         working-directory: action
         run: |
           go mod download
+          go mod verify
           go build -o inkog-scanner ./cmd/scanner
 
       - name: Scan All Test Agents
@@ -125,7 +128,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload Complete Report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: complete-scan-report
           path: complete-scan-report.json
@@ -170,6 +173,7 @@ jobs:
         working-directory: action
         run: |
           go mod download
+          go mod verify
           go build -o inkog-scanner ./cmd/scanner
 
       - name: Scan and Validate LangChain
