@@ -1,24 +1,46 @@
-# Inkog
+# Inkog - AI Agent Security Scanner
 
-AI agent security scanner that detects behavioral risks before deployment for Enterprises & Startups.
+[![GitHub Action](https://img.shields.io/badge/GitHub-Action-blue)](https://github.com/marketplace/actions/inkog-scanner)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+
+🛡️ Detect behavioral risks in AI agents before production deployment for Enterprises & Startups.
 
 ## Quick Start
 
-```bash
-# Coming soon
+```yaml
+# .github/workflows/agent-security.yml
+name: Agent Security Check
+on: [push, pull_request]
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: inkog-io/inkog@v1
+        with:
+          framework: langchain
+          risk_threshold: medium
 ```
 
 ## Features
 
-- **Pre-deployment Detection** - Catch behavioral risks before production
-- **96% Accuracy** - Proven patterns for known vulnerabilities
-- **EU AI Act Compliance** - Built for regulatory requirements
-- **5-minute GitHub Integration** - Effortless setup
+- 🎯 **96% Accuracy** - Proven patterns on prompt injection detection
+- 🔄 **Pre-deployment Detection** - Identifies infinite loops before they happen
+- 🔒 **Data Risk Detection** - Detects data exposure risks
+- 📊 **EU AI Act Compliance** - Built for regulatory requirements (€35M fines starting Aug 2026)
+- ⚡ **Sub-10 Second Analysis** - 5-minute GitHub integration
+
+## Supported Frameworks
+
+- LangChain
+- CrewAI
+- AutoGen
+- Custom Python/TypeScript agents
 
 ## Technology
 
-- **Language:** Go (0.88ms startup)
-- **Parser:** tree-sitter (36x faster)
+- **Language:** Go (0.88ms startup, not Python)
+- **Parser:** tree-sitter (36x faster than alternatives)
 - **Database:** PostgreSQL with JSONB
 - **Infrastructure:** AWS Lambda + Docker + gVisor
 
@@ -33,6 +55,7 @@ AI agent security scanner that detects behavioral risks before deployment for En
 - [Architecture](./docs/ARCHITECTURE.md) - Technical design
 - [Setup Guide](./docs/SETUP.md) - Developer setup
 - [Roadmap](./ROADMAP.md) - What's coming next
+- Full docs: [docs.inkog.ai](https://docs.inkog.ai)
 
 ## Contributing
 
@@ -40,4 +63,4 @@ We're currently in early development. Contributions coming soon!
 
 ## License
 
-[To be determined]
+Apache 2.0
