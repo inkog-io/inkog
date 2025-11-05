@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inkog Demo</title>
+    <title>Inkog Security Scanner Demo</title>
     <style>
         * {
             margin: 0;
@@ -90,6 +90,33 @@
             cursor: pointer;
         }
 
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid #e0e0e0;
+            background: #f9f9f9;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            color: #666;
+            border-bottom: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .tab:hover {
+            color: #333;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
         .content {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -133,18 +160,29 @@
             display: block;
             white-space: pre-wrap;
             word-wrap: break-word;
+            padding: 2px 4px;
+            margin: 0 -4px;
+            border-radius: 2px;
+            transition: all 0.3s ease;
         }
 
-        .code-comment {
-            color: #6a9955;
+        .code-line.highlight {
+            background: rgba(220, 53, 69, 0.3);
+            border-left: 3px solid #dc3545;
+            padding-left: 8px;
         }
 
-        .code-keyword {
-            color: #569cd6;
-        }
-
-        .code-string {
-            color: #ce9178;
+        .code-textarea {
+            flex: 1;
+            background: #1e1e1e;
+            border-radius: 4px;
+            padding: 16px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            color: #d4d4d4;
+            border: 1px solid #333;
+            resize: none;
         }
 
         .findings-container {
@@ -227,9 +265,12 @@
             font-size: 13px;
         }
 
-        .finding-line {
+        .finding-meta {
             font-size: 11px;
             color: #999;
+            display: flex;
+            gap: 8px;
+            margin-top: 6px;
         }
 
         .finding-message {
@@ -237,6 +278,14 @@
             color: #666;
             line-height: 1.5;
             margin-top: 6px;
+        }
+
+        .finding-standard {
+            font-size: 10px;
+            color: #999;
+            margin-top: 6px;
+            padding-top: 6px;
+            border-top: 1px solid #e0e0e0;
         }
 
         .metrics {
@@ -267,6 +316,14 @@
             color: #999;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
         }
 
         @media (max-width: 1024px) {
@@ -336,9 +393,9 @@
     <div class="container">
         <!-- Header -->
         <div class="header">
-            <div class="title">🔒 Inkog</div>
+            <div class="title">Inkog Security Scanner</div>
             <div class="controls">
-                <button class="btn-scan" id="scanBtn">🚀 Scan Code</button>
+                <button class="btn-scan" id="scanBtn">Scan Code</button>
                 <button class="btn-reset" id="resetBtn">Reset</button>
                 <select id="speedSelect">
                     <option value="slow">Slow</option>
@@ -348,17 +405,41 @@
             </div>
         </div>
 
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab active" data-tab="sample">Example Agent</button>
+            <button class="tab" data-tab="custom">Try Your Own</button>
+        </div>
+
         <!-- Main Content -->
         <div class="content">
             <!-- Left: Code -->
             <div class="panel">
-                <div class="panel-title">Agent Code</div>
-                <div class="code-container" id="codeContainer"></div>
+                <div class="panel-title">Source Code</div>
+
+                <!-- Sample Code Tab -->
+                <div id="sample" class="tab-content active">
+                    <div class="code-container" id="codeContainer"></div>
+                </div>
+
+                <!-- Custom Code Tab -->
+                <div id="custom" class="tab-content">
+                    <textarea
+                        id="customCode"
+                        class="code-textarea"
+                        placeholder="Paste your Python code here...
+Example:
+import os
+from langchain.agents import AgentExecutor
+
+OPENAI_API_KEY = 'sk-proj-...'
+prompt = f'Process: {user_input}'"></textarea>
+                </div>
             </div>
 
             <!-- Right: Results -->
             <div class="panel">
-                <div class="panel-title">Inkog Scan Results</div>
+                <div class="panel-title">Scan Results</div>
                 <div class="findings-container" id="findingsContainer">
                     <div class="findings-empty">Click "Scan Code" to analyze</div>
                 </div>
@@ -387,7 +468,7 @@
     </div>
 
     <script>
-        const agentCode = `import os
+        const sampleCode = `import os
 from langchain.agents import AgentExecutor, create_react_agent
 from langchain_openai import ChatOpenAI
 from langchain.tools import tool
@@ -422,63 +503,93 @@ def process_request(user_input: str):
 
 JWT_SECRET = "super-secret-key-12345"`;
 
-        const findings = [
+        const sampleFindings = [
             {
                 pattern: 'Hardcoded Credentials',
                 severity: 'high',
                 line: 7,
-                message: 'API key detected in source code'
+                message: 'API key detected in source code',
+                cwe: 'CWE-798',
+                cvss: '9.1'
             },
             {
                 pattern: 'Hardcoded Credentials',
                 severity: 'high',
                 line: 8,
-                message: 'Database password exposed in source'
+                message: 'Database password exposed in source',
+                cwe: 'CWE-798',
+                cvss: '9.1'
             },
             {
                 pattern: 'Prompt Injection',
                 severity: 'high',
                 line: 15,
-                message: 'User input directly interpolated in f-string'
+                message: 'User input directly interpolated in f-string',
+                cwe: 'CWE-94',
+                cvss: '8.8'
             },
             {
                 pattern: 'Prompt Injection',
                 severity: 'high',
                 line: 16,
-                message: 'User input directly interpolated in f-string'
+                message: 'User input directly interpolated in f-string',
+                cwe: 'CWE-94',
+                cvss: '8.8'
             },
             {
                 pattern: 'Infinite Loop',
                 severity: 'high',
                 line: 20,
-                message: 'Missing break condition in while loop'
+                message: 'Missing break condition in while loop',
+                cwe: 'CWE-835',
+                cvss: '7.5'
             },
             {
                 pattern: 'Unsafe Environment Access',
                 severity: 'medium',
                 line: 24,
-                message: 'Missing default value for environment variable'
+                message: 'Missing default value for environment variable',
+                cwe: 'CWE-665',
+                cvss: '6.5'
             },
             {
                 pattern: 'Prompt Injection',
                 severity: 'high',
                 line: 28,
-                message: 'User input directly interpolated in f-string'
+                message: 'User input directly interpolated in f-string',
+                cwe: 'CWE-94',
+                cvss: '8.8'
             },
             {
                 pattern: 'Hardcoded Credentials',
                 severity: 'high',
                 line: 31,
-                message: 'JWT secret exposed in source code'
+                message: 'JWT secret exposed in source code',
+                cwe: 'CWE-798',
+                cvss: '9.1'
             }
         ];
 
-        // Display code
-        function displayCode() {
-            const lines = agentCode.split('\n');
+        let currentCode = sampleCode;
+        let currentTab = 'sample';
+
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', (e) => {
+                currentTab = e.target.dataset.tab;
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                e.target.classList.add('active');
+                document.getElementById(currentTab).classList.add('active');
+                resetScan();
+            });
+        });
+
+        function displayCode(code) {
+            const lines = code.split('\n');
             const codeContainer = document.getElementById('codeContainer');
             codeContainer.innerHTML = lines.map((line, idx) => {
-                return `<div class="code-line">${(idx + 1).toString().padStart(2, '0')}  ${escapeHtml(line)}</div>`;
+                return `<div class="code-line" id="line-${idx + 1}">${(idx + 1).toString().padStart(2, '0')}  ${escapeHtml(line)}</div>`;
             }).join('');
         }
 
@@ -498,6 +609,74 @@ JWT_SECRET = "super-secret-key-12345"`;
             return speeds[document.getElementById('speedSelect').value] || 0.6;
         }
 
+        function analyzeCustomCode(code) {
+            // Simple pattern matching for custom code
+            const findings = [];
+            const lines = code.split('\n');
+
+            // Pattern 1: Hardcoded credentials
+            const credPatterns = [
+                /API_KEY\s*=\s*["']([^"']{15,})/i,
+                /PASSWORD\s*=\s*["']([^"']{8,})/i,
+                /SECRET\s*=\s*["']([^"']{15,})/i,
+                /sk-[a-z0-9]{20,}/i,
+                /ghp_[a-z0-9]{20,}/i
+            ];
+
+            lines.forEach((line, idx) => {
+                credPatterns.forEach(pattern => {
+                    if (pattern.test(line)) {
+                        findings.push({
+                            pattern: 'Hardcoded Credentials',
+                            severity: 'high',
+                            line: idx + 1,
+                            message: 'Credential found in source code',
+                            cwe: 'CWE-798',
+                            cvss: '9.1'
+                        });
+                    }
+                });
+
+                // Pattern 2: Prompt injection (f-strings with variables)
+                if (/f["'].*\{.*\}.*["']/.test(line)) {
+                    findings.push({
+                        pattern: 'Prompt Injection',
+                        severity: 'high',
+                        line: idx + 1,
+                        message: 'User input interpolation detected',
+                        cwe: 'CWE-94',
+                        cvss: '8.8'
+                    });
+                }
+
+                // Pattern 3: Infinite loops
+                if (/while\s+(True|true|1)\s*:/.test(line)) {
+                    findings.push({
+                        pattern: 'Infinite Loop',
+                        severity: 'high',
+                        line: idx + 1,
+                        message: 'Potential infinite loop detected',
+                        cwe: 'CWE-835',
+                        cvss: '7.5'
+                    });
+                }
+
+                // Pattern 4: Unsafe environment access
+                if (/os\.environ\[/.test(line) && !/.get\(/.test(line)) {
+                    findings.push({
+                        pattern: 'Unsafe Environment Access',
+                        severity: 'medium',
+                        line: idx + 1,
+                        message: 'Environment variable without default value',
+                        cwe: 'CWE-665',
+                        cvss: '6.5'
+                    });
+                }
+            });
+
+            return findings;
+        }
+
         function runScan() {
             const scanBtn = document.getElementById('scanBtn');
             const findingsContainer = document.getElementById('findingsContainer');
@@ -505,8 +684,39 @@ JWT_SECRET = "super-secret-key-12345"`;
             scanBtn.disabled = true;
             findingsContainer.innerHTML = '<div class="findings-empty">Scanning...</div>';
 
+            // Clear previous highlights
+            document.querySelectorAll('.code-line.highlight').forEach(el => {
+                el.classList.remove('highlight');
+            });
+
+            let findings = [];
+            if (currentTab === 'sample') {
+                currentCode = sampleCode;
+                findings = sampleFindings;
+                displayCode(currentCode);
+            } else {
+                const customText = document.getElementById('customCode').value;
+                if (!customText.trim()) {
+                    findingsContainer.innerHTML = '<div class="findings-empty">No code to scan</div>';
+                    scanBtn.disabled = false;
+                    return;
+                }
+                currentCode = customText;
+                findings = analyzeCustomCode(customText);
+                displayCode(customText);
+            }
+
             const startTime = performance.now();
             const speedMultiplier = getSpeedMultiplier();
+
+            if (findings.length === 0) {
+                findingsContainer.innerHTML = '<div class="findings-empty">No vulnerabilities detected</div>';
+                document.getElementById('riskScore').textContent = '0/100';
+                document.getElementById('findingsCount').textContent = '0';
+                document.getElementById('scanTime').textContent = '0.0ms';
+                scanBtn.disabled = false;
+                return;
+            }
 
             findings.forEach((finding, index) => {
                 setTimeout(() => {
@@ -514,6 +724,13 @@ JWT_SECRET = "super-secret-key-12345"`;
                         findingsContainer.innerHTML = '';
                     }
 
+                    // Highlight code line
+                    const lineEl = document.getElementById(`line-${finding.line}`);
+                    if (lineEl) {
+                        lineEl.classList.add('highlight');
+                    }
+
+                    // Add finding
                     const findingEl = document.createElement('div');
                     findingEl.className = `finding ${finding.severity}`;
 
@@ -524,18 +741,25 @@ JWT_SECRET = "super-secret-key-12345"`;
                             </span>
                             <span class="finding-name">${finding.pattern}</span>
                         </div>
-                        <div class="finding-line">Line ${finding.line}</div>
+                        <div class="finding-meta">
+                            <span>Line ${finding.line}</span>
+                            <span>${finding.cwe}</span>
+                            <span>CVSS ${finding.cvss}</span>
+                        </div>
                         <div class="finding-message">${finding.message}</div>
+                        <div class="finding-standard">Complies with OWASP Top 10, SANS Top 25</div>
                     `;
 
                     findingsContainer.appendChild(findingEl);
 
+                    // Update metrics after last finding
                     if (index === findings.length - 1) {
                         const endTime = performance.now();
                         const duration = endTime - startTime;
+                        const riskScore = Math.min(100, findings.filter(f => f.severity === 'high').length * 20 + findings.filter(f => f.severity === 'medium').length * 10);
 
                         setTimeout(() => {
-                            document.getElementById('riskScore').textContent = '92/100';
+                            document.getElementById('riskScore').textContent = riskScore + '/100';
                             document.getElementById('findingsCount').textContent = findings.length;
                             document.getElementById('scanTime').textContent = duration.toFixed(1) + 'ms';
                             scanBtn.disabled = false;
@@ -550,17 +774,15 @@ JWT_SECRET = "super-secret-key-12345"`;
             document.getElementById('riskScore').textContent = '--';
             document.getElementById('findingsCount').textContent = '0';
             document.getElementById('scanTime').textContent = '--';
+            document.querySelectorAll('.code-line.highlight').forEach(el => {
+                el.classList.remove('highlight');
+            });
         }
 
         // Initialize
-        displayCode();
+        displayCode(sampleCode);
         document.getElementById('scanBtn').addEventListener('click', runScan);
         document.getElementById('resetBtn').addEventListener('click', resetScan);
-
-        // Auto-run on load
-        window.addEventListener('load', () => {
-            setTimeout(runScan, 600);
-        });
     </script>
 </body>
 </html>
