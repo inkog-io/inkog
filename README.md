@@ -52,9 +52,10 @@ jobs:
 
 ## Documentation
 
-- [Architecture](./docs/ARCHITECTURE.md) - Technical design
-- [Setup Guide](./docs/SETUP.md) - Developer setup
+- [Architecture](./ARCHITECTURE.md) - Technical design
+- [Setup Guide](./SETUP.md) - Developer setup
 - [Roadmap](./ROADMAP.md) - What's coming next
+- [Contributing](./CONTRIBUTING.md) - How to contribute
 - Full docs: [docs.inkog.ai](https://docs.inkog.ai)
 
 ## Contributing
