@@ -204,3 +204,123 @@ jobs:
           else
             echo "⚠️  No vulnerabilities detected (check if scanner is working)"
           fi
+
+  post-pr-comment:
+    name: Post Security Scan Results to PR
+    runs-on: ubuntu-latest
+    needs: [test-both-agents]
+    if: github.event_name == 'pull_request' && github.event.pull_request != null
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download scan reports
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Format and post PR comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            // Read the complete scan report
+            let reportPath = '';
+            try {
+              reportPath = 'artifacts/complete-scan-report/complete-scan-report.json';
+              if (!fs.existsSync(reportPath)) {
+                console.log('Report not found, trying alternative path...');
+                reportPath = 'artifacts/complete-scan-report.json';
+              }
+            } catch (e) {
+              console.log('No scan report found');
+              return;
+            }
+
+            if (!fs.existsSync(reportPath)) {
+              console.log('Scan report file not found at:', reportPath);
+              return;
+            }
+
+            const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+
+            // Build the PR comment
+            let comment = '## 🔒 Inkog Security Scan Results\n\n';
+
+            // Risk score with visual indicator
+            let scoreColor = '🔴';
+            if (report.risk_score <= 30) scoreColor = '🟢';
+            else if (report.risk_score <= 60) scoreColor = '🟠';
+
+            comment += `**Risk Score: ${scoreColor} ${report.risk_score}/100**\n\n`;
+
+            // Summary
+            comment += '### Summary\n';
+            comment += `- **Total Issues**: ${report.findings_count}\n`;
+            comment += `- **High Risk**: ${report.high_risk_count}\n`;
+            comment += `- **Medium Risk**: ${report.medium_risk_count}\n`;
+            comment += `- **Low Risk**: ${report.low_risk_count}\n`;
+            comment += `- **Scan Time**: ${report.scan_duration}\n\n`;
+
+            // Show findings if any
+            if (report.findings_count > 0) {
+              comment += '### Issues Found\n\n';
+
+              // Group findings by severity
+              const highRisk = report.findings.filter(f => f.severity === 'high');
+              const mediumRisk = report.findings.filter(f => f.severity === 'medium');
+              const lowRisk = report.findings.filter(f => f.severity === 'low');
+
+              if (highRisk.length > 0) {
+                comment += '#### 🔴 Critical Issues\n';
+                highRisk.forEach((f, i) => {
+                  comment += `\n${i + 1}. **${f.pattern}** (Line ${f.line})\n`;
+                  comment += `   \`\`\`\n   ${f.code_snippet}\n   \`\`\`\n`;
+                  comment += `   ${f.message}\n`;
+                });
+                comment += '\n';
+              }
+
+              if (mediumRisk.length > 0) {
+                comment += '#### 🟠 Medium Issues\n';
+                mediumRisk.forEach((f, i) => {
+                  comment += `\n${i + 1}. **${f.pattern}** (Line ${f.line})\n`;
+                  comment += `   \`\`\`\n   ${f.code_snippet}\n   \`\`\`\n`;
+                  comment += `   ${f.message}\n`;
+                });
+                comment += '\n';
+              }
+
+              if (lowRisk.length > 0) {
+                comment += '#### 🟡 Low Issues\n';
+                lowRisk.forEach((f, i) => {
+                  comment += `\n${i + 1}. **${f.pattern}** (Line ${f.line})\n`;
+                  comment += `   ${f.message}\n`;
+                });
+                comment += '\n';
+              }
+            } else {
+              comment += '### ✅ No Issues Found\n\n';
+              comment += 'Great! No security vulnerabilities detected in this scan.\n\n';
+            }
+
+            // Footer with links
+            comment += '---\n\n';
+            comment += '📊 [View Full Report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) | ';
+            comment += '📖 [Inkog Docs](https://github.com/inkog-io/inkog#readme) | ';
+            comment += '🚀 [Try Demo](https://github.com/inkog-io/inkog/blob/main/demo/demo.html)\n\n';
+            comment += '*Powered by [Inkog](https://github.com/inkog-io/inkog) - AI Agent Security Scanner*\n';
+
+            // Post comment on PR
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+            console.log('PR comment posted successfully!');
+            console.log('Risk Score:', report.risk_score);
+            console.log('Findings:', report.findings_count);

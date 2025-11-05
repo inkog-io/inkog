@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inkog Live Demo - AI Agent Security Scanner</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm/css/xterm.min.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .demo-container {
+            max-width: 1200px;
+            width: 100%;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .demo-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px 40px;
+            text-align: center;
+        }
+
+        .demo-header h1 {
+            font-size: 32px;
+            margin-bottom: 10px;
+            letter-spacing: -0.5px;
+        }
+
+        .demo-header p {
+            font-size: 16px;
+            opacity: 0.9;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .demo-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            padding: 30px;
+        }
+
+        .terminal-section {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .terminal-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        #terminal {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            background: #1e1e1e;
+            padding: 12px;
+            height: 450px;
+            overflow: hidden;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .results-section {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .findings-list {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            height: 450px;
+            overflow-y: auto;
+            background: #f9f9f9;
+        }
+
+        .finding {
+            margin-bottom: 16px;
+            padding: 12px;
+            border-left: 4px solid #dc3545;
+            background: white;
+            border-radius: 4px;
+            opacity: 0;
+            animation: slideIn 0.5s ease-out forwards;
+        }
+
+        .finding.high {
+            border-left-color: #dc3545;
+        }
+
+        .finding.medium {
+            border-left-color: #ffc107;
+        }
+
+        .finding.low {
+            border-left-color: #28a745;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .finding-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        .finding-severity {
+            display: inline-block;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 3px;
+            text-transform: uppercase;
+        }
+
+        .finding-severity.high {
+            background: #dc3545;
+            color: white;
+        }
+
+        .finding-severity.medium {
+            background: #ffc107;
+            color: #333;
+        }
+
+        .finding-severity.low {
+            background: #28a745;
+            color: white;
+        }
+
+        .finding-details {
+            font-size: 13px;
+            color: #666;
+            line-height: 1.6;
+        }
+
+        .finding-location {
+            font-size: 12px;
+            color: #999;
+            margin-top: 6px;
+            font-family: 'Monaco', monospace;
+        }
+
+        .controls {
+            padding: 20px 30px;
+            background: #f5f5f5;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #e0e0e0;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #d0d0d0;
+        }
+
+        .speed-control {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .speed-control label {
+            font-size: 13px;
+            color: #666;
+            font-weight: 500;
+        }
+
+        select {
+            padding: 6px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 13px;
+            background: white;
+            cursor: pointer;
+        }
+
+        .status-bar {
+            padding: 15px 30px;
+            background: white;
+            border-top: 1px solid #e0e0e0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .status-item {
+            font-size: 13px;
+            color: #666;
+        }
+
+        .status-value {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .risk-score {
+            font-size: 24px;
+            font-weight: 700;
+            padding: 8px 16px;
+            background: linear-gradient(135deg, #ffc107 0%, #ff6b6b 100%);
+            color: white;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        @media (max-width: 1024px) {
+            .demo-content {
+                grid-template-columns: 1fr;
+            }
+
+            #terminal {
+                height: 350px;
+            }
+
+            .findings-list {
+                height: 350px;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .demo-header {
+                padding: 20px;
+            }
+
+            .demo-header h1 {
+                font-size: 24px;
+            }
+
+            .demo-content {
+                padding: 20px;
+            }
+
+            .controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .button-group {
+                flex-direction: column;
+                width: 100%;
+            }
+
+            button {
+                width: 100%;
+            }
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: -1px;
+            margin-bottom: 10px;
+        }
+
+        /* Scrollbar styling */
+        .findings-list::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .findings-list::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+
+        .findings-list::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 10px;
+        }
+
+        .findings-list::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+    </style>
+</head>
+<body>
+    <div class="demo-container">
+        <div class="demo-header">
+            <div class="logo">🔒 Inkog</div>
+            <h1>AI Agent Security Scanner</h1>
+            <p>Detect vulnerabilities in AI agents before deployment. Watch Inkog scan a vulnerable agent in real-time.</p>
+        </div>
+
+        <div class="demo-content">
+            <div class="terminal-section">
+                <div class="terminal-title">📺 Terminal Output</div>
+                <div id="terminal"></div>
+            </div>
+
+            <div class="results-section">
+                <div class="terminal-title">🔍 Security Findings</div>
+                <div class="findings-list" id="findingsList"></div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <div class="button-group">
+                <button class="btn-primary" id="playBtn">▶️ Play Demo</button>
+                <button class="btn-secondary" id="resetBtn">⟲ Reset</button>
+            </div>
+            <div class="speed-control">
+                <label for="speedSelect">Speed:</label>
+                <select id="speedSelect">
+                    <option value="slow">Slow (Detailed)</option>
+                    <option value="normal" selected>Normal</option>
+                    <option value="fast">Fast (Quick)</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="status-bar">
+            <div class="status-item">
+                Files Scanned: <span class="status-value" id="filesCount">0</span>
+            </div>
+            <div class="status-item">
+                Findings: <span class="status-value" id="findingsCount">0</span>
+            </div>
+            <div class="status-item">
+                Duration: <span class="status-value" id="duration">0ms</span>
+            </div>
+            <div class="risk-score" id="riskScore">0/100</div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/xterm/lib/xterm.min.js"></script>
+    <script>
+        const Terminal = window.Terminal;
+        const term = new Terminal({
+            cols: 80,
+            rows: 25,
+            cursorBlink: true,
+            theme: {
+                background: '#1e1e1e',
+                foreground: '#d4d4d4',
+                cursor: '#d4d4d4'
+            }
+        });
+
+        term.open(document.getElementById('terminal'));
+
+        // Demo data - the scan output
+        const scanOutput = [
+            { delay: 0, text: '$ inkog scan vulnerable-agent.py\r\n' },
+            { delay: 100, text: '🔍 Scanning vulnerable-agent.py for security issues...\r\n' },
+            { delay: 500, text: '\r\n' },
+            { delay: 600, text: '========================================\r\n' },
+            { delay: 650, text: '        INKOG SECURITY SCAN REPORT       \r\n' },
+            { delay: 700, text: '========================================\r\n' },
+            { delay: 800, text: '\r\n' },
+            { delay: 900, text: 'Risk Score:       73/100\r\n' },
+            { delay: 1000, text: 'Duration:         12.4ms\r\n' },
+            { delay: 1100, text: 'Files Scanned:    1\r\n' },
+            { delay: 1200, text: 'Lines of Code:    67\r\n' },
+            { delay: 1400, text: '\r\n' },
+            { delay: 1500, text: 'FINDINGS SUMMARY:\r\n' },
+            { delay: 1600, text: '  Total:      3\r\n' },
+            { delay: 1700, text: '  🔴 High:    2\r\n' },
+            { delay: 1800, text: '  🟠 Medium:  1\r\n' },
+            { delay: 1900, text: '  🟡 Low:     0\r\n' },
+            { delay: 2100, text: '\r\n' },
+            { delay: 2200, text: 'FINDINGS:\r\n' },
+            { delay: 2400, text: '1. Hardcoded Credentials (high)\r\n' },
+            { delay: 2500, text: '   File: vulnerable-agent.py:9\r\n' },
+            { delay: 2600, text: '   Message: Hardcoded API key, credential, or token detected in source code\r\n' },
+            { delay: 2800, text: '\r\n' },
+            { delay: 2900, text: '2. Prompt Injection (high)\r\n' },
+            { delay: 3100, text: '   File: vulnerable-agent.py:27\r\n' },
+            { delay: 3200, text: '   Message: Potential prompt injection: User input directly interpolated\r\n' },
+            { delay: 3400, text: '\r\n' },
+            { delay: 3500, text: '3. Infinite Loop (medium)\r\n' },
+            { delay: 3700, text: '   File: vulnerable-agent.py:35\r\n' },
+            { delay: 3800, text: '   Message: Infinite loop detected: while True without break\r\n' },
+            { delay: 4100, text: '\r\n' },
+            { delay: 4200, text: '========================================\r\n' },
+            { delay: 4300, text: '\r\n' },
+            { delay: 4400, text: '❌ Scan failed: Risk threshold exceeded\r\n' },
+            { delay: 4500, text: '\r\n' }
+        ];
+
+        const findings = [
+            {
+                id: 1,
+                name: 'Hardcoded Credentials',
+                severity: 'high',
+                line: 9,
+                message: 'API key detected in source code: sk-proj-1234567890abcdefghij1234567890ab',
+                cwe: 'CWE-798'
+            },
+            {
+                id: 2,
+                name: 'Prompt Injection',
+                severity: 'high',
+                line: 27,
+                message: 'User input directly interpolated in f-string without sanitization',
+                cwe: 'CWE-94'
+            },
+            {
+                id: 3,
+                name: 'Infinite Loop',
+                severity: 'medium',
+                line: 35,
+                message: 'while True loop without break condition - could hang the agent',
+                cwe: 'CWE-835'
+            }
+        ];
+
+        let animationId = null;
+        let isPlaying = false;
+
+        function getDelay(speed) {
+            const speeds = {
+                slow: 1,
+                normal: 0.6,
+                fast: 0.2
+            };
+            return speeds[speed] || 0.6;
+        }
+
+        function playDemo() {
+            if (isPlaying) return;
+            isPlaying = true;
+
+            term.clear();
+            document.getElementById('findingsList').innerHTML = '';
+            document.getElementById('filesCount').textContent = '0';
+            document.getElementById('findingsCount').textContent = '0';
+            document.getElementById('duration').textContent = '0ms';
+            document.getElementById('riskScore').textContent = '0/100';
+
+            const speed = getDelay(document.getElementById('speedSelect').value);
+            const startTime = Date.now();
+            let currentFinding = 0;
+
+            function playNextLine(index) {
+                if (index >= scanOutput.length) {
+                    isPlaying = false;
+                    displayMetrics();
+                    return;
+                }
+
+                setTimeout(() => {
+                    const line = scanOutput[index];
+                    term.write(line.text);
+
+                    // Check if we should add a finding
+                    if (index === 22) { // After "1. Hardcoded..."
+                        addFinding(0, (Date.now() - startTime) + 400);
+                    } else if (index === 28) { // After "2. Prompt Injection..."
+                        addFinding(1, (Date.now() - startTime) + 400);
+                    } else if (index === 35) { // After "3. Infinite Loop..."
+                        addFinding(2, (Date.now() - startTime) + 400);
+                    }
+
+                    playNextLine(index + 1);
+                }, line.delay * speed);
+            }
+
+            playNextLine(0);
+        }
+
+        function addFinding(index, delay) {
+            setTimeout(() => {
+                const finding = findings[index];
+                const findingsList = document.getElementById('findingsList');
+
+                const findingEl = document.createElement('div');
+                findingEl.className = `finding ${finding.severity}`;
+                findingEl.style.animationDelay = '0s';
+
+                const header = document.createElement('div');
+                header.className = 'finding-header';
+                header.innerHTML = `
+                    <span class="finding-severity ${finding.severity}">${finding.severity}</span>
+                    <span>${finding.name}</span>
+                `;
+
+                const details = document.createElement('div');
+                details.className = 'finding-details';
+                details.innerHTML = `${finding.message}`;
+
+                const location = document.createElement('div');
+                location.className = 'finding-location';
+                location.innerHTML = `Line ${finding.line} • ${finding.cwe}`;
+
+                findingEl.appendChild(header);
+                findingEl.appendChild(details);
+                findingEl.appendChild(location);
+
+                findingsList.appendChild(findingEl);
+
+                // Update counts
+                document.getElementById('findingsCount').textContent = index + 1;
+            }, delay);
+        }
+
+        function displayMetrics() {
+            setTimeout(() => {
+                document.getElementById('filesCount').textContent = '1';
+                document.getElementById('findingsCount').textContent = '3';
+                document.getElementById('duration').textContent = '12.4ms';
+                document.getElementById('riskScore').textContent = '73/100';
+            }, 200);
+        }
+
+        function resetDemo() {
+            if (isPlaying) return;
+            term.clear();
+            document.getElementById('findingsList').innerHTML = '';
+            document.getElementById('filesCount').textContent = '0';
+            document.getElementById('findingsCount').textContent = '0';
+            document.getElementById('duration').textContent = '0ms';
+            document.getElementById('riskScore').textContent = '0/100';
+        }
+
+        // Event listeners
+        document.getElementById('playBtn').addEventListener('click', playDemo);
+        document.getElementById('resetBtn').addEventListener('click', resetDemo);
+
+        // Auto-play on load
+        window.addEventListener('load', () => {
+            setTimeout(playDemo, 500);
+        });
+    </script>
+</body>
+</html>
