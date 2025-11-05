@@ -964,6 +964,9 @@ JWT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`;
             const mediumCount = findings.filter(f => f.severity === 'medium').length;
             const lowCount = findings.filter(f => f.severity === 'low').length;
 
+            // Clear the "Scanning..." message
+            findingsContainer.innerHTML = '';
+
             // Add summary section first
             const summaryEl = document.createElement('div');
             summaryEl.className = 'findings-summary';
