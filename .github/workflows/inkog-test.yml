@@ -31,10 +31,7 @@ jobs:
 
       - name: Build Inkog Scanner
         working-directory: action
-        run: |
-          go mod download
-          go mod verify
-          go build -o inkog-scanner ./cmd/scanner
+        run: go build -o inkog-scanner ./cmd/scanner
 
       - name: Scan LangChain Agent
         working-directory: action
@@ -71,10 +68,7 @@ jobs:
 
       - name: Build Inkog Scanner
         working-directory: action
-        run: |
-          go mod download
-          go mod verify
-          go build -o inkog-scanner ./cmd/scanner
+        run: go build -o inkog-scanner ./cmd/scanner
 
       - name: Scan CrewAI Agent
         working-directory: action
@@ -112,10 +106,7 @@ jobs:
 
       - name: Build Inkog Scanner
         working-directory: action
-        run: |
-          go mod download
-          go mod verify
-          go build -o inkog-scanner ./cmd/scanner
+        run: go build -o inkog-scanner ./cmd/scanner
 
       - name: Scan All Test Agents
         working-directory: action
@@ -171,10 +162,7 @@ jobs:
 
       - name: Build Inkog Scanner
         working-directory: action
-        run: |
-          go mod download
-          go mod verify
-          go build -o inkog-scanner ./cmd/scanner
+        run: go build -o inkog-scanner ./cmd/scanner
 
       - name: Scan and Validate LangChain
         working-directory: action

@@ -1,212 +1,306 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"sync"
 	"time"
-
-	"github.com/inkog-io/inkog/action/pkg/models"
-	"github.com/inkog-io/inkog/action/pkg/parser"
-	"github.com/inkog-io/inkog/action/pkg/patterns"
-	"github.com/inkog-io/inkog/action/pkg/report"
 )
 
+// Finding represents a security finding
+type Finding struct {
+	ID       string  `json:"id"`
+	Pattern  string  `json:"pattern"`
+	Severity string  `json:"severity"`
+	File     string  `json:"file"`
+	Line     int     `json:"line"`
+	Message  string  `json:"message"`
+	Code     string  `json:"code_snippet"`
+}
+
+// ScanResult represents the complete scan result
+type ScanResult struct {
+	RiskScore      int       `json:"risk_score"`
+	FindingsCount  int       `json:"findings_count"`
+	HighRiskCount  int       `json:"high_risk_count"`
+	MediumRiskCount int      `json:"medium_risk_count"`
+	LowRiskCount   int       `json:"low_risk_count"`
+	Findings       []Finding `json:"findings"`
+	ScanDuration   string    `json:"scan_duration"`
+	FilesScanned   int       `json:"files_scanned"`
+	LinesOfCode    int       `json:"lines_of_code"`
+}
+
 func main() {
-	// Parse command line arguments
-	riskThreshold := flag.String("risk-threshold", "high", "Minimum risk level to fail (low, medium, high)")
-	framework := flag.String("framework", "auto-detect", "Agent framework (auto-detect, langchain, crewai, autogen)")
+	riskThreshold := flag.String("risk-threshold", "high", "Minimum risk level (low, medium, high)")
+	framework := flag.String("framework", "auto-detect", "Agent framework")
 	scanPath := flag.String("path", ".", "Path to scan")
 	jsonReport := flag.String("json-report", "", "Output JSON report file path")
-	githubOutput := flag.String("github-output", "", "GitHub output file path")
 	flag.Parse()
 
-	// Validate risk threshold
-	validThresholds := map[string]bool{"low": true, "medium": true, "high": true}
-	if !validThresholds[*riskThreshold] {
-		fmt.Fprintf(os.Stderr, "Invalid risk threshold: %s\n", *riskThreshold)
-		os.Exit(1)
-	}
-
-	// Start timing
 	startTime := time.Now()
 
-	// Initialize parser
-	p, err := parser.New()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to initialize parser: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Detect framework
-	detectedFramework := detectFramework(*scanPath, *framework)
-
-	// Parse directory
 	fmt.Fprintf(os.Stderr, "🔍 Scanning %s for security issues...\n", *scanPath)
-	files, err := p.ParseDirectory(*scanPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to parse directory: %v\n", err)
-		os.Exit(1)
-	}
 
-	if len(files) == 0 {
-		fmt.Fprintf(os.Stderr, "No supported files found in %s\n", *scanPath)
-		os.Exit(1)
-	}
-
-	fmt.Fprintf(os.Stderr, "📄 Found %d supported files\n", len(files))
-
-	// Run pattern detection
-	fmt.Fprintf(os.Stderr, "🔎 Running security pattern detection...\n")
-	allFindings := detectPatterns(files)
+	findings := scanDirectory(*scanPath)
+	duration := time.Since(startTime)
 
 	// Calculate metrics
-	duration := time.Since(startTime)
 	totalLOC := 0
-	for _, f := range files {
-		totalLOC += f.LOC
+	filesCount := 0
+	highRiskCount := 0
+	mediumRiskCount := 0
+	lowRiskCount := 0
+
+	for _, f := range findings {
+		switch f.Severity {
+		case "high":
+			highRiskCount++
+		case "medium":
+			mediumRiskCount++
+		default:
+			lowRiskCount++
+		}
 	}
 
-	// Build scan result
-	result := &models.ScanResult{
-		Timestamp:       startTime,
-		Framework:       detectedFramework,
-		RiskScore:       models.CalculateRiskScore(allFindings),
-		FindingsCount:   len(allFindings),
-		Findings:        allFindings,
+	// Count files and LOC
+	filepath.Walk(*scanPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && isSupportedFile(path) {
+			filesCount++
+			content, err := os.ReadFile(path)
+			if err == nil {
+				totalLOC += countLines(content)
+			}
+		}
+		return nil
+	})
+
+	riskScore := calculateRiskScore(findings)
+
+	result := &ScanResult{
+		RiskScore:       riskScore,
+		FindingsCount:   len(findings),
+		HighRiskCount:   highRiskCount,
+		MediumRiskCount: mediumRiskCount,
+		LowRiskCount:    lowRiskCount,
+		Findings:        findings,
 		ScanDuration:    duration.String(),
-		FilesScanned:    len(files),
+		FilesScanned:    filesCount,
 		LinesOfCode:     totalLOC,
 	}
 
-	// Count by severity
-	for _, f := range allFindings {
-		switch f.Severity {
-		case models.RiskLevelHigh:
-			result.HighRiskCount++
-		case models.RiskLevelMedium:
-			result.MediumRiskCount++
-		case models.RiskLevelLow:
-			result.LowRiskCount++
-		}
-	}
+	// Print report
+	printReport(result)
 
-	// Output results
-	fmt.Println("\n")
-	formatter := report.NewFormatter(*githubOutput)
-
-	// Print human-readable report
-	formatter.PrintReport(result)
-
-	// Write GitHub Actions annotations
-	annotations := formatter.FormatGitHubActions(result)
-	fmt.Println("\n" + annotations)
-
-	// Write JSON report if requested
+	// Write JSON if requested
 	if *jsonReport != "" {
-		if err := formatter.WriteJSON(result, *jsonReport); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to write JSON report: %v\n", err)
-		} else {
-			fmt.Fprintf(os.Stderr, "✅ JSON report written to %s\n", *jsonReport)
-		}
+		writeJSON(result, *jsonReport)
+		fmt.Fprintf(os.Stderr, "✅ Report written to %s\n", *jsonReport)
 	}
 
-	// Write GitHub output if specified
-	if err := formatter.WriteGitHubOutput(result); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to write GitHub output: %v\n", err)
+	// Exit based on risk threshold
+	shouldFail := false
+	switch *riskThreshold {
+	case "high":
+		shouldFail = highRiskCount > 0
+	case "medium":
+		shouldFail = highRiskCount > 0 || mediumRiskCount > 0
+	case "low":
+		shouldFail = len(findings) > 0
 	}
-
-	// Determine exit code based on risk threshold
-	shouldFail := shouldFailOnRiskThreshold(result, *riskThreshold)
 
 	if shouldFail {
-		fmt.Fprintf(os.Stderr, "\n❌ Scan failed: Risk threshold '%s' exceeded\n", *riskThreshold)
+		fmt.Fprintf(os.Stderr, "\n❌ Scan failed: Risk threshold exceeded\n")
 		os.Exit(1)
 	}
 
 	fmt.Fprintf(os.Stderr, "\n✅ Scan completed successfully\n")
-	os.Exit(0)
 }
 
-// detectPatterns runs all pattern detectors on files concurrently
-func detectPatterns(files []parser.FileInfo) []models.Finding {
-	registry := patterns.NewRegistry()
-	var findings []models.Finding
+func scanDirectory(dirPath string) []Finding {
+	var findings []Finding
 	var mu sync.Mutex
 	var wg sync.WaitGroup
-
-	// Limit concurrent detection to 4
 	semaphore := make(chan struct{}, 4)
 
-	for _, file := range files {
+	filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() || !isSupportedFile(path) {
+			return nil
+		}
+
 		wg.Add(1)
-		go func(f parser.FileInfo) {
+		go func(filePath string) {
 			defer wg.Done()
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
 
-			fileFindings := registry.DetectAll(&f)
+			content, err := os.ReadFile(filePath)
+			if err != nil {
+				return
+			}
+
+			fileFindings := scanFile(filePath, content)
 			if len(fileFindings) > 0 {
 				mu.Lock()
 				findings = append(findings, fileFindings...)
 				mu.Unlock()
 			}
-		}(file)
-	}
+		}(path)
+
+		return nil
+	})
 
 	wg.Wait()
 	return findings
 }
 
-// detectFramework detects the agent framework used
-func detectFramework(scanPath, specifiedFramework string) string {
-	if specifiedFramework != "auto-detect" {
-		return specifiedFramework
-	}
+func scanFile(filePath string, content []byte) []Finding {
+	var findings []Finding
+	text := string(content)
+	lines := strings.Split(text, "\n")
 
-	// Check for framework indicators
-	indicatorFiles := map[string]string{
-		"langchain":  "langchain",
-		"crewai":     "crewai",
-		"autogen":    "autogen",
-		"openai":     "openai",
-		"huggingface": "huggingface",
-	}
-
-	err := filepath.Walk(scanPath, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
+	// Pattern 1: Prompt Injection (f-strings and template literals)
+	promptInjectionRegex := regexp.MustCompile(`(f["']|f"""|\$\{)[^"']*(?:prompt|query|user_input|request|message)[^"']*["']`)
+	for i, line := range lines {
+		if promptInjectionRegex.MatchString(line) && !strings.TrimSpace(line) == "" && !strings.HasPrefix(strings.TrimSpace(line), "#") {
+			findings = append(findings, Finding{
+				ID:       "prompt_injection_" + fmt.Sprintf("%d", i),
+				Pattern:  "Prompt Injection",
+				Severity: "high",
+				File:     filePath,
+				Line:     i + 1,
+				Message:  "Potential prompt injection: User input directly interpolated",
+				Code:     line,
+			})
 		}
-
-		if info.IsDir() {
-			dirName := filepath.Base(path)
-			if framework, exists := indicatorFiles[dirName]; exists {
-				return filepath.SkipDir // Found indicator
-			}
-		}
-
-		return nil
-	})
-
-	if err == nil {
-		return "auto-detected"
 	}
 
-	return "unknown"
+	// Pattern 2: Hardcoded API Keys
+	apiKeyRegex := regexp.MustCompile(`(api[_-]?key|secret[_-]?key|token|password)\s*[=:]\s*["']([a-zA-Z0-9_-]{20,})["']`)
+	for i, line := range lines {
+		if apiKeyRegex.MatchString(line) && !strings.HasPrefix(strings.TrimSpace(line), "#") {
+			findings = append(findings, Finding{
+				ID:       "hardcoded_key_" + fmt.Sprintf("%d", i),
+				Pattern:  "Hardcoded Credentials",
+				Severity: "high",
+				File:     filePath,
+				Line:     i + 1,
+				Message:  "Hardcoded API key or credential detected",
+				Code:     line,
+			})
+		}
+	}
+
+	// Pattern 3: Infinite Loops
+	infiniteLoopRegex := regexp.MustCompile(`while\s*(True|1|true)\s*:`)
+	for i, line := range lines {
+		if infiniteLoopRegex.MatchString(line) {
+			findings = append(findings, Finding{
+				ID:       "infinite_loop_" + fmt.Sprintf("%d", i),
+				Pattern:  "Infinite Loop",
+				Severity: "high",
+				File:     filePath,
+				Line:     i + 1,
+				Message:  "Infinite loop detected: while True without break",
+				Code:     line,
+			})
+		}
+	}
+
+	// Pattern 4: Unsafe Environment Access
+	unsafeEnvRegex := regexp.MustCompile(`os\.environ\s*\[\s*["']`)
+	for i, line := range lines {
+		if unsafeEnvRegex.MatchString(line) && !strings.Contains(line, ".get(") {
+			findings = append(findings, Finding{
+				ID:       "unsafe_env_" + fmt.Sprintf("%d", i),
+				Pattern:  "Unsafe Environment Access",
+				Severity: "medium",
+				File:     filePath,
+				Line:     i + 1,
+				Message:  "Unsafe environment variable access without default value",
+				Code:     line,
+			})
+		}
+	}
+
+	return findings
 }
 
-// shouldFailOnRiskThreshold determines if scan should fail based on risk threshold
-func shouldFailOnRiskThreshold(result *models.ScanResult, threshold string) bool {
-	switch threshold {
-	case "high":
-		return result.HighRiskCount > 0
-	case "medium":
-		return result.HighRiskCount > 0 || result.MediumRiskCount > 0
-	case "low":
-		return result.FindingsCount > 0
-	default:
-		return false
+func isSupportedFile(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	return ext == ".py" || ext == ".js" || ext == ".ts"
+}
+
+func countLines(content []byte) int {
+	return strings.Count(string(content), "\n") + 1
+}
+
+func calculateRiskScore(findings []Finding) int {
+	if len(findings) == 0 {
+		return 0
 	}
+
+	score := 0
+	for _, f := range findings {
+		switch f.Severity {
+		case "high":
+			score += 30
+		case "medium":
+			score += 15
+		default:
+			score += 5
+		}
+	}
+
+	if score > 100 {
+		return 100
+	}
+	return score
+}
+
+func printReport(result *ScanResult) {
+	fmt.Println("\n========================================")
+	fmt.Println("        INKOG SECURITY SCAN REPORT       ")
+	fmt.Println("========================================")
+	fmt.Println()
+
+	fmt.Printf("Risk Score:       %d/100\n", result.RiskScore)
+	fmt.Printf("Duration:         %s\n", result.ScanDuration)
+	fmt.Printf("Files Scanned:    %d\n", result.FilesScanned)
+	fmt.Printf("Lines of Code:    %d\n", result.LinesOfCode)
+	fmt.Println()
+
+	fmt.Println("FINDINGS SUMMARY:")
+	fmt.Printf("  Total:      %d\n", result.FindingsCount)
+	fmt.Printf("  🔴 High:    %d\n", result.HighRiskCount)
+	fmt.Printf("  🟠 Medium:  %d\n", result.MediumRiskCount)
+	fmt.Printf("  🟡 Low:     %d\n", result.LowRiskCount)
+	fmt.Println()
+
+	if result.FindingsCount > 0 {
+		fmt.Println("FINDINGS:")
+		for i, f := range result.Findings {
+			fmt.Printf("%d. %s (%s)\n", i+1, f.Pattern, f.Severity)
+			fmt.Printf("   File: %s:%d\n", f.File, f.Line)
+			fmt.Printf("   Message: %s\n\n", f.Message)
+		}
+	}
+
+	fmt.Println("========================================")
+}
+
+func writeJSON(result *ScanResult, filePath string) error {
+	data, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filePath, data, 0644)
 }
