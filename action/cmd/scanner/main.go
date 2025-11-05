@@ -38,7 +38,7 @@ type ScanResult struct {
 
 func main() {
 	riskThreshold := flag.String("risk-threshold", "high", "Minimum risk level (low, medium, high)")
-	framework := flag.String("framework", "auto-detect", "Agent framework")
+	_ = flag.String("framework", "auto-detect", "Agent framework") // for future use
 	scanPath := flag.String("path", ".", "Path to scan")
 	jsonReport := flag.String("json-report", "", "Output JSON report file path")
 	flag.Parse()
@@ -170,7 +170,8 @@ func scanFile(filePath string, content []byte) []Finding {
 	// Pattern 1: Prompt Injection (f-strings and template literals)
 	promptInjectionRegex := regexp.MustCompile(`(f["']|f"""|\$\{)[^"']*(?:prompt|query|user_input|request|message)[^"']*["']`)
 	for i, line := range lines {
-		if promptInjectionRegex.MatchString(line) && !strings.TrimSpace(line) == "" && !strings.HasPrefix(strings.TrimSpace(line), "#") {
+		trimmedLine := strings.TrimSpace(line)
+		if promptInjectionRegex.MatchString(line) && trimmedLine != "" && !strings.HasPrefix(trimmedLine, "#") {
 			findings = append(findings, Finding{
 				ID:       "prompt_injection_" + fmt.Sprintf("%d", i),
 				Pattern:  "Prompt Injection",
