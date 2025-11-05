@@ -1,0 +1,214 @@
+name: Inkog Security Scan Tests
+
+on:
+  push:
+    paths:
+      - 'test-agents/**'
+      - 'action/**'
+      - '.github/workflows/inkog-test.yml'
+  pull_request:
+    paths:
+      - 'test-agents/**'
+      - 'action/**'
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
+jobs:
+  test-langchain-agent:
+    name: Test LangChain Agent
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+
+      - name: Build Inkog Scanner
+        working-directory: action
+        run: |
+          go mod download
+          go build -o inkog-scanner ./cmd/scanner
+
+      - name: Scan LangChain Agent
+        working-directory: action
+        run: |
+          ./inkog-scanner \
+            --path ../test-agents/langchain-example \
+            --framework langchain \
+            --risk-threshold medium \
+            --json-report ../langchain-scan-report.json
+        continue-on-error: true
+
+      - name: Upload LangChain Report
+        uses: actions/upload-artifact@v3
+        with:
+          name: langchain-scan-report
+          path: langchain-scan-report.json
+
+      - name: Display LangChain Report
+        run: |
+          echo "=== LangChain Scan Results ==="
+          cat langchain-scan-report.json | jq '.'
+
+  test-crewai-agent:
+    name: Test CrewAI Agent
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+
+      - name: Build Inkog Scanner
+        working-directory: action
+        run: |
+          go mod download
+          go build -o inkog-scanner ./cmd/scanner
+
+      - name: Scan CrewAI Agent
+        working-directory: action
+        run: |
+          ./inkog-scanner \
+            --path ../test-agents/crewai-example \
+            --framework crewai \
+            --risk-threshold medium \
+            --json-report ../crewai-scan-report.json
+        continue-on-error: true
+
+      - name: Upload CrewAI Report
+        uses: actions/upload-artifact@v3
+        with:
+          name: crewai-scan-report
+          path: crewai-scan-report.json
+
+      - name: Display CrewAI Report
+        run: |
+          echo "=== CrewAI Scan Results ==="
+          cat crewai-scan-report.json | jq '.'
+
+  test-both-agents:
+    name: Comprehensive Security Scan
+    runs-on: ubuntu-latest
+    needs: [test-langchain-agent, test-crewai-agent]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+
+      - name: Build Inkog Scanner
+        working-directory: action
+        run: |
+          go mod download
+          go build -o inkog-scanner ./cmd/scanner
+
+      - name: Scan All Test Agents
+        working-directory: action
+        run: |
+          ./inkog-scanner \
+            --path ../test-agents \
+            --framework auto-detect \
+            --risk-threshold high \
+            --json-report ../complete-scan-report.json
+        continue-on-error: true
+
+      - name: Upload Complete Report
+        uses: actions/upload-artifact@v3
+        with:
+          name: complete-scan-report
+          path: complete-scan-report.json
+
+      - name: Display Complete Report
+        run: |
+          echo "=== Complete Scan Results ==="
+          cat complete-scan-report.json | jq '.'
+
+      - name: Generate Summary
+        run: |
+          echo "## 🔒 Inkog Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Scan completed on test agents" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Parse and display key metrics
+          RISK_SCORE=$(cat complete-scan-report.json | jq '.risk_score')
+          FINDINGS=$(cat complete-scan-report.json | jq '.findings_count')
+          HIGH_RISK=$(cat complete-scan-report.json | jq '.high_risk_count')
+
+          echo "### Results" >> $GITHUB_STEP_SUMMARY
+          echo "- **Risk Score**: $RISK_SCORE/100" >> $GITHUB_STEP_SUMMARY
+          echo "- **Total Findings**: $FINDINGS" >> $GITHUB_STEP_SUMMARY
+          echo "- **High Risk Issues**: $HIGH_RISK" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📊 Full report available in artifacts" >> $GITHUB_STEP_SUMMARY
+
+  validate-detection:
+    name: Validate Pattern Detection
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+
+      - name: Build Inkog Scanner
+        working-directory: action
+        run: |
+          go mod download
+          go build -o inkog-scanner ./cmd/scanner
+
+      - name: Scan and Validate LangChain
+        working-directory: action
+        run: |
+          ./inkog-scanner \
+            --path ../test-agents/langchain-example \
+            --json-report report.json || true
+
+          # Validate that expected vulnerabilities were found
+          FINDINGS=$(jq '.findings_count' report.json)
+          HIGH_RISK=$(jq '.high_risk_count' report.json)
+
+          echo "LangChain Agent Scan Results:"
+          echo "- Findings: $FINDINGS"
+          echo "- High Risk: $HIGH_RISK"
+
+          if [ $FINDINGS -gt 0 ]; then
+            echo "✅ Vulnerabilities detected successfully"
+          else
+            echo "⚠️  No vulnerabilities detected (check if scanner is working)"
+          fi
+
+      - name: Scan and Validate CrewAI
+        working-directory: action
+        run: |
+          ./inkog-scanner \
+            --path ../test-agents/crewai-example \
+            --json-report report.json || true
+
+          FINDINGS=$(jq '.findings_count' report.json)
+          HIGH_RISK=$(jq '.high_risk_count' report.json)
+
+          echo "CrewAI Agent Scan Results:"
+          echo "- Findings: $FINDINGS"
+          echo "- High Risk: $HIGH_RISK"
+
+          if [ $FINDINGS -gt 0 ]; then
+            echo "✅ Vulnerabilities detected successfully"
+          else
+            echo "⚠️  No vulnerabilities detected (check if scanner is working)"
+          fi
