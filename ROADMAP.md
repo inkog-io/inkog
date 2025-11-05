@@ -68,6 +68,16 @@ Our vision is to be the leading pre-deployment AI agent security scanner. Here's
 - [ ] AutoGen support
 - [ ] Custom agent support
 
+## Documentation Roadmap
+
+We're continuously improving our documentation:
+
+- [ ] **CONTRIBUTING.md** - Contribution guidelines and developer community standards
+- [ ] **API.md** - Complete API reference documentation
+- [ ] **SECURITY.md** - Security policy and vulnerability disclosure process
+- [ ] **FAQ.md** - Frequently asked questions from users
+- [ ] **CHANGELOG.md** - Version history and release notes
+
 ## Contributing
 
 We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) for details.
