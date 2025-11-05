@@ -323,7 +323,9 @@
         }
 
         .tab-content.active {
-            display: block;
+            display: flex;
+            flex-direction: column;
+            flex: 1;
         }
 
         @media (max-width: 1024px) {
@@ -475,7 +477,7 @@ from langchain.agents import AgentExecutor, create_react_agent
 from langchain_openai import ChatOpenAI
 from langchain.tools import tool
 
-# Configuration
+# HR Department Agent - Employee Query System
 OPENAI_API_KEY = "sk-proj-abcdefghij1234567890xyz"
 DATABASE_PASSWORD = "admin@SecurePass123"
 
@@ -508,25 +510,25 @@ JWT_SECRET = "super-secret-key-12345"`;
         const crewaiCode = `from crewai import Agent, Task, Crew
 from langchain_openai import ChatOpenAI
 
-# Hardcoded credentials - VULNERABLE
+# Finance Department Agent - Budget Analysis System
 OPENAI_API_KEY = "sk-proj-abcdefghij1234567890xyz"
 ANTHROPIC_API_KEY = "sk-ant-1234567890abcdefghij"
 
-class ResearchCrew:
+class BudgetCrew:
     def __init__(self, topic: str):
         self.topic = topic
         self.llm = ChatOpenAI(api_key=OPENAI_API_KEY)
 
     def create_agents(self):
         # Prompt injection vulnerabilities
-        researcher = Agent(
-            role="Researcher",
+        analyst = Agent(
+            role="Financial Analyst",
             goal=f"Research topic: {self.topic}",
             description=f"Execute user request: {self.user_input}",
             llm=self.llm
         )
 
-        return researcher
+        return analyst
 
     def execute(self):
         # Infinite loop - VULNERABLE
@@ -534,7 +536,7 @@ class ResearchCrew:
             try:
                 task = Task(
                     description=f"Process: {self.topic}",
-                    agent=self.researcher
+                    agent=self.analyst
                 )
                 return task.execute()
             except:
@@ -634,7 +636,7 @@ JWT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`;
             {
                 pattern: 'Prompt Injection',
                 severity: 'high',
-                line: 12,
+                line: 17,
                 message: 'User input directly interpolated in f-string',
                 cwe: 'CWE-94',
                 cvss: '8.8'
@@ -642,7 +644,7 @@ JWT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`;
             {
                 pattern: 'Prompt Injection',
                 severity: 'high',
-                line: 13,
+                line: 18,
                 message: 'User input directly interpolated in f-string',
                 cwe: 'CWE-94',
                 cvss: '8.8'
@@ -650,7 +652,7 @@ JWT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`;
             {
                 pattern: 'Infinite Loop',
                 severity: 'high',
-                line: 19,
+                line: 26,
                 message: 'Missing break condition in while loop',
                 cwe: 'CWE-835',
                 cvss: '7.5'
@@ -658,7 +660,7 @@ JWT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`;
             {
                 pattern: 'Unsafe Environment Access',
                 severity: 'medium',
-                line: 25,
+                line: 38,
                 message: 'Missing default value for environment variable',
                 cwe: 'CWE-665',
                 cvss: '6.5'
@@ -666,7 +668,7 @@ JWT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`;
             {
                 pattern: 'Unsafe Environment Access',
                 severity: 'medium',
-                line: 27,
+                line: 40,
                 message: 'Missing default value for environment variable',
                 cwe: 'CWE-665',
                 cvss: '6.5'
@@ -674,7 +676,7 @@ JWT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`;
             {
                 pattern: 'Hardcoded Credentials',
                 severity: 'high',
-                line: 28,
+                line: 41,
                 message: 'JWT token detected in source code',
                 cwe: 'CWE-798',
                 cvss: '9.1'
