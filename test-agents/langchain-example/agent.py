@@ -1,6 +1,9 @@
 """
 LangChain AI Agent Example
 This agent demonstrates common security vulnerabilities found in AI agents.
+
+GitHub Actions Test: Ready for production scanning
+Test Status: Workflow fixed and optimized for enterprise deployment
 """
 
 import os
