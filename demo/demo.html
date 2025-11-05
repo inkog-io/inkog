@@ -302,6 +302,104 @@
             background: rgba(245, 158, 11, 0.1);
         }
 
+        .finding.hover {
+            background: rgba(59, 130, 246, 0.15);
+            border-left-color: #3b82f6;
+            box-shadow: 0 8px 20px rgba(59, 130, 246, 0.2);
+        }
+
+        .code-line.hover {
+            background: rgba(59, 130, 246, 0.2);
+            border-left-color: #3b82f6;
+        }
+
+        .findings-summary {
+            padding: 20px;
+            background: #0f172a;
+            border-radius: 8px;
+            border: 1px solid #334155;
+            margin-bottom: 16px;
+            animation: slideInRight 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .findings-summary-title {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #64748b;
+            margin-bottom: 16px;
+        }
+
+        .summary-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+        }
+
+        .stat {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .stat-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .stat-number {
+            font-size: 24px;
+            font-weight: 700;
+            color: #f1f5f9;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-label.high {
+            color: #fca5a5;
+        }
+
+        .stat-label.medium {
+            color: #fcd34d;
+        }
+
+        .stat-label.low {
+            color: #86efac;
+        }
+
+        .stat-bar {
+            height: 6px;
+            background: #1e293b;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .stat-bar-fill {
+            height: 100%;
+            background: inherit;
+            border-radius: 3px;
+            animation: fillBar 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .stat-bar-fill.high {
+            background: #ef4444;
+        }
+
+        .stat-bar-fill.medium {
+            background: #f59e0b;
+        }
+
+        .stat-bar-fill.low {
+            background: #10b981;
+        }
+
         @keyframes slideInRight {
             from {
                 opacity: 0;
@@ -861,13 +959,51 @@ JWT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`;
                 return;
             }
 
+            // Calculate severity counts for summary
+            const highCount = findings.filter(f => f.severity === 'high').length;
+            const mediumCount = findings.filter(f => f.severity === 'medium').length;
+            const lowCount = findings.filter(f => f.severity === 'low').length;
+
+            // Add summary section first
+            const summaryEl = document.createElement('div');
+            summaryEl.className = 'findings-summary';
+            summaryEl.innerHTML = `
+                <div class="findings-summary-title">Vulnerability Breakdown</div>
+                <div class="summary-stats">
+                    <div class="stat">
+                        <div class="stat-header">
+                            <div class="stat-number">${highCount}</div>
+                        </div>
+                        <div class="stat-label high">High</div>
+                        <div class="stat-bar">
+                            <div class="stat-bar-fill high" style="width: ${(highCount / findings.length) * 100}%"></div>
+                        </div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-header">
+                            <div class="stat-number">${mediumCount}</div>
+                        </div>
+                        <div class="stat-label medium">Medium</div>
+                        <div class="stat-bar">
+                            <div class="stat-bar-fill medium" style="width: ${(mediumCount / findings.length) * 100}%"></div>
+                        </div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-header">
+                            <div class="stat-number">${lowCount}</div>
+                        </div>
+                        <div class="stat-label low">Low</div>
+                        <div class="stat-bar">
+                            <div class="stat-bar-fill low" style="width: ${(lowCount / findings.length) * 100}%"></div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            findingsContainer.appendChild(summaryEl);
+
             findings.forEach((finding, index) => {
                 const delay = 200 + (index * 120);
                 setTimeout(() => {
-                    if (index === 0) {
-                        findingsContainer.innerHTML = '';
-                    }
-
                     // Highlight code line - Use data-line attribute instead of id
                     const lineElements = document.querySelectorAll(`[data-line="${finding.line}"]`);
                     lineElements.forEach(el => {
@@ -879,6 +1015,8 @@ JWT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`;
                     // Add finding element
                     const findingEl = document.createElement('div');
                     findingEl.className = `finding ${finding.severity}`;
+                    findingEl.setAttribute('data-line', finding.line);
+                    findingEl.setAttribute('data-finding-index', index);
                     findingEl.innerHTML = `
                         <div class="finding-header">
                             <span class="finding-badge ${finding.severity}">${finding.severity === 'high' ? 'High' : 'Medium'}</span>
@@ -892,6 +1030,26 @@ JWT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`;
                         <div class="finding-message">${finding.message}</div>
                         <div class="finding-standard">Complies with OWASP Top 10, SANS Top 25</div>
                     `;
+
+                    // Add hover handlers for cross-highlighting
+                    findingEl.addEventListener('mouseenter', () => {
+                        findingEl.classList.add('hover');
+                        // Highlight corresponding code lines
+                        document.querySelectorAll(`[data-line="${finding.line}"]`).forEach(el => {
+                            if (!el.classList.contains('finding')) {
+                                el.classList.add('hover');
+                            }
+                        });
+                    });
+                    findingEl.addEventListener('mouseleave', () => {
+                        findingEl.classList.remove('hover');
+                        document.querySelectorAll(`[data-line="${finding.line}"]`).forEach(el => {
+                            if (!el.classList.contains('finding')) {
+                                el.classList.remove('hover');
+                            }
+                        });
+                    });
+
                     findingsContainer.appendChild(findingEl);
 
                     // Update metrics on last finding
@@ -899,14 +1057,32 @@ JWT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`;
                         setTimeout(() => {
                             const endTime = performance.now();
                             const duration = endTime - startTime;
-                            const highCount = findings.filter(f => f.severity === 'high').length;
-                            const mediumCount = findings.filter(f => f.severity === 'medium').length;
                             const riskScore = Math.min(100, highCount * 20 + mediumCount * 10);
 
                             document.getElementById('riskScore').textContent = riskScore + '/100';
                             document.getElementById('findingsCount').textContent = findings.length;
                             document.getElementById('scanTime').textContent = duration.toFixed(1) + 'ms';
                             scanBtn.disabled = false;
+
+                            // Add hover handlers to code lines
+                            document.querySelectorAll('.code-line').forEach(lineEl => {
+                                lineEl.addEventListener('mouseenter', () => {
+                                    const lineNum = lineEl.getAttribute('data-line');
+                                    lineEl.classList.add('hover');
+                                    // Highlight all findings on this line
+                                    document.querySelectorAll(`[data-line="${lineNum}"].finding`).forEach(f => {
+                                        f.classList.add('hover');
+                                    });
+                                });
+                                lineEl.addEventListener('mouseleave', () => {
+                                    const lineNum = lineEl.getAttribute('data-line');
+                                    lineEl.classList.remove('hover');
+                                    // Remove hover from findings
+                                    document.querySelectorAll(`[data-line="${lineNum}"].finding`).forEach(f => {
+                                        f.classList.remove('hover');
+                                    });
+                                });
+                            });
                         }, 300);
                     }
                 }, delay);
