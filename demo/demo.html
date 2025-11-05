@@ -788,12 +788,12 @@ JWT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`;
         const langchainFindings = [
             { pattern: 'Hardcoded Credentials', severity: 'high', line: 7, message: 'API key detected in source code', cwe: 'CWE-798', cvss: '9.1' },
             { pattern: 'Hardcoded Credentials', severity: 'high', line: 8, message: 'Database password exposed in source', cwe: 'CWE-798', cvss: '9.1' },
-            { pattern: 'Prompt Injection', severity: 'high', line: 15, message: 'User input directly interpolated in f-string', cwe: 'CWE-94', cvss: '8.8' },
             { pattern: 'Prompt Injection', severity: 'high', line: 16, message: 'User input directly interpolated in f-string', cwe: 'CWE-94', cvss: '8.8' },
-            { pattern: 'Infinite Loop', severity: 'high', line: 20, message: 'Missing break condition in while loop', cwe: 'CWE-835', cvss: '7.5' },
-            { pattern: 'Unsafe Environment Access', severity: 'medium', line: 24, message: 'Missing default value for environment variable', cwe: 'CWE-665', cvss: '6.5' },
-            { pattern: 'Prompt Injection', severity: 'high', line: 28, message: 'User input directly interpolated in f-string', cwe: 'CWE-94', cvss: '8.8' },
-            { pattern: 'Hardcoded Credentials', severity: 'high', line: 31, message: 'JWT secret exposed in source code', cwe: 'CWE-798', cvss: '9.1' }
+            { pattern: 'Prompt Injection', severity: 'high', line: 17, message: 'User input directly interpolated in f-string', cwe: 'CWE-94', cvss: '8.8' },
+            { pattern: 'Infinite Loop', severity: 'high', line: 21, message: 'Missing break condition in while loop', cwe: 'CWE-835', cvss: '7.5' },
+            { pattern: 'Unsafe Environment Access', severity: 'medium', line: 28, message: 'Missing default value for environment variable', cwe: 'CWE-665', cvss: '6.5' },
+            { pattern: 'Prompt Injection', severity: 'high', line: 31, message: 'User input directly interpolated in f-string', cwe: 'CWE-94', cvss: '8.8' },
+            { pattern: 'Hardcoded Credentials', severity: 'high', line: 34, message: 'JWT secret exposed in source code', cwe: 'CWE-798', cvss: '9.1' }
         ];
 
         const crewaiFindings = [
