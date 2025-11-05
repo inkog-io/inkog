@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inkog Enterprise Demo - AI Agent Security Scanner</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm/css/xterm.min.css" />
+    <title>Inkog Demo</title>
     <style>
         * {
             margin: 0;
@@ -13,258 +12,182 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
-            min-height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
             padding: 20px;
             color: #333;
         }
 
-        .demo-wrapper {
+        .container {
             max-width: 1400px;
             margin: 0 auto;
-        }
-
-        /* Header Section */
-        .hero-section {
             background: white;
-            border-radius: 12px 12px 0 0;
-            padding: 60px 40px;
-            text-align: center;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
-        }
-
-        .logo-badge {
-            display: inline-block;
-            font-size: 28px;
-            font-weight: 700;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 20px;
-            letter-spacing: -1px;
-        }
-
-        .hero-title {
-            font-size: 42px;
-            font-weight: 700;
-            color: #0f0c29;
-            margin-bottom: 15px;
-            line-height: 1.2;
-        }
-
-        .hero-subtitle {
-            font-size: 18px;
-            color: #666;
-            max-width: 700px;
-            margin: 0 auto 40px;
-            line-height: 1.6;
-        }
-
-        .value-props {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin-top: 40px;
-            padding-top: 40px;
-            border-top: 1px solid #eee;
-        }
-
-        .value-prop {
-            text-align: left;
-        }
-
-        .value-prop-icon {
-            font-size: 32px;
-            margin-bottom: 12px;
-        }
-
-        .value-prop-title {
-            font-weight: 600;
-            color: #0f0c29;
-            margin-bottom: 8px;
-        }
-
-        .value-prop-desc {
-            font-size: 13px;
-            color: #999;
-            line-height: 1.5;
-        }
-
-        /* Main Demo Section */
-        .demo-container {
-            background: white;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
-            border-radius: 0 0 12px 12px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
             overflow: hidden;
         }
 
-        .demo-content {
+        .header {
+            background: #1e1e1e;
+            color: white;
+            padding: 20px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .title {
+            font-size: 24px;
+            font-weight: 600;
+            letter-spacing: -0.5px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-scan {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-scan:hover {
+            background: #5568d3;
+        }
+
+        .btn-scan:disabled {
+            background: #999;
+            cursor: not-allowed;
+        }
+
+        .btn-reset {
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        .btn-reset:hover {
+            background: #e0e0e0;
+        }
+
+        select {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 13px;
+            background: white;
+            cursor: pointer;
+        }
+
+        .content {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 0;
             min-height: 600px;
         }
 
-        .demo-left {
-            padding: 40px;
-            background: #f8f9fa;
+        .panel {
+            padding: 30px;
             border-right: 1px solid #e0e0e0;
             display: flex;
             flex-direction: column;
         }
 
-        .demo-right {
-            padding: 40px;
-            display: flex;
-            flex-direction: column;
-            background: white;
+        .panel:last-child {
+            border-right: none;
         }
 
-        .code-section-title {
-            font-size: 13px;
+        .panel-title {
+            font-size: 12px;
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 1px;
-            color: #666;
+            color: #999;
             margin-bottom: 16px;
         }
 
-        .code-comparison {
-            display: flex;
-            flex-direction: column;
-            gap: 24px;
+        .code-container {
             flex: 1;
-        }
-
-        .code-block {
-            border-radius: 8px;
-            overflow: hidden;
-            border: 1px solid #e0e0e0;
-        }
-
-        .code-label {
-            background: #333;
-            color: white;
-            padding: 10px 16px;
-            font-size: 12px;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .code-label.bad {
-            background: #dc3545;
-        }
-
-        .code-label.good {
-            background: #28a745;
-        }
-
-        .code-content {
             background: #1e1e1e;
-            color: #d4d4d4;
+            border-radius: 4px;
             padding: 16px;
+            overflow: auto;
             font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-            font-size: 13px;
+            font-size: 12px;
             line-height: 1.6;
-            overflow-x: auto;
-            max-height: 200px;
-            overflow-y: auto;
+            color: #d4d4d4;
         }
 
-        .code-content .vulnerable {
-            background: rgba(220, 53, 69, 0.2);
+        .code-line {
             display: block;
-            padding: 4px 8px;
-            margin: 0 -16px;
-            padding-left: 24px;
-            border-left: 3px solid #dc3545;
+            white-space: pre-wrap;
+            word-wrap: break-word;
         }
 
-        .code-content .comment {
+        .code-comment {
             color: #6a9955;
         }
 
-        .code-content .keyword {
+        .code-keyword {
             color: #569cd6;
         }
 
-        .code-content .string {
+        .code-string {
             color: #ce9178;
-        }
-
-        /* Scan Results */
-        .scan-results {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .results-title {
-            font-size: 13px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: #666;
-            margin-bottom: 16px;
         }
 
         .findings-container {
             flex: 1;
-            border: 1px solid #e0e0e0;
-            border-radius: 8px;
-            overflow: hidden;
             display: flex;
             flex-direction: column;
-            background: #f9f9f9;
+            gap: 12px;
+            overflow-y: auto;
         }
 
         .findings-empty {
-            padding: 40px 20px;
-            text-align: center;
-            color: #999;
             display: flex;
             align-items: center;
             justify-content: center;
-            flex-direction: column;
+            height: 100%;
+            color: #999;
+            text-align: center;
+            font-size: 14px;
         }
 
-        .findings-empty-icon {
-            font-size: 48px;
-            margin-bottom: 12px;
-            opacity: 0.3;
-        }
-
-        .findings-list {
-            flex: 1;
-            overflow-y: auto;
-            padding: 16px;
-        }
-
-        .finding-item {
-            margin-bottom: 16px;
-            padding: 16px;
-            border-radius: 8px;
-            background: white;
+        .finding {
+            padding: 14px;
             border-left: 4px solid;
+            border-radius: 4px;
+            background: #f9f9f9;
+            border: 1px solid #e0e0e0;
             animation: slideIn 0.4s ease-out;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
 
-        .finding-item.high {
+        .finding.high {
             border-left-color: #dc3545;
+            background: #fff5f5;
         }
 
-        .finding-item.medium {
+        .finding.medium {
             border-left-color: #ffc107;
+            background: #fffbf0;
         }
 
         @keyframes slideIn {
             from {
                 opacity: 0;
-                transform: translateX(-20px);
+                transform: translateX(-10px);
             }
             to {
                 opacity: 1;
@@ -275,229 +198,53 @@
         .finding-header {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 10px;
             margin-bottom: 8px;
         }
 
-        .finding-severity {
+        .finding-badge {
             display: inline-block;
             font-size: 10px;
             font-weight: 700;
-            padding: 4px 10px;
-            border-radius: 4px;
+            padding: 3px 8px;
+            border-radius: 3px;
             text-transform: uppercase;
         }
 
-        .finding-severity.high {
+        .finding-badge.high {
             background: #dc3545;
             color: white;
         }
 
-        .finding-severity.medium {
+        .finding-badge.medium {
             background: #ffc107;
             color: #333;
         }
 
-        .finding-pattern {
+        .finding-name {
             font-weight: 600;
-            color: #0f0c29;
+            color: #333;
+            font-size: 13px;
         }
 
         .finding-line {
-            font-size: 12px;
+            font-size: 11px;
             color: #999;
         }
 
         .finding-message {
-            font-size: 13px;
+            font-size: 12px;
             color: #666;
             line-height: 1.5;
-            margin-top: 8px;
+            margin-top: 6px;
         }
 
-        /* Controls */
-        .controls {
-            padding: 24px 40px;
-            background: white;
-            border-top: 1px solid #e0e0e0;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 20px;
-            flex-wrap: wrap;
-        }
-
-        .control-left {
-            display: flex;
-            gap: 12px;
-        }
-
-        .control-right {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-        }
-
-        button {
-            padding: 12px 24px;
-            border: none;
-            border-radius: 6px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
-        }
-
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
-        }
-
-        .btn-primary:active {
-            transform: translateY(0);
-        }
-
-        .btn-secondary {
-            background: #f0f0f0;
-            color: #333;
-        }
-
-        .btn-secondary:hover {
-            background: #e0e0e0;
-        }
-
-        select {
-            padding: 8px 12px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 13px;
-            font-weight: 500;
-            cursor: pointer;
-        }
-
-        .speed-label {
-            font-size: 13px;
-            font-weight: 500;
-            color: #666;
-        }
-
-        /* Footer */
-        .demo-footer {
-            background: white;
-            padding: 40px;
-            border-top: 1px solid #e0e0e0;
-            text-align: center;
-        }
-
-        .footer-title {
-            font-size: 18px;
-            font-weight: 600;
-            color: #0f0c29;
-            margin-bottom: 20px;
-        }
-
-        .footer-benefits {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-bottom: 40px;
-        }
-
-        .benefit {
-            text-align: left;
-        }
-
-        .benefit-icon {
-            font-size: 28px;
-            margin-bottom: 8px;
-        }
-
-        .benefit-title {
-            font-weight: 600;
-            color: #0f0c29;
-            margin-bottom: 6px;
-        }
-
-        .benefit-desc {
-            font-size: 13px;
-            color: #999;
-            line-height: 1.5;
-        }
-
-        .cta-section {
-            padding: 40px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-radius: 8px;
-            color: white;
-            text-align: center;
-            max-width: 600px;
-            margin: 0 auto;
-        }
-
-        .cta-title {
-            font-size: 24px;
-            font-weight: 700;
-            margin-bottom: 12px;
-        }
-
-        .cta-desc {
-            font-size: 14px;
-            opacity: 0.95;
-            margin-bottom: 20px;
-            line-height: 1.6;
-        }
-
-        .cta-buttons {
-            display: flex;
-            gap: 12px;
-            justify-content: center;
-            flex-wrap: wrap;
-        }
-
-        .btn-cta {
-            padding: 12px 28px;
-            border-radius: 6px;
-            font-weight: 600;
-            text-decoration: none;
-            display: inline-block;
-            transition: all 0.3s ease;
-        }
-
-        .btn-cta-primary {
-            background: white;
-            color: #667eea;
-        }
-
-        .btn-cta-primary:hover {
-            transform: translateY(-2px);
-        }
-
-        .btn-cta-secondary {
-            background: rgba(255,255,255,0.2);
-            color: white;
-            border: 1px solid rgba(255,255,255,0.4);
-        }
-
-        .btn-cta-secondary:hover {
-            background: rgba(255,255,255,0.3);
-        }
-
-        /* Metrics */
-        .metrics-bar {
-            padding: 20px 40px;
-            background: #f8f9fa;
+        .metrics {
+            padding: 20px 30px;
+            background: #f9f9f9;
             border-top: 1px solid #e0e0e0;
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            grid-template-columns: repeat(4, 1fr);
             gap: 20px;
             text-align: center;
         }
@@ -516,353 +263,303 @@
         }
 
         .metric-label {
-            font-size: 12px;
+            font-size: 11px;
             color: #999;
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
 
-        /* Responsive */
         @media (max-width: 1024px) {
-            .demo-content {
+            .content {
                 grid-template-columns: 1fr;
             }
 
-            .demo-left {
+            .panel {
                 border-right: none;
                 border-bottom: 1px solid #e0e0e0;
             }
 
-            .hero-title {
-                font-size: 32px;
-            }
-
-            .value-props {
-                grid-template-columns: 1fr;
+            .metrics {
+                grid-template-columns: repeat(2, 1fr);
             }
         }
 
         @media (max-width: 640px) {
-            .hero-section {
-                padding: 40px 20px;
-            }
-
-            .demo-left,
-            .demo-right {
-                padding: 20px;
-            }
-
-            .hero-title {
-                font-size: 24px;
+            .header {
+                flex-direction: column;
+                gap: 12px;
+                align-items: flex-start;
             }
 
             .controls {
-                flex-direction: column;
-                align-items: stretch;
+                width: 100%;
+                flex-wrap: wrap;
             }
 
             button, select {
-                width: 100%;
+                flex: 1;
+                min-width: 100px;
             }
 
-            .footer-benefits {
+            .metrics {
                 grid-template-columns: 1fr;
+            }
+
+            .content {
+                min-height: 400px;
+            }
+
+            .panel {
+                padding: 20px;
             }
         }
 
-        /* Scrollbar */
-        .findings-list::-webkit-scrollbar,
-        .code-content::-webkit-scrollbar {
+        ::-webkit-scrollbar {
             width: 6px;
         }
 
-        .findings-list::-webkit-scrollbar-track,
-        .code-content::-webkit-scrollbar-track {
+        ::-webkit-scrollbar-track {
             background: #f1f1f1;
         }
 
-        .findings-list::-webkit-scrollbar-thumb,
-        .code-content::-webkit-scrollbar-thumb {
+        ::-webkit-scrollbar-thumb {
             background: #ccc;
             border-radius: 3px;
         }
 
-        .findings-list::-webkit-scrollbar-thumb:hover,
-        .code-content::-webkit-scrollbar-thumb:hover {
+        ::-webkit-scrollbar-thumb:hover {
             background: #999;
         }
     </style>
 </head>
 <body>
-    <div class="demo-wrapper">
-        <!-- Hero Section -->
-        <div class="hero-section">
-            <div class="logo-badge">🔒 INKOG</div>
-            <h1 class="hero-title">Enterprise AI Agent Security Scanner</h1>
-            <p class="hero-subtitle">Detect behavioral risks before deployment. See how Inkog identifies critical vulnerabilities in real time.</p>
-
-            <div class="value-props">
-                <div class="value-prop">
-                    <div class="value-prop-icon">⚡</div>
-                    <div class="value-prop-title">Pre-Deployment Detection</div>
-                    <div class="value-prop-desc">Catch vulnerabilities before they reach production</div>
-                </div>
-                <div class="value-prop">
-                    <div class="value-prop-icon">🎯</div>
-                    <div class="value-prop-title">100% Accuracy</div>
-                    <div class="value-prop-desc">Zero false positives on known patterns</div>
-                </div>
-                <div class="value-prop">
-                    <div class="value-prop-icon">⚙️</div>
-                    <div class="value-prop-title">Instant Feedback</div>
-                    <div class="value-prop-desc">Get results in milliseconds, not hours</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Demo Container -->
-        <div class="demo-container">
-            <div class="demo-content">
-                <!-- Left: Code Comparison -->
-                <div class="demo-left">
-                    <div class="code-section-title">Vulnerable Code</div>
-
-                    <div class="code-comparison">
-                        <!-- Hardcoded Credentials -->
-                        <div class="code-block">
-                            <div class="code-label bad">🔴 Hardcoded API Key</div>
-                            <div class="code-content">
-<span class="keyword">OPENAI_API_KEY</span> = <span class="string">"sk-proj-1234567890abcd..."</span>
-<span class="vulnerable">↑ Exposed in source code</span>
-                            </div>
-                        </div>
-
-                        <!-- Prompt Injection -->
-                        <div class="code-block">
-                            <div class="code-label bad">🔴 Prompt Injection</div>
-                            <div class="code-content">
-<span class="keyword">prompt</span> = <span class="string">f"</span>Execute query: {user_query}<span class="string">"</span>
-<span class="vulnerable">↑ Direct user input interpolation</span>
-                            </div>
-                        </div>
-
-                        <!-- Infinite Loop -->
-                        <div class="code-block">
-                            <div class="code-label bad">🔴 Infinite Loop</div>
-                            <div class="code-content">
-<span class="keyword">while</span> <span class="keyword">True</span>:
-    attempt += <span class="string">1</span>
-<span class="vulnerable">↑ Missing break condition</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Right: Scan Results -->
-                <div class="demo-right">
-                    <div class="results-title">Inkog Scan Results</div>
-
-                    <div class="findings-container">
-                        <div class="findings-list" id="findingsList">
-                            <div class="findings-empty">
-                                <div class="findings-empty-icon">🔍</div>
-                                <p>Click "Scan Code" to run security analysis</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Controls -->
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="title">🔒 Inkog</div>
             <div class="controls">
-                <div class="control-left">
-                    <button class="btn-primary" id="scanBtn">
-                        🚀 Scan Code
-                    </button>
-                    <button class="btn-secondary" id="resetBtn">
-                        ⟲ Reset
-                    </button>
-                </div>
-                <div class="control-right">
-                    <span class="speed-label">Speed:</span>
-                    <select id="speedSelect">
-                        <option value="slow">Slow</option>
-                        <option value="normal" selected>Normal</option>
-                        <option value="fast">Fast</option>
-                    </select>
-                </div>
+                <button class="btn-scan" id="scanBtn">🚀 Scan Code</button>
+                <button class="btn-reset" id="resetBtn">Reset</button>
+                <select id="speedSelect">
+                    <option value="slow">Slow</option>
+                    <option value="normal" selected>Normal</option>
+                    <option value="fast">Fast</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="content">
+            <!-- Left: Code -->
+            <div class="panel">
+                <div class="panel-title">Agent Code</div>
+                <div class="code-container" id="codeContainer"></div>
             </div>
 
-            <!-- Metrics -->
-            <div class="metrics-bar">
-                <div class="metric">
-                    <div class="metric-value" id="riskScore">--</div>
-                    <div class="metric-label">Risk Score</div>
-                </div>
-                <div class="metric">
-                    <div class="metric-value" id="findingsCount">0</div>
-                    <div class="metric-label">Issues Found</div>
-                </div>
-                <div class="metric">
-                    <div class="metric-value" id="scanTime">--</div>
-                    <div class="metric-label">Scan Time</div>
-                </div>
-                <div class="metric">
-                    <div class="metric-value">100%</div>
-                    <div class="metric-label">Accuracy</div>
+            <!-- Right: Results -->
+            <div class="panel">
+                <div class="panel-title">Inkog Scan Results</div>
+                <div class="findings-container" id="findingsContainer">
+                    <div class="findings-empty">Click "Scan Code" to analyze</div>
                 </div>
             </div>
         </div>
 
-        <!-- Footer: Benefits & CTA -->
-        <div class="demo-footer">
-            <div class="footer-title">Why Enterprise Teams Trust Inkog</div>
-
-            <div class="footer-benefits">
-                <div class="benefit">
-                    <div class="benefit-icon">🛡️</div>
-                    <div class="benefit-title">Prevent Incidents</div>
-                    <div class="benefit-desc">Catch security issues before production. Average cost of AI incident: $4.4M</div>
-                </div>
-                <div class="benefit">
-                    <div class="benefit-icon">📊</div>
-                    <div class="benefit-title">Compliance Ready</div>
-                    <div class="benefit-desc">EU AI Act compliant, SOC 2 compatible, audit-ready reporting</div>
-                </div>
-                <div class="benefit">
-                    <div class="benefit-icon">🔗</div>
-                    <div class="benefit-title">Developer Friendly</div>
-                    <div class="benefit-desc">GitHub Actions integration, instant PR feedback, seamless workflows</div>
-                </div>
-                <div class="benefit">
-                    <div class="benefit-icon">⚡</div>
-                    <div class="benefit-title">Production Grade</div>
-                    <div class="benefit-desc">Sub-millisecond scans, zero false positives, enterprise scaling</div>
-                </div>
+        <!-- Metrics -->
+        <div class="metrics">
+            <div class="metric">
+                <div class="metric-value" id="riskScore">--</div>
+                <div class="metric-label">Risk Score</div>
             </div>
-
-            <div class="cta-section">
-                <div class="cta-title">Ready to Secure Your AI Agents?</div>
-                <div class="cta-desc">Join enterprises protecting their AI deployments with Inkog. Start for free with GitHub Actions integration.</div>
-                <div class="cta-buttons">
-                    <a href="https://github.com/inkog-io/inkog" class="btn-cta btn-cta-primary">View on GitHub</a>
-                    <a href="https://github.com/inkog-io/inkog#readme" class="btn-cta btn-cta-secondary">Read Docs</a>
-                </div>
+            <div class="metric">
+                <div class="metric-value" id="findingsCount">0</div>
+                <div class="metric-label">Issues Found</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value" id="scanTime">--</div>
+                <div class="metric-label">Scan Time</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value">100%</div>
+                <div class="metric-label">Accuracy</div>
             </div>
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/xterm/lib/xterm.min.js"></script>
     <script>
-        // Vulnerability findings data
+        const agentCode = `import os
+from langchain.agents import AgentExecutor, create_react_agent
+from langchain_openai import ChatOpenAI
+from langchain.tools import tool
+
+# Configuration
+OPENAI_API_KEY = "sk-proj-abcdefghij1234567890xyz"
+DATABASE_PASSWORD = "admin@SecurePass123"
+
+class SearchAgent:
+    def __init__(self, user_query: str):
+        self.user_query = user_query
+        self.llm = ChatOpenAI(api_key=OPENAI_API_KEY)
+
+    def search(self) -> str:
+        prompt = f"Search for: {self.user_query}"
+        system_prompt = f"Execute: {self.user_input}"
+        return self.llm.predict(prompt)
+
+    def retry_search(self):
+        while True:
+            try:
+                return self.search()
+            except:
+                pass
+
+    def get_db_url(self):
+        return os.environ["DB_URL"]
+
+def process_request(user_input: str):
+    instruction = f"Process: {user_input}"
+    return instruction
+
+JWT_SECRET = "super-secret-key-12345"`;
+
         const findings = [
             {
                 pattern: 'Hardcoded Credentials',
                 severity: 'high',
-                line: 9,
-                message: 'API key sk-proj-... detected in source code. Exposed to anyone with code access.',
-                details: 'Environment variables should be used instead. See: https://12factor.net/config'
+                line: 7,
+                message: 'API key detected in source code'
+            },
+            {
+                pattern: 'Hardcoded Credentials',
+                severity: 'high',
+                line: 8,
+                message: 'Database password exposed in source'
             },
             {
                 pattern: 'Prompt Injection',
                 severity: 'high',
-                line: 27,
-                message: 'User input directly interpolated in f-string. Can execute arbitrary prompts.',
-                details: 'Use parameterized prompts. Validate and sanitize all user inputs before use.'
+                line: 15,
+                message: 'User input directly interpolated in f-string'
+            },
+            {
+                pattern: 'Prompt Injection',
+                severity: 'high',
+                line: 16,
+                message: 'User input directly interpolated in f-string'
             },
             {
                 pattern: 'Infinite Loop',
                 severity: 'high',
-                line: 35,
-                message: 'Missing break condition could hang the agent indefinitely.',
-                details: 'Add timeout and explicit break conditions. Implement circuit breakers.'
+                line: 20,
+                message: 'Missing break condition in while loop'
+            },
+            {
+                pattern: 'Unsafe Environment Access',
+                severity: 'medium',
+                line: 24,
+                message: 'Missing default value for environment variable'
+            },
+            {
+                pattern: 'Prompt Injection',
+                severity: 'high',
+                line: 28,
+                message: 'User input directly interpolated in f-string'
+            },
+            {
+                pattern: 'Hardcoded Credentials',
+                severity: 'high',
+                line: 31,
+                message: 'JWT secret exposed in source code'
             }
         ];
 
-        // Get speed multiplier
-        function getSpeedMultiplier() {
-            const speed = document.getElementById('speedSelect').value;
-            const multipliers = { slow: 1.0, normal: 0.6, fast: 0.3 };
-            return multipliers[speed] || 0.6;
+        // Display code
+        function displayCode() {
+            const lines = agentCode.split('\n');
+            const codeContainer = document.getElementById('codeContainer');
+            codeContainer.innerHTML = lines.map((line, idx) => {
+                return `<div class="code-line">${(idx + 1).toString().padStart(2, '0')}  ${escapeHtml(line)}</div>`;
+            }).join('');
         }
 
-        // Run scan animation
+        function escapeHtml(text) {
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return text.replace(/[&<>"']/g, m => map[m]);
+        }
+
+        function getSpeedMultiplier() {
+            const speeds = { slow: 1.0, normal: 0.6, fast: 0.3 };
+            return speeds[document.getElementById('speedSelect').value] || 0.6;
+        }
+
         function runScan() {
-            const findingsList = document.getElementById('findingsList');
             const scanBtn = document.getElementById('scanBtn');
+            const findingsContainer = document.getElementById('findingsContainer');
 
-            // Disable button during scan
             scanBtn.disabled = true;
-            findingsList.innerHTML = '';
-
-            // Show progress
-            const progressEl = document.createElement('div');
-            progressEl.className = 'findings-empty';
-            progressEl.innerHTML = '<div class="findings-empty-icon">⚙️</div><p>Scanning code...</p>';
-            findingsList.appendChild(progressEl);
+            findingsContainer.innerHTML = '<div class="findings-empty">Scanning...</div>';
 
             const startTime = performance.now();
             const speedMultiplier = getSpeedMultiplier();
 
-            // Add findings with staggered animation
             findings.forEach((finding, index) => {
                 setTimeout(() => {
                     if (index === 0) {
-                        findingsList.innerHTML = '';
+                        findingsContainer.innerHTML = '';
                     }
 
                     const findingEl = document.createElement('div');
-                    findingEl.className = `finding-item ${finding.severity}`;
+                    findingEl.className = `finding ${finding.severity}`;
 
                     findingEl.innerHTML = `
                         <div class="finding-header">
-                            <span class="finding-severity ${finding.severity}">
-                                ${finding.severity === 'high' ? '🔴 HIGH' : '🟠 MEDIUM'}
+                            <span class="finding-badge ${finding.severity}">
+                                ${finding.severity === 'high' ? 'High' : 'Medium'}
                             </span>
-                            <span class="finding-pattern">${finding.pattern}</span>
+                            <span class="finding-name">${finding.pattern}</span>
                         </div>
                         <div class="finding-line">Line ${finding.line}</div>
                         <div class="finding-message">${finding.message}</div>
                     `;
 
-                    findingsList.appendChild(findingEl);
+                    findingsContainer.appendChild(findingEl);
 
-                    // Update metrics after last finding
                     if (index === findings.length - 1) {
                         const endTime = performance.now();
                         const duration = endTime - startTime;
 
                         setTimeout(() => {
-                            document.getElementById('riskScore').textContent = '73/100';
+                            document.getElementById('riskScore').textContent = '92/100';
                             document.getElementById('findingsCount').textContent = findings.length;
                             document.getElementById('scanTime').textContent = duration.toFixed(1) + 'ms';
                             scanBtn.disabled = false;
                         }, 200);
                     }
-                }, (500 + index * 400) * speedMultiplier);
+                }, (400 + index * 350) * speedMultiplier);
             });
         }
 
-        // Reset demo
         function resetScan() {
-            document.getElementById('findingsList').innerHTML = `
-                <div class="findings-empty">
-                    <div class="findings-empty-icon">🔍</div>
-                    <p>Click "Scan Code" to run security analysis</p>
-                </div>
-            `;
+            document.getElementById('findingsContainer').innerHTML = '<div class="findings-empty">Click "Scan Code" to analyze</div>';
             document.getElementById('riskScore').textContent = '--';
             document.getElementById('findingsCount').textContent = '0';
             document.getElementById('scanTime').textContent = '--';
         }
 
-        // Event listeners
+        // Initialize
+        displayCode();
         document.getElementById('scanBtn').addEventListener('click', runScan);
         document.getElementById('resetBtn').addEventListener('click', resetScan);
 
-        // Auto-run scan on page load
+        // Auto-run on load
         window.addEventListener('load', () => {
-            setTimeout(runScan, 800);
+            setTimeout(runScan, 600);
         });
     </script>
 </body>
