@@ -18,7 +18,7 @@ func main() {
 	flag.Parse()
 
 	// Initialize pattern registry
-	registry := patterns.InitializeRegistry()
+	registry := InitializeRegistry()
 
 	// Handle --list-patterns flag
 	if *listPatterns {

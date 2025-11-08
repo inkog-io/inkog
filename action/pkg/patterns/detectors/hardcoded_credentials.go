@@ -48,27 +48,27 @@ func NewHardcodedCredentialsDetector() *HardcodedCredentialsDetector {
 
 	regexes := []credentialPattern{
 		{
-			regex:       regexp.MustCompile(`(sk-|sk_|sk_live_|ghp_|sk-ant-)[a-zA-Z0-9_\-]{20,}`),
+			regex:       regexp.MustCompile(`(?i)(sk-|sk_|sk_live_|ghp_|sk-ant-)[a-zA-Z0-9_\-]{20,}`),
 			name:        "Known API Key Format",
 			description: "OpenAI (sk-proj-, sk-ant-), Stripe (sk_live_), GitHub (ghp_) and other service prefixes",
 		},
 		{
-			regex:       regexp.MustCompile(`(api_?key|secret_?key|secret|token|password|api_?secret)\s*[=:]\s*["']([a-zA-Z0-9_\-\.]{15,})["']`),
+			regex:       regexp.MustCompile(`(?i)(api_?key|secret_?key|secret|token|password|api_?secret)\s*[=:]\s*["']([a-zA-Z0-9_\-\.]{15,})["']`),
 			name:        "Hardcoded Credential Variable",
 			description: "Variable assignment with 15+ character value",
 		},
 		{
-			regex:       regexp.MustCompile(`(OPENAI|STRIPE|GITHUB|ANTHROPIC|DATABASE|API|SECRET|TOKEN)_?(KEY|PASSWORD|SECRET|TOKEN)\s*=\s*["']([a-zA-Z0-9_\-\.]{15,})["']`),
+			regex:       regexp.MustCompile(`(?i)(openai|stripe|github|anthropic|database|api|secret|token)_?(key|password|secret|token)\s*=\s*["']([a-zA-Z0-9_\-\.]{15,})["']`),
 			name:        "Hardcoded Service Credential",
 			description: "Named constant with secret value",
 		},
 		{
-			regex:       regexp.MustCompile(`(jwt|token|auth|bearer)\s*[=:]\s*["']([a-zA-Z0-9_\-\.]{20,})["']`),
+			regex:       regexp.MustCompile(`(?i)(jwt|token|auth|bearer)\s*[=:]\s*["']([a-zA-Z0-9_\-\.]{20,})["']`),
 			name:        "Hardcoded Token",
 			description: "JWT, auth token, or bearer token",
 		},
 		{
-			regex:       regexp.MustCompile(`(db_?password|db_?user|db_?host|database_?url)\s*[=:]\s*["']([^"']{8,})["']`),
+			regex:       regexp.MustCompile(`(?i)(db_?password|db_?user|db_?host|database_?url)\s*[=:]\s*["']([^"']{8,})["']`),
 			name:        "Hardcoded Database Credential",
 			description: "Database connection string or password",
 		},

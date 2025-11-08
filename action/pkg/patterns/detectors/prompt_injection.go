@@ -146,36 +146,3 @@ func (d *PromptInjectionDetector) isInLLMContext(line string) bool {
 
 	return false
 }
-
-// isSupportedFile checks if file extension is supported
-func isSupportedFile(path string) bool {
-	supported := []string{".py", ".js", ".ts", ".jsx", ".tsx", ".go"}
-	for _, ext := range supported {
-		if strings.HasSuffix(path, ext) {
-			return true
-		}
-	}
-	return false
-}
-
-// isTestFile checks if file is a test file (false positive reduction)
-func isTestFile(path string) bool {
-	testPatterns := []string{
-		"test_", "_test.py", "/tests/", "test/",
-		".test.js", ".test.ts", "spec.js", "spec.ts",
-		"example", "sample", "demo",
-	}
-
-	lowerPath := strings.ToLower(path)
-	for _, pattern := range testPatterns {
-		if strings.Contains(lowerPath, pattern) {
-			return true
-		}
-	}
-
-	return false
-}
-
-// Finding represents a single security finding
-// (Re-exported here for convenience in detector packages)
-type Finding = patterns.Finding

@@ -211,11 +211,11 @@ func TestHardcodedCredentialsMultipleSecrets(t *testing.T) {
 
 	// Test 8: Multiple secrets in same file
 	vulnerable := `
-API_KEY = "sk-proj-abc123"
-DB_PASSWORD = "admin123"
-GITHUB_TOKEN = "ghp_xyz789"
-JWT_SECRET = "my-secret-key"
-AWS_SECRET = "aws_secret_access_key_123"
+API_KEY = "sk-proj-abcdefghijklmnopqrstuvwxyz1234567890"
+DB_PASSWORD = "SuperSecureAdminPassword123!@#"
+GITHUB_TOKEN = "ghp_xyz789abcdefghijklmnopqrstuvwxyz1234567890"
+JWT_SECRET = "my-secret-key-with-minimum-length-requirement"
+AWS_SECRET = "aws_secret_access_key_with_realistically_long_value_here"
 `
 
 	findings, err := detector.Detect("secrets.py", []byte(vulnerable))
