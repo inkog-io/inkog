@@ -4,7 +4,15 @@
 
 ---
 
-## Quick Start: Add a Pattern in 5 Steps
+## Quick Start: Add a Pattern (7 Steps - Including Testing)
+
+### ⚠️ IMPORTANT: Testing is Part of Development
+
+Every pattern must be tested BEFORE committing. Tests validate:
+- Correct vulnerability detection
+- False positive reduction
+- Confidence scoring accuracy
+- Performance metrics
 
 ### 1. Create Pattern File
 
@@ -33,9 +41,9 @@ type MyPatternDetector struct {
 func (d *MyPatternDetector) Name() string { return "my_pattern" }
 func (d *MyPatternDetector) GetPattern() patterns.Pattern { return d.pattern }
 func (d *MyPatternDetector) GetConfidence() float32 { return d.confidence }
-func (d *MyPatternDetector) Detect(filePath string, src []byte) ([]Finding, error) {
+func (d *MyPatternDetector) Detect(filePath string, src []byte) ([]patterns.Finding, error) {
     // Your detection logic
-    var findings []Finding
+    var findings []patterns.Finding
     // ... populate findings ...
     return findings, nil
 }
@@ -56,6 +64,15 @@ func NewMyPatternDetector() *MyPatternDetector {
         OWASP:    "LLM01",
         Description: "Description of vulnerability...",
         Remediation: "How to fix it...",
+        FinancialImpact: struct {
+            Severity    string
+            Description string
+            RiskPerYear float32
+        }{
+            Severity:    "HIGH",
+            Description: "...",
+            RiskPerYear: 100000,
+        },
     }
 
     return &MyPatternDetector{
@@ -82,13 +99,170 @@ func InitializeRegistry() *Registry {
 }
 ```
 
-### 5. Test & Commit
+### 5. Create Unit Tests (REQUIRED)
+
+Create `my_pattern_test.go` with 6+ test cases:
+
+```go
+package detectors
+
+import "testing"
+
+// Test 1: Basic detection (positive case)
+func TestMyPatternDetection(t *testing.T) {
+    detector := NewMyPatternDetector()
+    vulnerable := `[vulnerable code example]`
+
+    findings, err := detector.Detect("app.py", []byte(vulnerable))
+    if err != nil {
+        t.Fatalf("Error: %v", err)
+    }
+
+    if len(findings) != 1 {
+        t.Fatalf("Expected 1 finding, got %d", len(findings))
+    }
+}
+
+// Test 2: False positive reduction (test files)
+func TestMyPatternSkipsTestFiles(t *testing.T) {
+    detector := NewMyPatternDetector()
+    code := `[same vulnerable code]`
+
+    findings, _ := detector.Detect("test_app.py", []byte(code))
+    if len(findings) > 0 {
+        t.Fatalf("Should skip test files")
+    }
+}
+
+// Test 3: Known CVE/real scenario
+func TestMyPatternKnownVulnerability(t *testing.T) {
+    // Reference actual CVE or documented case
+}
+
+// Test 4: Confidence scoring
+func TestMyPatternConfidence(t *testing.T) {
+    // Verify confidence is within expected range
+}
+
+// Test 5: Multiple findings
+func TestMyPatternMultipleFindings(t *testing.T) {
+    // Test file with multiple vulnerabilities
+}
+
+// Test 6: Secure code
+func TestMyPatternSecureCode(t *testing.T) {
+    // Verify secure code doesn't trigger
+}
+
+// Bonus: Benchmark test
+func BenchmarkMyPattern(b *testing.B) {
+    detector := NewMyPatternDetector()
+    code := []byte(`[vulnerable code]`)
+
+    b.ResetTimer()
+    for i := 0; i < b.N; i++ {
+        detector.Detect("app.py", code)
+    }
+}
+```
+
+**Test Requirements:**
+- ✅ All tests must pass
+- ✅ Confidence must be 0.0-1.0
+- ✅ < 5% false positive rate
+- ✅ > 90% accuracy on known vulnerabilities
+- ✅ Performance < 2ms per file
+
+### 6. Create Test Data (REQUIRED)
+
+Add test files to `testdata/`:
+
+```
+testdata/
+├── vulnerable_my_pattern.py      # Examples of vulnerable code
+├── secure_my_pattern.py          # Examples of secure code
+└── false_positives_my_pattern.py # Code that shouldn't trigger
+```
+
+**Example test data:**
+
+```python
+# testdata/vulnerable_my_pattern.py
+# VULNERABLE: Clear example of what you're detecting
+
+# testdata/secure_my_pattern.py
+# SECURE: Example of correct implementation
+
+# testdata/false_positives_my_pattern.py
+# In test file - should skip
+# Placeholder values - should skip
+# Commented code - should skip
+```
+
+### 7. Run Tests & Validate
 
 ```bash
 cd action
-go test ./...
-go build -o inkog ./cmd/scanner
-./inkog --path test-agents --list-patterns
+
+# Run unit tests for your pattern
+go test ./pkg/patterns/detectors -run MyPattern -v
+
+# Run all tests with coverage
+go test ./pkg/patterns/detectors -cover -v
+
+# Generate coverage report
+go test ./pkg/patterns/detectors -coverprofile=coverage.out
+go tool cover -html=coverage.out
+
+# Test against real code
+./inkog --path ../testdata --json-report results.json
+
+# Verify findings
+jq '.findings[] | .pattern' results.json
+```
+
+**Expected Results:**
+- ✅ All 6+ unit tests pass
+- ✅ Code coverage > 80%
+- ✅ Detects vulnerabilities in testdata/
+- ✅ Skips test files correctly
+- ✅ Confidence scores are reasonable
+
+### 8. Document & Commit
+
+Create documentation in `docs/patterns/my_pattern.md`:
+
+```markdown
+# My Pattern Name
+
+## Overview
+[What vulnerability does it detect?]
+
+## Detection Method
+[How does it detect it?]
+
+## Code Examples
+
+### Vulnerable
+[Show bad code]
+
+### Secure
+[Show good code]
+
+## Remediation
+[How to fix it]
+
+## Related
+[Links to similar patterns]
+```
+
+Commit with comprehensive message:
+
+```bash
+git add action/pkg/patterns/detectors/my_pattern*.go
+git add docs/patterns/my_pattern.md
+git add testdata/
+git commit -m "feat: Add my_pattern detector with full test coverage"
 ```
 
 ---
@@ -449,6 +623,43 @@ Target metrics per pattern:
 - Add tests
 - Register in init.go
 - Submit PR
+
+---
+
+## Future Ideas: Custom Pattern SDK
+
+### 🚀 Planned Feature (Not for Current Release)
+
+**Inkog Custom Pattern SDK** - Allow companies to write their own patterns without forking the codebase.
+
+This would enable:
+- Enterprise-specific vulnerability detection
+- Industry-specific patterns (fintech, healthcare, etc.)
+- Custom business logic patterns
+- Plugin-based architecture
+
+**Potential Design:**
+
+```go
+// Pattern plugin could be loaded as:
+import "github.com/company/inkog-patterns"
+
+// SDK would provide:
+// - PatternSDK interface
+// - Testing utilities
+// - Documentation generators
+// - Performance measurement tools
+```
+
+**When to Build:** After completing TIER 1-3 core patterns and validating plugin approach with internal patterns.
+
+**Benefits:**
+- ✅ Extensibility without core code changes
+- ✅ Easier customer adoption (can add their own patterns)
+- ✅ Better market positioning vs competitors
+- ✅ Revenue opportunity (pattern marketplace)
+
+**Current Status:** Design phase only. Focus on core 16 patterns first.
 
 ---
 
