@@ -11,7 +11,9 @@ func InitializeRegistry() *patterns.Registry {
 
 	// TIER 1: Financial Impact Patterns
 	// These cause $5K -> $50K monthly cost explosions
-	registry.Register(detectors.NewPromptInjectionDetector())
+	// Using enhanced V2 detector for Prompt Injection with comprehensive coverage
+	// of CVEs (LangChain PALChain CVE-2023-44467, GraphCypher CVE-2024-8309, etc.)
+	registry.Register(detectors.NewPromptInjectionDetectorV2())
 	registry.Register(detectors.NewHardcodedCredentialsDetector())
 	registry.Register(detectors.NewInfiniteLoopDetector())
 	registry.Register(detectors.NewUnsafeEnvAccessDetector())
