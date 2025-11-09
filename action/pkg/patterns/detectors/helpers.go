@@ -6,7 +6,7 @@ import (
 
 // isSupportedFile checks if file extension is supported
 func isSupportedFile(path string) bool {
-	supported := []string{".py", ".js", ".ts", ".jsx", ".tsx", ".go"}
+	supported := []string{".py", ".js", ".ts", ".jsx", ".tsx", ".go", ".java", ".c", ".cpp", ".h", ".hpp", ".cs", ".rb", ".php", ".scala", ".kt"}
 	for _, ext := range supported {
 		if strings.HasSuffix(path, ext) {
 			return true

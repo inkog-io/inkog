@@ -18,7 +18,10 @@ func InitializeRegistry() *patterns.Registry {
 	// detection, private keys, encoding/obfuscation, entropy analysis, and confidence scoring
 	// Coverage: AWS, Azure, GCP, Stripe, GitHub, SendGrid, Slack, Twilio, JWT, PEM keys
 	registry.Register(detectors.NewHardcodedCredentialsDetectorV2())
-	registry.Register(detectors.NewInfiniteLoopDetector())
+	// Using enhanced V2 detector for Infinite Loops with constant condition detection,
+	// recursion analysis, multi-language support, and false positive reduction
+	// Coverage: LangChain CVE-2024-2965, CrewAI, AutoGen, Flowise, Dify DoS scenarios
+	registry.Register(detectors.NewInfiniteLoopDetectorV2())
 	registry.Register(detectors.NewUnsafeEnvAccessDetector())
 
 	// TIER 2: Compliance Critical Patterns
