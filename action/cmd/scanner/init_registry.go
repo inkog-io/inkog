@@ -22,7 +22,10 @@ func InitializeRegistry() *patterns.Registry {
 	// recursion analysis, multi-language support, and false positive reduction
 	// Coverage: LangChain CVE-2024-2965, CrewAI, AutoGen, Flowise, Dify DoS scenarios
 	registry.Register(detectors.NewInfiniteLoopDetectorV2())
-	registry.Register(detectors.NewUnsafeEnvAccessDetector())
+	// Using enhanced V2 detector for Unsafe Environment Access with dangerous code execution detection,
+	// environment variable access tracking, file operation analysis, and obfuscation detection
+	// Coverage: LangChain CVE-2023-44467, CVE-2024-36480, CVE-2025-46059; CrewAI, AutoGen, Flowise, Dify RCE scenarios
+	registry.Register(detectors.NewUnsafeEnvAccessDetectorV2())
 
 	// TIER 2: Compliance Critical Patterns
 	// Will be added in Phase 2
