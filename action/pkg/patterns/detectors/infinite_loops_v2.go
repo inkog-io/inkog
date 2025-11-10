@@ -1,6 +1,7 @@
 package detectors
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -8,10 +9,12 @@ import (
 )
 
 // InfiniteLoopDetectorV2 detects infinite loop patterns in code
-// Covers constant conditions, empty for loops, recursion without base cases
-// and other patterns that lead to uncontrolled resource consumption
+// Covers constant conditions, empty for loops, recursion without base cases,
+// and other patterns that lead to uncontrolled resource consumption.
+// Uses AST-based control flow and call graph analysis for high-confidence detection.
 type InfiniteLoopDetectorV2 struct {
-	pattern patterns.Pattern
+	pattern      patterns.Pattern
+	astFramework *ASTAnalysisFramework
 
 	// PRIORITY 1: Critical infinite loop patterns
 	whileTruePattern         *regexp.Regexp // while True:, while true, while(true)
@@ -52,6 +55,7 @@ func NewInfiniteLoopDetectorV2() *InfiniteLoopDetectorV2 {
 			OWASP:    "A06:2021 - Vulnerable and Outdated Components",
 			Description: "Detects infinite loops, uncontrolled recursion, and loops with unreachable exit conditions that can lead to denial-of-service",
 		},
+		astFramework: NewASTAnalysisFramework(),
 
 		// PRIORITY 1: Critical patterns
 		whileTruePattern:     regexp.MustCompile(`(?i)\bwhile\s+(?:True|true|1\b)\s*[:\(]`),
@@ -93,7 +97,7 @@ func (d *InfiniteLoopDetectorV2) GetConfidence() float32 {
 	return 0.85
 }
 
-// Detect scans for infinite loops
+// Detect scans for infinite loops using both pattern matching and AST-based semantic analysis
 func (d *InfiniteLoopDetectorV2) Detect(filePath string, src []byte) ([]patterns.Finding, error) {
 	if !isSupportedFile(filePath) {
 		return []patterns.Finding{}, nil
@@ -108,6 +112,51 @@ func (d *InfiniteLoopDetectorV2) Detect(filePath string, src []byte) ([]patterns
 	lines := strings.Split(content, "\n")
 	var findings []patterns.Finding
 
+	// PASS 1: Perform AST-based semantic analysis for control flow and recursion detection
+	analysis := d.astFramework.AnalyzeCode(filePath, lines)
+
+	// PASS 2: Analyze control flow paths for unreachable exits
+	controlFlowAnalyzer := d.astFramework.GetControlFlowAnalyzer()
+	unterminatedLoops := controlFlowAnalyzer.DetectUnterminatedLoops(analysis.ControlFlows)
+
+	for _, loop := range unterminatedLoops {
+		if loop.StartLine > 0 && loop.StartLine <= len(lines) {
+			line := lines[loop.StartLine-1]
+			trimmed := strings.TrimSpace(line)
+
+			// Skip comments and empty lines
+			if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "//") {
+				continue
+			}
+
+			confidence := d.astFramework.EnhanceConfidenceScore(0.80, analysis, loop.StartLine)
+			msg := fmt.Sprintf("Infinite loop detected (lines %d-%d): No reachable exit condition", loop.StartLine, loop.EndLine)
+
+			findings = append(findings, d.createFinding(line, loop.StartLine, filePath, "HIGH", confidence, msg)...)
+		}
+	}
+
+	// PASS 3: Detect mutual recursion and circular call patterns
+	mutualCycles := d.astFramework.DetectMutualRecursion(analysis)
+	for _, cycle := range mutualCycles {
+		// A→B→A or longer cycles indicate potential infinite recursion
+		if len(cycle) >= 2 {
+			// Find the first function in the cycle and report it
+			firstFunc := cycle[0]
+			if function, exists := analysis.Functions[firstFunc]; exists {
+				if function.StartLine > 0 && function.StartLine <= len(lines) {
+					line := lines[function.StartLine-1]
+					confidence := d.astFramework.EnhanceConfidenceScore(0.85, analysis, function.StartLine)
+					cycleStr := strings.Join(cycle, " → ")
+					msg := fmt.Sprintf("Infinite recursion detected: %s", cycleStr)
+
+					findings = append(findings, d.createFinding(line, function.StartLine, filePath, "HIGH", confidence, msg)...)
+				}
+			}
+		}
+	}
+
+	// PASS 4: Traditional regex-based pattern detection
 	for i, line := range lines {
 		// Skip comments and empty lines
 		trimmed := strings.TrimSpace(line)

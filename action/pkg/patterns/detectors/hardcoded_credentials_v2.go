@@ -11,10 +11,11 @@ import (
 
 // HardcodedCredentialsDetectorV2 implements comprehensive credential detection
 // with support for 30+ credential formats, encoding detection, entropy analysis,
-// and dynamic confidence scoring.
+// dynamic confidence scoring, and AST-based semantic analysis for credential exfiltration detection.
 type HardcodedCredentialsDetectorV2 struct {
-	pattern    patterns.Pattern
-	confidence float32
+	pattern      patterns.Pattern
+	confidence   float32
+	astFramework *ASTAnalysisFramework
 
 	// PRIORITY 1: Critical credential format patterns
 	awsAccessKeyID         *regexp.Regexp // AKIA[0-9A-Z]{16}
@@ -82,7 +83,8 @@ func NewHardcodedCredentialsDetectorV2() *HardcodedCredentialsDetectorV2 {
 			OWASP:       "A01:2021 - Broken Access Control",
 			Description: "Detects 30+ hardcoded credential formats including API keys, private keys, tokens, and encoded secrets",
 		},
-		confidence: 0.98,
+		confidence:   0.98,
+		astFramework: NewASTAnalysisFramework(),
 
 		// PRIORITY 1: AWS Patterns
 		awsAccessKeyID:    regexp.MustCompile(`(?i)AKIA[0-9A-Z]{16}`),
@@ -156,7 +158,7 @@ func (d *HardcodedCredentialsDetectorV2) GetConfidence() float32 {
 	return d.confidence
 }
 
-// Detect scans for hardcoded credentials
+// Detect scans for hardcoded credentials using both pattern matching and AST-based semantic analysis
 func (d *HardcodedCredentialsDetectorV2) Detect(filePath string, src []byte) ([]patterns.Finding, error) {
 	if !d.isSupportedCredentialFile(filePath) {
 		return []patterns.Finding{}, nil
@@ -171,6 +173,34 @@ func (d *HardcodedCredentialsDetectorV2) Detect(filePath string, src []byte) ([]
 	lines := strings.Split(content, "\n")
 	var findings []patterns.Finding
 
+	// PASS 1: Perform AST-based semantic analysis for credential tracking and exfiltration detection
+	analysis := d.astFramework.AnalyzeCode(filePath, lines)
+
+	// PASS 2: Identify credentials and their exfiltration paths using variable tracking
+	variableTracker := d.astFramework.GetVariableTracker()
+	credentialsWithUsage := variableTracker.GetCredentialsWithUsage(analysis.Variables)
+
+	// Check each credential variable for exfiltration
+	for credVar, usageContexts := range credentialsWithUsage {
+		for _, context := range usageContexts {
+			// High-risk contexts: print, log, send, write, http, network, return
+			riskContexts := []string{"print", "log", "send", "write", "http", "request", "network", "return", "yield"}
+			for _, riskCtx := range riskContexts {
+				if strings.Contains(strings.ToLower(context), riskCtx) {
+					// Find the line where this credential is used in this context
+					for i, line := range lines {
+						if strings.Contains(line, credVar) && strings.Contains(strings.ToLower(line), riskCtx) {
+							confidence := d.astFramework.EnhanceConfidenceScore(0.88, analysis, i+1)
+							finding := d.createFinding(line, i+1, filePath, "CRITICAL", confidence, "Credential "+credVar+" exfiltrated via "+context)
+							findings = append(findings, finding...)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// PASS 3: Traditional regex-based pattern detection
 	for i, line := range lines {
 		// Skip comments and docstrings
 		trimmed := strings.TrimSpace(line)

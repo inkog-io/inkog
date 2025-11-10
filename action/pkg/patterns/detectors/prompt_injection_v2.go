@@ -9,10 +9,14 @@ import (
 )
 
 // PromptInjectionDetectorV2 provides comprehensive prompt injection detection
-// with support for multiple attack vectors, evasion techniques, and false positive reduction.
+// with support for multiple attack vectors, evasion techniques, false positive reduction,
+// and AST-based semantic analysis for accurate variable and data flow tracking.
 type PromptInjectionDetectorV2 struct {
 	pattern    patterns.Pattern
 	confidence float32
+
+	// AST framework components for semantic analysis
+	astFramework *ASTAnalysisFramework
 
 	// Core injection patterns
 	injectionKeywords    *regexp.Regexp
@@ -73,8 +77,9 @@ func NewPromptInjectionDetectorV2() *PromptInjectionDetectorV2 {
 	}
 
 	detector := &PromptInjectionDetectorV2{
-		pattern:    pattern,
-		confidence: 0.90,
+		pattern:      pattern,
+		confidence:   0.90,
+		astFramework: NewASTAnalysisFramework(),
 	}
 
 	// PRIORITY 1: Injection keywords and synonyms (25+ patterns)
@@ -143,7 +148,7 @@ func (d *PromptInjectionDetectorV2) GetConfidence() float32 {
 	return d.confidence
 }
 
-// Detect analyzes code for prompt injection vulnerabilities
+// Detect analyzes code for prompt injection vulnerabilities using both regex patterns and AST-based semantic analysis
 func (d *PromptInjectionDetectorV2) Detect(filePath string, src []byte) ([]patterns.Finding, error) {
 	var findings []patterns.Finding
 
@@ -159,6 +164,48 @@ func (d *PromptInjectionDetectorV2) Detect(filePath string, src []byte) ([]patte
 
 	lines := strings.Split(string(src), "\n")
 
+	// PASS 1: Perform AST-based semantic analysis for accurate variable and data flow tracking
+	analysis := d.astFramework.AnalyzeCode(filePath, lines)
+
+	// PASS 2: Identify dangerous data flows (user_input → prompt → llm chains)
+	dataFlowAnalyzer := d.astFramework.GetDataFlowAnalyzer()
+	userInputFlows := dataFlowAnalyzer.GetFlowsBySource(analysis.DataFlows, "user_input")
+	dangerousFlows := make([]DataFlow, 0)
+	for _, flow := range userInputFlows {
+		// Check if flow reaches a dangerous sink (eval, exec, system, llm.call)
+		if d.astFramework.IsDataFlowDangerous(flow) {
+			dangerousFlows = append(dangerousFlows, flow)
+		}
+	}
+
+	// Check each dangerous flow for injection vulnerability
+	for _, flow := range dangerousFlows {
+		for _, lineNum := range flow.LineNumbers {
+			if lineNum <= 0 || lineNum > len(lines) {
+				continue
+			}
+
+			line := lines[lineNum-1]
+			trimmedLine := strings.TrimSpace(line)
+
+			// Skip comments and empty lines
+			if trimmedLine == "" || strings.HasPrefix(trimmedLine, "#") || strings.HasPrefix(trimmedLine, "//") {
+				continue
+			}
+
+			// High confidence finding: direct user input to dangerous sink
+			confidence := d.astFramework.EnhanceConfidenceScore(0.85, analysis, lineNum)
+
+			findings = append(findings, d.createFinding(
+				filePath, lineNum-1, line, "CRITICAL",
+				"Data flow vulnerability: user input to dangerous sink",
+				"User-controlled data flows to "+flow.Sink+". AST analysis confirms: "+strings.Join(flow.Path, " → "),
+				confidence,
+			))
+		}
+	}
+
+	// PASS 3: Traditional regex-based detection (faster for specific patterns)
 	for i, line := range lines {
 		trimmedLine := strings.TrimSpace(line)
 
@@ -169,6 +216,18 @@ func (d *PromptInjectionDetectorV2) Detect(filePath string, src []byte) ([]patte
 
 		// PRIORITY 1: Check for dangerous sinks with untrusted input
 		if d.hasDangerousSink(line, filePath, i) {
+			// Skip if already found by AST analysis
+			var alreadyReported bool
+			for _, f := range findings {
+				if f.Line == i+1 && strings.Contains(f.Message, "Data flow vulnerability") {
+					alreadyReported = true
+					break
+				}
+			}
+			if alreadyReported {
+				continue
+			}
+
 			findings = append(findings, d.createFinding(
 				filePath, i, line, "CRITICAL",
 				"Code execution with untrusted input",
@@ -181,6 +240,8 @@ func (d *PromptInjectionDetectorV2) Detect(filePath string, src []byte) ([]patte
 		// PRIORITY 1: Check for injection keywords
 		if d.hasInjectionKeywords(line) {
 			confidence := d.calculateConfidence(line, filePath, i)
+			confidence = d.astFramework.EnhanceConfidenceScore(confidence, analysis, i+1)
+
 			if confidence < 0.5 {
 				continue // Too many mitigations, skip
 			}
@@ -197,6 +258,8 @@ func (d *PromptInjectionDetectorV2) Detect(filePath string, src []byte) ([]patte
 		// PRIORITY 1: Check for string interpolation in prompts
 		if d.hasUnsafeStringInterpolation(line) {
 			confidence := d.calculateConfidence(line, filePath, i)
+			confidence = d.astFramework.EnhanceConfidenceScore(confidence, analysis, i+1)
+
 			if confidence < 0.65 {
 				continue // Strong mitigations present
 			}
@@ -213,6 +276,8 @@ func (d *PromptInjectionDetectorV2) Detect(filePath string, src []byte) ([]patte
 		// PRIORITY 2: Check for evasion techniques
 		if d.hasEvasionTechnique(line) {
 			confidence := d.calculateConfidence(line, filePath, i)
+			confidence = d.astFramework.EnhanceConfidenceScore(confidence, analysis, i+1)
+
 			if confidence < 0.60 {
 				continue
 			}
