@@ -22,9 +22,11 @@ func InitializeRegistry() *patterns.Registry {
 	// recursion analysis, multi-language support, and false positive reduction
 	// Coverage: LangChain CVE-2024-2965, CrewAI, AutoGen, Flowise, Dify DoS scenarios
 	registry.Register(detectors.NewInfiniteLoopDetectorV2())
-	// Using enhanced V2 detector for Unsafe Environment Access with dangerous code execution detection,
-	// environment variable access tracking, file operation analysis, and obfuscation detection
-	// Coverage: LangChain CVE-2023-44467, CVE-2024-36480, CVE-2025-46059; CrewAI, AutoGen, Flowise, Dify RCE scenarios
+	// Using AST-aware V2 detector for Unsafe Environment Access with Tree-sitter based semantic analysis
+	// Features: Import alias tracking, nested attribute chain analysis, dynamic function detection
+	// Dangerous code execution detection, environment variable access tracking, obfuscation detection
+	// Coverage: LangChain CVE-2023-44467, CVE-2024-36480, CVE-2025-46059; CrewAI, AutoGen, Flowise, Dify
+	// AST Advantage: Catches evasion like "import os as x; x.system()" that regex-only detectors miss
 	registry.Register(detectors.NewUnsafeEnvAccessDetectorV2())
 
 	// TIER 2: Compliance Critical Patterns

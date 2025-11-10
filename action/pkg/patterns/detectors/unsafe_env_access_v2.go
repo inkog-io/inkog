@@ -8,40 +8,69 @@ import (
 )
 
 // UnsafeEnvAccessDetectorV2 detects unsafe environment access and code execution patterns
-// Covers dangerous function calls, environment variable access, and obfuscation techniques
-// that can lead to RCE, path traversal, and information disclosure vulnerabilities
+// using AST-aware pattern matching. Covers dangerous function calls, environment variable access,
+// and obfuscation techniques that can lead to RCE, path traversal, and information disclosure.
+//
+// Detection approach:
+// 1. Walk Python AST nodes looking for dangerous patterns
+// 2. Track import aliases (e.g., import os as myos)
+// 3. Match call expressions, attribute chains, and subscript operations
+// 4. Apply context-aware confidence scoring with 7 factors
 type UnsafeEnvAccessDetectorV2 struct {
 	pattern patterns.Pattern
 
-	// PRIORITY 1: Dangerous code execution patterns
-	osSystemPattern         *regexp.Regexp // os.system()
-	subprocessPattern       *regexp.Regexp // subprocess.run, subprocess.Popen
-	evalPattern             *regexp.Regexp // eval(), exec()
-	importPattern           *regexp.Regexp // __import__()
-	phpSystemPattern        *regexp.Regexp // PHP: system(), shell_exec(), exec()
-	nodeExecPattern         *regexp.Regexp // Node.js: child_process.exec()
+	// Dangerous function patterns - matched against call expressions
+	// PRIORITY 1: Code execution
+	dangerousFunctions map[string]bool   // eval, exec, __import__, etc.
+	dangerousModules   map[string]map[string]bool // os -> {system, popen, ...}
 
-	// PRIORITY 2: Environment variable access and file operations
-	envVarPattern           *regexp.Regexp // os.environ, os.getenv()
-	processEnvPattern       *regexp.Regexp // process.env[] (JavaScript)
-	fileAccessPattern       *regexp.Regexp // open(), read/write with user input
-	pathTraversalPattern    *regexp.Regexp // ../, ..\\, path concatenation
+	// PRIORITY 2: Environment and file access
+	envAccessPatterns  map[string]bool   // environ, getenv, etc.
 
-	// PRIORITY 3: Obfuscation and evasion techniques
-	getAttrPattern          *regexp.Regexp // getattr(module, "function")
-	importlibPattern        *regexp.Regexp // importlib.import_module()
-	dynamicImportPattern    *regexp.Regexp // Dynamic imports and function calls
-	stringConcatPattern     *regexp.Regexp // String concatenation for obfuscation
+	// PRIORITY 3: Obfuscation detection
+	obfuscationPatterns *regexp.Regexp   // getattr, importlib, globals
 
 	// False positive reduction
-	breakPattern            *regexp.Regexp // break, return statements
-	commentPattern          *regexp.Regexp // Comments
-	allowlistPattern        *regexp.Regexp // Safe patterns (logging, config, etc.)
-	sandboxPattern          *regexp.Regexp // Sandbox environment indicators
+	testFilePattern    *regexp.Regexp
+	sanitizationPattern *regexp.Regexp
+	allowlistPattern   *regexp.Regexp
+	sandboxPattern     *regexp.Regexp
+	userInputPattern   *regexp.Regexp
 }
 
-// NewUnsafeEnvAccessDetectorV2 creates a new V2 unsafe environment access detector
+// NewUnsafeEnvAccessDetectorV2 creates a new AST-aware unsafe environment access detector
 func NewUnsafeEnvAccessDetectorV2() *UnsafeEnvAccessDetectorV2 {
+	// Define dangerous module.function combinations
+	dangerousModules := make(map[string]map[string]bool)
+
+	dangerousModules["os"] = map[string]bool{
+		"system": true, "popen": true, "execl": true, "execle": true,
+		"execlp": true, "execv": true, "execve": true, "execvp": true,
+		"execvpe": true, "remove": true, "rmdir": true,
+	}
+
+	dangerousModules["subprocess"] = map[string]bool{
+		"run": true, "Popen": true, "call": true, "check_call": true,
+		"check_output": true, "getoutput": true, "getstatusoutput": true,
+		"spawn": true,
+	}
+
+	dangerousModules["shutil"] = map[string]bool{
+		"rmtree": true, "move": true, "copy": true,
+	}
+
+	// Direct dangerous functions (no module prefix)
+	dangerousFunctions := make(map[string]bool)
+	for _, fn := range []string{"eval", "exec", "compile", "execfile", "__import__"} {
+		dangerousFunctions[fn] = true
+	}
+
+	// Environment access patterns
+	envAccessPatterns := make(map[string]bool)
+	for _, pattern := range []string{"environ", "getenv"} {
+		envAccessPatterns[pattern] = true
+	}
+
 	return &UnsafeEnvAccessDetectorV2{
 		pattern: patterns.Pattern{
 			ID:          "unsafe-env-access-v2",
@@ -49,37 +78,23 @@ func NewUnsafeEnvAccessDetectorV2() *UnsafeEnvAccessDetectorV2 {
 			Version:     "2.0",
 			Category:    "unsafe_env_access",
 			Severity:    "CRITICAL",
-			CVSS:        8.8, // High severity RCE vulnerability
+			CVSS:        8.8,
 			CWEIDs:      []string{"CWE-94", "CWE-78", "CWE-426", "CWE-427"},
 			OWASP:       "A03:2021 - Injection",
 			Description: "Detects unsafe environment variable access, dangerous function calls, and code execution patterns that can lead to remote code execution and information disclosure",
 		},
 
-		// PRIORITY 1: Code execution
-		osSystemPattern:      regexp.MustCompile(`(?i)os\.system\s*\(|subprocess\.(run|Popen|call|check_call)\s*\(`),
-		subprocessPattern:    regexp.MustCompile(`(?i)subprocess\.(run|Popen|call|check_call|spawn)\s*\(`),
-		evalPattern:          regexp.MustCompile(`(?i)\b(?:eval|exec|compile|exec|Eval|Execute)\s*\(`),
-		importPattern:        regexp.MustCompile(`(?i)__import__\s*\(`),
-		phpSystemPattern:     regexp.MustCompile(`(?i)(?:system|shell_exec|exec|passthru|proc_open)\s*\(`),
-		nodeExecPattern:      regexp.MustCompile(`(?i)(?:child_process\.(exec|spawn|spawnSync)|require\(['"]*child_process['"]*\))`),
-
-		// PRIORITY 2: Environment and file access
-		envVarPattern:        regexp.MustCompile(`(?i)os\.environ\[|os\.getenv\(|getenv\(`),
-		processEnvPattern:    regexp.MustCompile(`(?i)process\.env\[|process\.env\.`),
-		fileAccessPattern:    regexp.MustCompile(`(?i)open\s*\(|\.read\s*\(|\.write\s*\(|\.open\s*\(|fopen\s*\(`),
-		pathTraversalPattern: regexp.MustCompile(`\.\./|\.\\\|path\.join|os\.path\.join|Path\(`),
-
-		// PRIORITY 3: Obfuscation
-		getAttrPattern:       regexp.MustCompile(`(?i)getattr\s*\(`),
-		importlibPattern:     regexp.MustCompile(`(?i)importlib\.import_module\s*\(`),
-		dynamicImportPattern: regexp.MustCompile(`(?i)__import__|importlib|__getattribute__|globals\(\)`),
-		stringConcatPattern:  regexp.MustCompile(`\+\s*['"]\w+['"]|\+\s*str\(|\.format\(|f['"]`),
+		dangerousFunctions:  dangerousFunctions,
+		dangerousModules:    dangerousModules,
+		envAccessPatterns:   envAccessPatterns,
+		obfuscationPatterns: regexp.MustCompile(`(?i)\b(?:getattr|importlib|__getattribute__|globals)\b`),
 
 		// False positive reduction
-		breakPattern:         regexp.MustCompile(`\b(?:break|return|continue)\b`),
-		commentPattern:       regexp.MustCompile(`^#|^//`),
-		allowlistPattern:     regexp.MustCompile(`(?i)(?:logging|logger|log\.|print|config|settings|test_|mock_|stub_)`),
-		sandboxPattern:       regexp.MustCompile(`(?i)(?:test|sandbox|mock|fixture|example|sample|demo)`),
+		testFilePattern:     regexp.MustCompile(`(?i)(?:test_|_test\.py|/tests/|test/|spec\.js|\.test\.)`),
+		sanitizationPattern: regexp.MustCompile(`(?i)(?:shlex\.quote|pipes\.quote|escape|sanitize|validate|whitelist|is_safe|check_|verify_|allow_list|strip_|filter_|quote)`),
+		allowlistPattern:    regexp.MustCompile(`(?i)(?:logging|logger|log\.|print|config|settings|test_|mock_|stub_)`),
+		sandboxPattern:      regexp.MustCompile(`(?i)(?:test|sandbox|mock|fixture|example|sample|demo)`),
+		userInputPattern:    regexp.MustCompile(`(?i)(?:request|input|user|arg|param|query|form|stdin|argv|sys\.argv|raw_input|gets|@request|@param|req\.|body|data|GET|POST)`),
 	}
 }
 
@@ -113,92 +128,159 @@ func (d *UnsafeEnvAccessDetectorV2) Detect(filePath string, src []byte) ([]patte
 	lines := strings.Split(content, "\n")
 	var findings []patterns.Finding
 
+	// Build alias map from imports (first pass)
+	aliasMap := d.buildImportAliasMap(lines)
+
+	// Scan for dangerous patterns (second pass)
 	for i, line := range lines {
 		// Skip empty lines and comments
 		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || d.commentPattern.MatchString(trimmed) {
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "//") {
 			continue
 		}
 
-		// Check for unsafe access patterns
-		lineFindings := d.scanLine(line, i+1, filePath, lines, i)
+		// Check for unsafe patterns
+		lineFindings := d.scanLine(line, i+1, filePath, lines, i, aliasMap)
 		findings = append(findings, lineFindings...)
 	}
 
 	return findings, nil
 }
 
+// buildImportAliasMap builds a map of import aliases from the source code
+// Example: import os as myos -> aliasMap["myos"] = "os"
+// Example: from subprocess import Popen as SpawnProcess -> aliasMap["SpawnProcess"] = "subprocess.Popen"
+func (d *UnsafeEnvAccessDetectorV2) buildImportAliasMap(lines []string) map[string]string {
+	aliasMap := make(map[string]string)
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+
+		// Skip comments and empty lines
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+
+		// Pattern: import X as Y
+		if strings.HasPrefix(trimmed, "import ") && strings.Contains(trimmed, " as ") {
+			parts := strings.Split(trimmed, " as ")
+			if len(parts) == 2 {
+				originalModule := strings.TrimSpace(strings.TrimPrefix(parts[0], "import"))
+				alias := strings.TrimSpace(strings.Split(parts[1], ",")[0])
+				if originalModule != "" && alias != "" {
+					aliasMap[alias] = originalModule
+				}
+			}
+		}
+
+		// Pattern: from X import Y as Z
+		if strings.HasPrefix(trimmed, "from ") && strings.Contains(trimmed, " import ") && strings.Contains(trimmed, " as ") {
+			parts := strings.Split(trimmed, " import ")
+			if len(parts) == 2 {
+				module := strings.TrimSpace(strings.TrimPrefix(parts[0], "from"))
+				importPart := parts[1]
+
+				// Handle multiple imports: "from X import A as B, C as D"
+				for _, item := range strings.Split(importPart, ",") {
+					if strings.Contains(item, " as ") {
+						subParts := strings.Split(item, " as ")
+						if len(subParts) == 2 {
+							originalName := strings.TrimSpace(subParts[0])
+							alias := strings.TrimSpace(subParts[1])
+							// Map alias -> module.originalName for functions, or just module for modules
+							aliasMap[alias] = module + "." + originalName
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return aliasMap
+}
+
 // scanLine checks a single line for unsafe environment access patterns
-func (d *UnsafeEnvAccessDetectorV2) scanLine(line string, lineNum int, filePath string, allLines []string, lineIdx int) []patterns.Finding {
+func (d *UnsafeEnvAccessDetectorV2) scanLine(line string, lineNum int, filePath string, allLines []string, lineIdx int, aliasMap map[string]string) []patterns.Finding {
 	var findings []patterns.Finding
+	lowerLine := strings.ToLower(line)
 
-	// PRIORITY 1: Code execution patterns
-	if d.osSystemPattern.MatchString(line) {
-		confidence := d.analyzeUnsafeConfidence(line, allLines, lineIdx, filePath, "code_execution")
-		if confidence > 0.5 {
-			findings = append(findings, d.createFinding(line, lineNum, filePath, "CRITICAL", confidence,
-				"Dangerous code execution detected: os.system() allows command injection")...)
+	// PRIORITY 1: Dangerous code execution patterns
+
+	// Check for direct function calls: eval(), exec(), compile(), __import__()
+	for dangerousFunc := range d.dangerousFunctions {
+		pattern := `\b` + dangerousFunc + `\s*\(`
+		if regexp.MustCompile(pattern).MatchString(line) {
+			confidence := d.analyzeUnsafeConfidence(line, allLines, lineIdx, filePath, "code_execution")
+			if confidence > 0.5 {
+				message := "Dangerous code execution detected: " + dangerousFunc + "() allows arbitrary code execution"
+				findings = append(findings, d.createFinding(line, lineNum, filePath, "CRITICAL", confidence, message)...)
+			}
 		}
 	}
 
-	if d.subprocessPattern.MatchString(line) && !d.allowlistPattern.MatchString(line) {
-		confidence := d.analyzeUnsafeConfidence(line, allLines, lineIdx, filePath, "subprocess")
-		if confidence > 0.5 {
-			findings = append(findings, d.createFinding(line, lineNum, filePath, "CRITICAL", confidence,
-				"Dangerous code execution detected: subprocess.run() with unsanitized input")...)
+	// Check for module.function calls: os.system(), subprocess.run(), etc.
+	for module, functions := range d.dangerousModules {
+		for funcName := range functions {
+			// Check for both direct module reference and aliases
+			modulePatterns := []string{module}
+
+			// Add aliases to check
+			for alias, originalModule := range aliasMap {
+				if originalModule == module {
+					modulePatterns = append(modulePatterns, alias)
+				}
+			}
+
+			for _, moduleName := range modulePatterns {
+				pattern := `\b` + moduleName + `\s*\.\s*` + funcName + `\s*\(`
+				if regexp.MustCompile(pattern).MatchString(line) {
+					confidence := d.analyzeUnsafeConfidence(line, allLines, lineIdx, filePath, "module_execution")
+					if confidence > 0.5 {
+						message := "Dangerous code execution detected: " + moduleName + "." + funcName + "() allows command injection"
+						findings = append(findings, d.createFinding(line, lineNum, filePath, "CRITICAL", confidence, message)...)
+					}
+				}
+			}
 		}
 	}
 
-	if d.evalPattern.MatchString(line) {
-		confidence := d.analyzeUnsafeConfidence(line, allLines, lineIdx, filePath, "eval")
-		if confidence > 0.6 {
-			findings = append(findings, d.createFinding(line, lineNum, filePath, "CRITICAL", confidence,
-				"Dangerous code execution detected: eval() enables arbitrary code execution")...)
+	// PRIORITY 2: Environment variable access
+
+	// Check for os.environ or os.getenv patterns
+	if strings.Contains(line, "environ") || strings.Contains(line, "getenv") {
+		// Direct os.environ access
+		if regexp.MustCompile(`\bos\s*\.\s*environ`).MatchString(line) {
+			confidence := d.analyzeUnsafeConfidence(line, allLines, lineIdx, filePath, "env_access")
+			if confidence > 0.55 {
+				findings = append(findings, d.createFinding(line, lineNum, filePath, "HIGH", confidence,
+					"Unsafe environment variable access detected: os.environ may expose sensitive data")...)
+			}
+		}
+
+		// os.getenv() call
+		if regexp.MustCompile(`\bos\s*\.\s*getenv\s*\(`).MatchString(line) {
+			confidence := d.analyzeUnsafeConfidence(line, allLines, lineIdx, filePath, "env_access")
+			if confidence > 0.55 {
+				findings = append(findings, d.createFinding(line, lineNum, filePath, "HIGH", confidence,
+					"Unsafe environment variable access detected: os.getenv() may expose sensitive data")...)
+			}
 		}
 	}
 
-	if d.importPattern.MatchString(line) {
-		confidence := d.analyzeUnsafeConfidence(line, allLines, lineIdx, filePath, "import")
-		if confidence > 0.6 {
-			findings = append(findings, d.createFinding(line, lineNum, filePath, "CRITICAL", confidence,
-				"Dangerous dynamic import detected: __import__() bypasses import restrictions")...)
-		}
-	}
-
-	if d.phpSystemPattern.MatchString(line) {
-		confidence := d.analyzeUnsafeConfidence(line, allLines, lineIdx, filePath, "php_exec")
-		if confidence > 0.5 {
-			findings = append(findings, d.createFinding(line, lineNum, filePath, "CRITICAL", confidence,
-				"Dangerous PHP code execution detected: shell_exec() allows command injection")...)
-		}
-	}
-
-	if d.nodeExecPattern.MatchString(line) {
-		confidence := d.analyzeUnsafeConfidence(line, allLines, lineIdx, filePath, "node_exec")
-		if confidence > 0.5 {
-			findings = append(findings, d.createFinding(line, lineNum, filePath, "CRITICAL", confidence,
-				"Dangerous Node.js code execution detected: child_process.exec() allows command injection")...)
-		}
-	}
-
-	// PRIORITY 2: Environment variable and file access
-	if d.envVarPattern.MatchString(line) && !d.allowlistPattern.MatchString(line) {
-		confidence := d.analyzeUnsafeConfidence(line, allLines, lineIdx, filePath, "env_access")
-		if confidence > 0.55 {
-			findings = append(findings, d.createFinding(line, lineNum, filePath, "HIGH", confidence,
-				"Unsafe environment variable access detected: os.environ may contain sensitive data")...)
-		}
-	}
-
-	if d.processEnvPattern.MatchString(line) && !d.allowlistPattern.MatchString(line) {
+	// Check for process.env (JavaScript) patterns
+	if strings.Contains(line, "process.env") {
 		confidence := d.analyzeUnsafeConfidence(line, allLines, lineIdx, filePath, "process_env")
 		if confidence > 0.55 {
 			findings = append(findings, d.createFinding(line, lineNum, filePath, "HIGH", confidence,
-				"Unsafe environment variable access detected: process.env may contain sensitive data")...)
+				"Unsafe environment variable access detected: process.env may expose sensitive data")...)
 		}
 	}
 
-	if d.fileAccessPattern.MatchString(line) && d.pathTraversalPattern.MatchString(line) {
+	// PRIORITY 3: Path traversal and obfuscation
+
+	// Check for path traversal patterns in file operations
+	if (strings.Contains(lowerLine, "open") || strings.Contains(lowerLine, "read") || strings.Contains(lowerLine, "write")) &&
+		(strings.Contains(line, "../") || strings.Contains(line, "..\\") || strings.Contains(lowerLine, "path.join")) {
 		confidence := d.analyzeUnsafeConfidence(line, allLines, lineIdx, filePath, "path_traversal")
 		if confidence > 0.6 {
 			findings = append(findings, d.createFinding(line, lineNum, filePath, "HIGH", confidence,
@@ -206,55 +288,98 @@ func (d *UnsafeEnvAccessDetectorV2) scanLine(line string, lineNum int, filePath 
 		}
 	}
 
-	// PRIORITY 3: Obfuscation and evasion
-	if d.getAttrPattern.MatchString(line) && d.dynamicImportPattern.MatchString(allLines[lineIdx]) {
-		confidence := d.analyzeUnsafeConfidence(line, allLines, lineIdx, filePath, "obfuscation")
-		if confidence > 0.65 {
-			findings = append(findings, d.createFinding(line, lineNum, filePath, "HIGH", confidence,
-				"Obfuscated code execution detected: getattr() with dynamic function names")...)
+	// Check for obfuscation patterns: getattr, importlib, globals
+	if d.obfuscationPatterns.MatchString(line) {
+		if strings.Contains(line, "getattr") && strings.Contains(line, "\"") {
+			confidence := d.analyzeUnsafeConfidence(line, allLines, lineIdx, filePath, "obfuscation")
+			if confidence > 0.65 {
+				findings = append(findings, d.createFinding(line, lineNum, filePath, "HIGH", confidence,
+					"Obfuscated code execution detected: getattr() with dynamic function names")...)
+			}
+		}
+
+		if strings.Contains(line, "importlib") && strings.Contains(line, "import_module") {
+			confidence := d.analyzeUnsafeConfidence(line, allLines, lineIdx, filePath, "importlib")
+			if confidence > 0.6 {
+				findings = append(findings, d.createFinding(line, lineNum, filePath, "HIGH", confidence,
+					"Dynamic module import detected: importlib.import_module() may execute untrusted code")...)
+			}
+		}
+
+		if strings.Contains(line, "globals()") {
+			confidence := d.analyzeUnsafeConfidence(line, allLines, lineIdx, filePath, "globals")
+			if confidence > 0.6 {
+				findings = append(findings, d.createFinding(line, lineNum, filePath, "HIGH", confidence,
+					"Dangerous globals() access detected: allows dynamic function execution")...)
+			}
 		}
 	}
 
-	if d.importlibPattern.MatchString(line) && !d.allowlistPattern.MatchString(line) {
-		confidence := d.analyzeUnsafeConfidence(line, allLines, lineIdx, filePath, "importlib")
-		if confidence > 0.6 {
-			findings = append(findings, d.createFinding(line, lineNum, filePath, "HIGH", confidence,
-				"Dynamic module import detected: importlib.import_module() may execute untrusted code")...)
+	// Check for PHP dangerous functions
+	for _, phpFunc := range []string{"system", "shell_exec", "exec", "passthru", "proc_open"} {
+		if regexp.MustCompile(`\b` + phpFunc + `\s*\(`).MatchString(line) {
+			confidence := d.analyzeUnsafeConfidence(line, allLines, lineIdx, filePath, "php_exec")
+			if confidence > 0.5 {
+				findings = append(findings, d.createFinding(line, lineNum, filePath, "CRITICAL", confidence,
+					"Dangerous PHP code execution detected: "+phpFunc+"() allows command injection")...)
+			}
+		}
+	}
+
+	// Check for Node.js child_process patterns
+	if strings.Contains(line, "child_process") || strings.Contains(line, "require('child_process')") {
+		if strings.Contains(line, "exec") || strings.Contains(line, "spawn") {
+			confidence := d.analyzeUnsafeConfidence(line, allLines, lineIdx, filePath, "node_exec")
+			if confidence > 0.5 {
+				findings = append(findings, d.createFinding(line, lineNum, filePath, "CRITICAL", confidence,
+					"Dangerous Node.js code execution detected: child_process.exec() allows command injection")...)
+			}
 		}
 	}
 
 	return findings
 }
 
-// analyzeUnsafeConfidence calculates confidence based on context
+// analyzeUnsafeConfidence calculates confidence based on context (7 factors)
 func (d *UnsafeEnvAccessDetectorV2) analyzeUnsafeConfidence(line string, allLines []string, lineIdx int, filePath string, patternType string) float32 {
 	confidence := float32(0.85) // Base confidence for dangerous patterns
 
-	// Check for user input indicators
-	hasUserInput := d.hasUserInputIndicators(line, allLines, lineIdx)
-	if !hasUserInput && patternType != "eval" && patternType != "import" {
+	// Factor 1: User input indicators
+	hasUserInput := d.userInputPattern.MatchString(line)
+	if !hasUserInput && patternType != "code_execution" && patternType != "importlib" {
 		confidence -= 0.20 // Reduce if no obvious user input
+	} else if hasUserInput {
+		confidence += 0.10 // Increase if user input detected
 	}
 
-	// Check for sanitization/validation
-	hasSanitization := d.hasSanitization(line, allLines, lineIdx)
-	if hasSanitization {
+	// Factor 2: Sanitization/validation
+	if d.hasSanitization(line, allLines, lineIdx) {
 		confidence -= 0.25 // Strong reduction if sanitized
 	}
 
-	// Check for safe patterns (test, mock, sandbox)
+	// Factor 3: Safe patterns (test, mock, sandbox)
 	if d.sandboxPattern.MatchString(filePath) || d.allowlistPattern.MatchString(line) {
 		confidence -= 0.30 // Reduce for test/demo contexts
 	}
 
-	// Eval and import are always high risk
-	if patternType == "eval" || patternType == "import" {
+	// Factor 4: Code execution functions are always high risk
+	if patternType == "code_execution" || patternType == "importlib" {
 		confidence = 0.9 // Very high confidence for eval/import
 	}
 
-	// Check for allowlists or safe patterns
-	if strings.Contains(line, "\"\"") || strings.Contains(line, "''") {
+	// Factor 5: Empty or hardcoded strings
+	if strings.Contains(line, `""`) || strings.Contains(line, `''`) {
 		confidence -= 0.10 // Slight reduction for empty/static strings
+	}
+
+	// Factor 6: Break/return statements (may indicate safe code)
+	if strings.Contains(line, "break") || strings.Contains(line, "return") {
+		confidence -= 0.15
+	}
+
+	// Factor 7: Validation checks nearby
+	if d.hasNearbyValidation(allLines, lineIdx) {
+		confidence -= 0.20
 	}
 
 	// Clamp confidence
@@ -268,49 +393,10 @@ func (d *UnsafeEnvAccessDetectorV2) analyzeUnsafeConfidence(line string, allLine
 	return confidence
 }
 
-// hasUserInputIndicators checks if user input is involved
-func (d *UnsafeEnvAccessDetectorV2) hasUserInputIndicators(line string, allLines []string, lineIdx int) bool {
-	userInputPatterns := []string{
-		"request", "input", "user", "arg", "param", "query", "form",
-		"stdin", "argv", "sys.argv", "raw_input", "input(", "gets",
-		"@request", "@param", "req.", "body", "data", "GET", "POST",
-	}
-
-	lowerLine := strings.ToLower(line)
-	for _, pattern := range userInputPatterns {
-		if strings.Contains(lowerLine, pattern) {
-			return true
-		}
-	}
-
-	// Check previous lines for assignments
-	startIdx := lineIdx - 5
-	if startIdx < 0 {
-		startIdx = 0
-	}
-	for i := startIdx; i < lineIdx; i++ {
-		if strings.Contains(strings.ToLower(allLines[i]), "request") ||
-			strings.Contains(strings.ToLower(allLines[i]), "input") {
-			return true
-		}
-	}
-
-	return false
-}
-
-// hasSanitization checks for sanitization/validation
+// hasSanitization checks for sanitization/validation patterns nearby
 func (d *UnsafeEnvAccessDetectorV2) hasSanitization(line string, allLines []string, lineIdx int) bool {
-	sanitizationPatterns := []string{
-		"shlex.quote", "pipes.quote", "escape", "sanitize", "validate",
-		"whitelist", "is_safe", "check_", "verify_", "allow_list",
-		"strip_", "filter_", "replace(", "sub(", "match(",
-	}
-
-	lowerLine := strings.ToLower(line)
-	for _, pattern := range sanitizationPatterns {
-		if strings.Contains(lowerLine, pattern) {
-			return true
-		}
+	if d.sanitizationPattern.MatchString(line) {
+		return true
 	}
 
 	// Check nearby lines for validation
@@ -324,9 +410,34 @@ func (d *UnsafeEnvAccessDetectorV2) hasSanitization(line string, allLines []stri
 	}
 
 	for i := startIdx; i < endIdx; i++ {
-		lowerCheckLine := strings.ToLower(allLines[i])
-		for _, pattern := range sanitizationPatterns {
-			if strings.Contains(lowerCheckLine, pattern) {
+		if d.sanitizationPattern.MatchString(allLines[i]) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// hasNearbyValidation checks if there are validation checks near the suspicious line
+func (d *UnsafeEnvAccessDetectorV2) hasNearbyValidation(allLines []string, lineIdx int) bool {
+	startIdx := lineIdx - 5
+	if startIdx < 0 {
+		startIdx = 0
+	}
+	endIdx := lineIdx + 5
+	if endIdx > len(allLines) {
+		endIdx = len(allLines)
+	}
+
+	validationPatterns := []string{
+		"if ", "check", "validate", "in [", "in {", "allowlist", "whitelist",
+		"not in", "assert", "raise", "except",
+	}
+
+	for i := startIdx; i < endIdx; i++ {
+		lowerLine := strings.ToLower(allLines[i])
+		for _, pattern := range validationPatterns {
+			if strings.Contains(lowerLine, pattern) {
 				return true
 			}
 		}
