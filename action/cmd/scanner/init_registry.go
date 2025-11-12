@@ -24,9 +24,10 @@ func InitializeRegistry() *patterns.Registry {
 	registry.Register(detectors.NewUnsafeEnvAccessDetector())
 
 	// TIER 2: Resource Exhaustion Patterns
-	// Patterns 5 & 6 in development - V2 implementations had architectural issues
-	// TODO: Rebuild Pattern 5 (Token Bombing) - unbounded LLM API calls
-	// TODO: Rebuild Pattern 6 (Recursive Tool Calling) - agent delegation loops
+	// Pattern 5: Token Bombing - unbounded LLM API calls causing DoS or cost explosion
+	registry.Register(detectors.NewTokenBombingDetectorV2Clean())
+	// Pattern 6: Recursive Tool Calling - agent delegation loops and unbounded recursion
+	registry.Register(detectors.NewRecursiveToolCallingDetectorV2Clean())
 
 	// TIER 3: Data Protection Patterns
 	// Will be added in Phase 3
