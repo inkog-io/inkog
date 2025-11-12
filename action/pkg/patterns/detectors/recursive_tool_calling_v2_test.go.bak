@@ -696,7 +696,7 @@ def recursive_helper(data):
 	}
 }
 
-func TestRecursiveToolCallingDetectorV2_LangChainCVE202429 65(t *testing.T) {
+func TestRecursiveToolCallingDetectorV2_LangChainCVE202429(t *testing.T) {
 	detector := NewRecursiveToolCallingDetectorV2()
 
 	code := `
