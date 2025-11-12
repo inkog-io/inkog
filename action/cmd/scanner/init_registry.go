@@ -9,8 +9,6 @@ import (
 func InitializeRegistry() *patterns.Registry {
 	registry := patterns.NewRegistry()
 
-	// DEBUG: Test detector - REMOVE AFTER DEBUGGING
-	registry.Register(detectors.NewDebugDetector())
 
 	// TIER 1: Financial Impact Patterns
 	// HYBRID PHASE 1: Using clean, tested implementations
@@ -25,9 +23,9 @@ func InitializeRegistry() *patterns.Registry {
 
 	// TIER 2: Resource Exhaustion Patterns
 	// Pattern 5: Token Bombing - unbounded LLM API calls causing DoS or cost explosion
-	registry.Register(detectors.NewTokenBombingDetectorV2Clean())
+	registry.Register(detectors.NewTokenBombingDetector())
 	// Pattern 6: Recursive Tool Calling - agent delegation loops and unbounded recursion
-	registry.Register(detectors.NewRecursiveToolCallingDetectorV2Clean())
+	registry.Register(detectors.NewRecursiveToolCallingDetector())
 
 	// TIER 3: Data Protection Patterns
 	// Will be added in Phase 3
