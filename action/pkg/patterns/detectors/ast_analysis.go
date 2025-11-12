@@ -290,7 +290,7 @@ func (f *ASTAnalysisFramework) EnhanceConfidenceScore(baseScore float32, analysi
 	}
 
 	// Check for sanitization in nearby lines
-	for varName, variable := range analysis.Variables {
+	for _, variable := range analysis.Variables {
 		if variable.IsSanitized {
 			for _, usage := range variable.Usages {
 				if usage.LineNum >= lineNum-5 && usage.LineNum <= lineNum+5 {

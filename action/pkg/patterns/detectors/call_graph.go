@@ -178,7 +178,6 @@ func (cgb *CallGraphBuilder) FindMutualRecursion(relations []CallRelation) [][]s
 	}
 
 	// Check for direct mutual recursion (A→B→A)
-	visited := make(map[string]map[string]bool)
 
 	for _, relation := range relations {
 		caller := relation.Caller
