@@ -27,8 +27,29 @@ func InitializeRegistry() *patterns.Registry {
 	// Pattern 6: Recursive Tool Calling - agent delegation loops and unbounded recursion
 	registry.Register(detectors.NewRecursiveToolCallingDetector())
 
-	// TIER 3: Data Protection Patterns
-	// Will be added in Phase 3
+	// TIER 2 (Continued): Additional Resource & Logic Patterns
+	// Pattern 7: Context Window Accumulation - unbounded context growth
+	registry.Register(detectors.NewContextWindowAccumulationDetector())
+	// Pattern 8: Missing Rate Limits - uncontrolled API rate exposure
+	registry.Register(detectors.NewMissingRateLimitsDetector())
+	// Pattern 9: RAG Over-Fetching - excessive document retrieval risks
+	registry.Register(detectors.NewRAGOverFetchingDetector())
+
+	// TIER 3: Data Protection & Code Execution Patterns
+	// Pattern 10: Logging Sensitive Data - PII/credentials in logs
+	registry.Register(detectors.NewLoggingSensitiveDataDetector())
+	// Pattern 11: Output Validation Failures - unvalidated LLM outputs
+	registry.Register(detectors.NewOutputValidationFailuresDetector())
+	// Pattern 12: SQL Injection via LLM - LLM-generated SQL without sanitization
+	registry.Register(detectors.NewSQLInjectionViaLLMDetector())
+	// Pattern 13: Unvalidated Code Execution - exec/eval without safety
+	registry.Register(detectors.NewUnvalidatedExecEvalDetector())
+
+	// TIER 3 (Continued): Governance & Compliance Patterns
+	// Pattern 14: Missing Human Oversight - autonomous actions without approval
+	registry.Register(detectors.NewMissingHumanOversightDetector())
+	// Pattern 15: Cross-Tenant Data Leakage - multi-tenant isolation failures
+	registry.Register(detectors.NewCrossTenantDataLeakageDetector())
 
 	return registry
 }

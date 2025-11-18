@@ -63,6 +63,14 @@ func (d *TokenBombingDetector) Detect(filePath string, src []byte) ([]patterns.F
 		"recursive":     regexp.MustCompile(`(?i)def\s+\w+|func\s+\w+|function\s+\w+`), // function definitions
 	}
 
+	// Patterns for BOUNDED loops (safe to use with LLM calls)
+	boundedLoopPatterns := map[string]*regexp.Regexp{
+		"for_range":     regexp.MustCompile(`(?i)for\s+\w+\s+in\s+range\s*\(`),      // Python: for i in range(n)
+		"for_length":    regexp.MustCompile(`(?i)for\s+\w+\s+in\s+range\s*\(\s*len`), // Python: for i in range(len(...))
+		"for_collection": regexp.MustCompile(`(?i)for\s+\w+\s+in\s+[a-zA-Z_]\w*`),    // Python: for item in collection
+		"for_C_style":   regexp.MustCompile(`for\s*\(\s*\w+\s*=\s*0\s*;\s*\w+\s*<`),  // C-style: for(int i=0; i<n; i++)
+	}
+
 	// Track function contexts for recursion
 	functionStack := map[string][]int{}
 	var currentFunc string
@@ -161,6 +169,12 @@ func (d *TokenBombingDetector) Detect(filePath string, src []byte) ([]patterns.F
 			continue // Token limit specified, not vulnerable
 		}
 
+		// Check if we're in a BOUNDED loop first (these are safe)
+		inBoundedLoop := d.isInBoundedLoop(lines, lineNum, boundedLoopPatterns)
+		if inBoundedLoop {
+			continue // Bounded loops are safe, skip this LLM call
+		}
+
 		// Check if we're in an unbounded context
 		inUnboundedLoop := d.isInUnboundedLoop(lines, lineNum, loopPatterns)
 		isRecursive := d.isRecursiveCall(lines, lineNum, currentFunc, llmPatterns)
@@ -257,6 +271,50 @@ func (d *TokenBombingDetector) isInUnboundedLoop(lines []string, currentLine int
 					return true // Unbounded loop found (no break/return found)
 				}
 				return false // Has exit condition, so not unbounded
+			}
+		}
+
+		// Stop if we hit another function/class definition
+		if strings.Contains(line, "def ") || strings.Contains(line, "func ") || strings.Contains(line, "class ") {
+			break
+		}
+	}
+
+	return false
+}
+
+// isInBoundedLoop checks if a line is within a bounded loop (which is safe)
+func (d *TokenBombingDetector) isInBoundedLoop(lines []string, currentLine int, boundedLoopPatterns map[string]*regexp.Regexp) bool {
+	// Look backward from current line to find a loop start
+	for i := currentLine; i >= 0 && i > currentLine-50; i-- {
+		line := lines[i]
+
+		// Check for bounded loop patterns
+		for _, pattern := range boundedLoopPatterns {
+			if pattern.MatchString(line) {
+				// Found a bounded loop
+				// Now verify we're still inside it by checking indentation
+				loopIndent := len(lines[i]) - len(strings.TrimLeft(lines[i], " \t"))
+
+				// Check all lines between loop and current line
+				allIndented := true
+				for j := i + 1; j < currentLine; j++ {
+					checkLine := strings.TrimSpace(lines[j])
+					if checkLine == "" || strings.HasPrefix(checkLine, "#") {
+						continue // Skip empty and comment lines
+					}
+
+					currentIndent := len(lines[j]) - len(strings.TrimLeft(lines[j], " \t"))
+					if currentIndent <= loopIndent {
+						// Exited the loop
+						allIndented = false
+						break
+					}
+				}
+
+				if allIndented {
+					return true // We're inside a bounded loop
+				}
 			}
 		}
 

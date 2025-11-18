@@ -62,6 +62,9 @@ type ScanResult struct {
 	LinesOfCode     int        `json:"lines_of_code"`
 	PatternsChecked int        `json:"patterns_checked"`
 	SkippedFiles    int        `json:"skipped_files"`
+	FailedFilesCount int       `json:"failed_files_count"`
+	FailedFiles     []string   `json:"failed_files"`
+	PanicedDetectors []string  `json:"panicked_detectors"`
 }
 
 // SeverityLevel defines severity ordering

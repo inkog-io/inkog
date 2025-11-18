@@ -1,1 +1,69 @@
+name: 'Inkog - AI Agent Security Scanner'
+author: 'Inkog Security'
+description: 'Detect prompt injection, infinite loops, data leaks and more in AI agents. Scans for 15 critical security patterns with <10ms performance.'
+branding:
+  icon: 'shield'
+  color: 'blue'
 
+# Marketplace metadata
+categories:
+  - 'Security'
+  - 'Code Quality'
+  - 'AI'
+
+keywords:
+  - 'security'
+  - 'ai-agents'
+  - 'prompt-injection'
+  - 'code-quality'
+  - 'vulnerability-detection'
+  - 'langchain'
+  - 'crewai'
+  - 'autogen'
+
+inputs:
+  path:
+    description: 'Directory to scan for security vulnerabilities'
+    required: false
+    default: '.'
+
+  risk-threshold:
+    description: 'Risk severity threshold to fail on: low, medium, high, or critical'
+    required: false
+    default: 'high'
+
+  framework:
+    description: 'Framework to detect: auto-detect, langchain, crewai, autogen'
+    required: false
+    default: 'auto-detect'
+
+  json-report:
+    description: 'Path to output JSON report file (optional)'
+    required: false
+    default: ''
+
+outputs:
+  risk-score:
+    description: 'Overall risk score (0-100)'
+    value: ${{ steps.inkog-scan.outputs.risk-score }}
+
+  findings-count:
+    description: 'Total number of security findings'
+    value: ${{ steps.inkog-scan.outputs.findings-count }}
+
+  high-risk-count:
+    description: 'Number of high-risk and critical findings'
+    value: ${{ steps.inkog-scan.outputs.high-risk-count }}
+
+  report-path:
+    description: 'Path to generated JSON report (if json-report input was provided)'
+    value: ${{ steps.inkog-scan.outputs.report-path }}
+
+runs:
+  using: 'docker'
+  image: 'docker://ghcr.io/inkog-io/inkog:latest'
+  args:
+    - '--path=${{ inputs.path }}'
+    - '--risk-threshold=${{ inputs.risk-threshold }}'
+    - '--framework=${{ inputs.framework }}'
+    - ${{ inputs.json-report && format('--json-report={0}', inputs.json-report) || '' }}

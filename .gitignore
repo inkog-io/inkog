@@ -1,0 +1,66 @@
+# Build artifacts
+/inkog-scanner
+/action/inkog-scanner
+*.o
+*.a
+*.so
+*.dylib
+*.exe
+*.test
+*.out
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.iml
+
+# Go modules
+vendor/
+go.sum
+
+# Test coverage
+*.coverprofile
+cover.out
+coverage.txt
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
+*_old.*
+.tmp/
+
+# Build directories
+/bin/
+/dist/
+
+# Demo artifacts
+/demo/build/
+/demo/dist/
+
+# Test outputs
+/test-output/
+/test-results/
+
+# Environment files (but don't ignore .github/workflows)
+.env.local
+.env.*.local
+
+# Archives
+*.zip
+*.tar.gz
+*.tgz
+
+# Internal directory (for local development)
+/internal/
+
+# Compiled binaries in root
+inkog
+inkog-scanner
+inkog-scanner-*

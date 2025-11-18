@@ -39,6 +39,8 @@ func (s *Scanner) Scan(dirPath string) (*patterns.ScanResult, error) {
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	var filesCount, skippedCount, totalLOC int
+	var failedFiles []string
+	var panicedDetectors []string
 
 	// Walk directory and scan files
 	err := filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
@@ -70,13 +72,24 @@ func (s *Scanner) Scan(dirPath string) (*patterns.ScanResult, error) {
 			// Read file
 			content, err := os.ReadFile(filePath)
 			if err != nil {
+				fmt.Fprintf(os.Stderr, "⚠️  Cannot read file %s: %v\n", filePath, err)
+				mu.Lock()
+				failedFiles = append(failedFiles, filePath)
+				mu.Unlock()
 				return
 			}
 
 			totalLOC += s.countLines(content)
 
 			// Run all detectors on this file
-			fileFindings := s.scanFileWithAllDetectors(filePath, content)
+			panicedDets := s.scanFileWithAllDetectors(filePath, content)
+			fileFindings := panicedDets.Findings
+
+			if len(panicedDets.PanicedDetectors) > 0 {
+				mu.Lock()
+				panicedDetectors = append(panicedDetectors, panicedDets.PanicedDetectors...)
+				mu.Unlock()
+			}
 
 			if len(fileFindings) > 0 {
 				mu.Lock()
@@ -97,41 +110,77 @@ func (s *Scanner) Scan(dirPath string) (*patterns.ScanResult, error) {
 
 	// Calculate risk metrics
 	duration := time.Since(startTime)
-	result := s.buildScanResult(findings, duration, filesCount, skippedCount, totalLOC)
+	result := s.buildScanResult(findings, duration, filesCount, skippedCount, totalLOC, failedFiles, panicedDetectors)
 
 	return result, nil
 }
 
+// DetectionResult holds findings and metadata from scanning a file
+type DetectionResult struct {
+	Findings         []patterns.Finding
+	PanicedDetectors []string
+}
+
 // scanFileWithAllDetectors runs all detectors on a single file
-func (s *Scanner) scanFileWithAllDetectors(filePath string, content []byte) []patterns.Finding {
+func (s *Scanner) scanFileWithAllDetectors(filePath string, content []byte) DetectionResult {
 	var findings []patterns.Finding
+	var panicedDetectors []string
 
 	for _, detector := range s.registry.GetAll() {
-		detectorFindings, err := detector.Detect(filePath, content)
-		if err != nil {
-			// Log error but continue with other detectors
-			fmt.Fprintf(os.Stderr, "⚠️  Error in detector %s: %v\n", detector.Name(), err)
-			continue
-		}
-
+		// Wrap detector call with panic recovery
+		detectorFindings, panicked := s.safeDetect(detector, filePath, content)
 		findings = append(findings, detectorFindings...)
+		if panicked {
+			panicedDetectors = append(panicedDetectors, detector.Name())
+		}
 	}
 
-	return findings
+	return DetectionResult{
+		Findings:         findings,
+		PanicedDetectors: panicedDetectors,
+	}
+}
+
+// safeDetect wraps detector.Detect() with panic recovery
+// Returns findings and a boolean indicating if a panic occurred
+func (s *Scanner) safeDetect(detector patterns.Detector, filePath string, content []byte) (findings []patterns.Finding, panicOccurred bool) {
+	findings = []patterns.Finding{}
+	panicOccurred = false
+
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Fprintf(os.Stderr, "🚨 PANIC in detector %s: %v (file: %s)\n", detector.Name(), r, filePath)
+			panicOccurred = true
+			// Continue scanning - don't crash the entire tool
+		}
+	}()
+
+	detectorFindings, err := detector.Detect(filePath, content)
+	if err != nil {
+		// Log error but continue with other detectors
+		fmt.Fprintf(os.Stderr, "⚠️  Error in detector %s: %v\n", detector.Name(), err)
+		return
+	}
+
+	findings = detectorFindings
+	return
 }
 
 // buildScanResult constructs the final scan result
 func (s *Scanner) buildScanResult(findings []patterns.Finding, duration time.Duration,
-	filesCount, skippedCount, totalLOC int) *patterns.ScanResult {
+	filesCount, skippedCount, totalLOC int, failedFiles []string, panicedDetectors []string) *patterns.ScanResult {
 
 	result := &patterns.ScanResult{
-		Findings:        findings,
-		FilesScanned:    filesCount,
-		SkippedFiles:    skippedCount,
-		LinesOfCode:     totalLOC,
-		ScanDuration:    duration.String(),
-		FindingsCount:   len(findings),
-		PatternsChecked: s.registry.Count(),
+		Findings:         findings,
+		FilesScanned:     filesCount,
+		SkippedFiles:     skippedCount,
+		LinesOfCode:      totalLOC,
+		ScanDuration:     duration.String(),
+		FindingsCount:    len(findings),
+		PatternsChecked:  s.registry.Count(),
+		FailedFiles:      failedFiles,
+		FailedFilesCount: len(failedFiles),
+		PanicedDetectors: panicedDetectors,
 	}
 
 	// Count by severity

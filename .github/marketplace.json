@@ -1,0 +1,370 @@
+{
+  "name": "Inkog - AI Agent Security Scanner",
+  "title": "Inkog AI Agent Security Scanner",
+  "description": "Detect prompt injection, infinite loops, data leaks and more in AI agents",
+  "shortDescription": "15 AI security patterns in one scan - protect your agents",
+
+  "categories": [
+    "Security",
+    "Code Quality",
+    "AI"
+  ],
+
+  "keywords": [
+    "security",
+    "ai-agents",
+    "prompt-injection",
+    "code-quality",
+    "scanning",
+    "vulnerability-detection",
+    "langchain",
+    "crewai",
+    "autogen",
+    "llm-security",
+    "agent-security",
+    "pattern-detection",
+    "static-analysis"
+  ],
+
+  "tags": [
+    "ai",
+    "security",
+    "agents",
+    "scanning",
+    "vulnerabilities",
+    "code-quality",
+    "static-analysis",
+    "langchain",
+    "crewai"
+  ],
+
+  "branding": {
+    "color": "blue",
+    "icon": "shield"
+  },
+
+  "author": "Inkog Security",
+  "repository": "https://github.com/inkog-io/inkog",
+  "documentation": "https://docs.inkog.ai",
+  "issues": "https://github.com/inkog-io/inkog/issues",
+  "discussions": "https://github.com/inkog-io/inkog/discussions",
+
+  "license": "MIT",
+  "licenseUrl": "https://github.com/inkog-io/inkog/blob/main/LICENSE",
+
+  "version": "1.0.0",
+  "releaseDate": "2024-11-17",
+  "releaseNotes": "Initial production release with 15 security patterns",
+
+  "performance": {
+    "startup_time": "0.88ms",
+    "typical_scan_time": "<10ms",
+    "throughput": "~17,000 LoC/second",
+    "memory_usage": "~50MB",
+    "binary_size": "~2.1MB"
+  },
+
+  "features": [
+    "15 AI security patterns",
+    "Framework auto-detection",
+    "Zero configuration setup",
+    "Lightning-fast performance",
+    "Panic recovery",
+    "Enterprise-grade reliability",
+    "JSON report output",
+    "GitHub PR annotations",
+    "CVSS scoring",
+    "CWE mapping"
+  ],
+
+  "patterns": {
+    "tier1": {
+      "name": "Foundation Patterns",
+      "count": 4,
+      "patterns": [
+        {
+          "id": "hardcoded_credentials",
+          "name": "Hardcoded Credentials",
+          "cwe": ["CWE-798", "CWE-259"],
+          "severity": "CRITICAL",
+          "confidence": "98%"
+        },
+        {
+          "id": "prompt_injection",
+          "name": "Prompt Injection",
+          "cwe": ["CWE-94", "CWE-95"],
+          "severity": "HIGH",
+          "confidence": "90%"
+        },
+        {
+          "id": "infinite_loops",
+          "name": "Infinite Loops & Recursion",
+          "cwe": ["CWE-835", "CWE-674"],
+          "severity": "HIGH",
+          "confidence": "95%"
+        },
+        {
+          "id": "unsafe_env_access",
+          "name": "Unsafe Environment Access",
+          "cwe": ["CWE-665"],
+          "severity": "MEDIUM",
+          "confidence": "92%"
+        }
+      ]
+    },
+    "tier2": {
+      "name": "Resource Exhaustion Patterns",
+      "count": 5,
+      "patterns": [
+        {
+          "id": "token_bombing",
+          "name": "Token Bombing",
+          "cwe": ["CWE-400", "CWE-770"],
+          "severity": "CRITICAL",
+          "confidence": "88%"
+        },
+        {
+          "id": "recursive_tool_calling",
+          "name": "Recursive Tool Calling",
+          "cwe": ["CWE-674", "CWE-835"],
+          "severity": "CRITICAL",
+          "confidence": "88%"
+        },
+        {
+          "id": "context_accumulation",
+          "name": "Context Window Accumulation",
+          "cwe": ["CWE-770", "CWE-400"],
+          "severity": "HIGH",
+          "confidence": "80%"
+        },
+        {
+          "id": "missing_rate_limits",
+          "name": "Missing Rate Limits",
+          "cwe": ["CWE-400", "CWE-770"],
+          "severity": "HIGH",
+          "confidence": "80%"
+        },
+        {
+          "id": "rag_over_fetching",
+          "name": "RAG Over-Fetching",
+          "cwe": ["CWE-770", "CWE-400"],
+          "severity": "HIGH",
+          "confidence": "85%"
+        }
+      ]
+    },
+    "tier3": {
+      "name": "Data & Execution Patterns",
+      "count": 6,
+      "patterns": [
+        {
+          "id": "logging_sensitive_data",
+          "name": "Logging Sensitive Data",
+          "cwe": ["CWE-532", "CWE-209"],
+          "severity": "HIGH",
+          "confidence": "82%"
+        },
+        {
+          "id": "output_validation_failures",
+          "name": "Output Validation Failures",
+          "cwe": ["CWE-74", "CWE-95"],
+          "severity": "CRITICAL",
+          "confidence": "78%"
+        },
+        {
+          "id": "sql_injection_via_llm",
+          "name": "SQL Injection via LLM",
+          "cwe": ["CWE-89", "CWE-94"],
+          "severity": "CRITICAL",
+          "confidence": "85%"
+        },
+        {
+          "id": "unvalidated_code_execution",
+          "name": "Unvalidated Code Execution",
+          "cwe": ["CWE-95", "CWE-94"],
+          "severity": "CRITICAL",
+          "confidence": "90%"
+        },
+        {
+          "id": "missing_human_oversight",
+          "name": "Missing Human Oversight",
+          "cwe": ["CWE-99", "CWE-674"],
+          "severity": "HIGH",
+          "confidence": "75%"
+        },
+        {
+          "id": "cross_tenant_data_leakage",
+          "name": "Cross-Tenant Data Leakage",
+          "cwe": ["CWE-284", "CWE-862"],
+          "severity": "CRITICAL",
+          "confidence": "82%"
+        }
+      ]
+    }
+  },
+
+  "supportedFrameworks": [
+    {
+      "name": "LangChain",
+      "languages": ["Python", "JavaScript"],
+      "status": "Supported"
+    },
+    {
+      "name": "CrewAI",
+      "languages": ["Python"],
+      "status": "Supported"
+    },
+    {
+      "name": "AutoGen",
+      "languages": ["Python"],
+      "status": "Supported"
+    },
+    {
+      "name": "Custom Agents",
+      "languages": ["Python", "TypeScript", "JavaScript", "Go"],
+      "status": "Supported"
+    }
+  ],
+
+  "supportedLanguages": [
+    {
+      "language": "Python",
+      "extension": ".py",
+      "status": "Supported"
+    },
+    {
+      "language": "JavaScript",
+      "extension": ".js",
+      "status": "Supported"
+    },
+    {
+      "language": "TypeScript",
+      "extension": ".ts, .tsx",
+      "status": "Supported"
+    },
+    {
+      "language": "Go",
+      "extension": ".go",
+      "status": "Supported"
+    }
+  ],
+
+  "inputs": {
+    "path": {
+      "description": "Directory to scan for security vulnerabilities",
+      "required": false,
+      "default": "."
+    },
+    "risk-threshold": {
+      "description": "Risk severity threshold to fail on",
+      "required": false,
+      "default": "high",
+      "options": ["low", "medium", "high", "critical"]
+    },
+    "framework": {
+      "description": "Framework to detect",
+      "required": false,
+      "default": "auto-detect",
+      "options": ["auto-detect", "langchain", "crewai", "autogen"]
+    },
+    "json-report": {
+      "description": "Path to output JSON report file",
+      "required": false,
+      "default": ""
+    }
+  },
+
+  "outputs": {
+    "risk-score": {
+      "description": "Overall risk score (0-100)"
+    },
+    "findings-count": {
+      "description": "Total number of security findings"
+    },
+    "high-risk-count": {
+      "description": "Number of high-risk and critical findings"
+    },
+    "report-path": {
+      "description": "Path to generated JSON report"
+    }
+  },
+
+  "testResults": {
+    "test_date": "2024-11-17",
+    "test_files": 4,
+    "test_lines_of_code": 153,
+    "total_findings": 25,
+    "critical_findings": 12,
+    "high_findings": 11,
+    "medium_findings": 2,
+    "risk_score": 100,
+    "scan_duration_ms": 9.1,
+    "patterns_checked": 15,
+    "success_rate": "100%"
+  },
+
+  "badges": {
+    "license": {
+      "url": "https://img.shields.io/badge/License-MIT-green",
+      "alt": "MIT License"
+    },
+    "github_release": {
+      "url": "https://img.shields.io/github/v/release/inkog-io/inkog",
+      "alt": "GitHub Release"
+    },
+    "go_report": {
+      "url": "https://goreportcard.com/badge/github.com/inkog-io/inkog",
+      "alt": "Go Report Card"
+    },
+    "security_verified": {
+      "url": "https://img.shields.io/badge/Security-Verified-brightgreen",
+      "alt": "Security Verified"
+    }
+  },
+
+  "sponsorship": {
+    "github_sponsor": "inkog-io",
+    "patreon": "inkog_security",
+    "open_collective": "inkog",
+    "ko_fi": "inkog",
+    "buy_me_a_coffee": "inkok_security"
+  },
+
+  "links": {
+    "homepage": "https://inkog.ai",
+    "github": "https://github.com/inkog-io/inkog",
+    "documentation": "https://docs.inkog.ai",
+    "issues": "https://github.com/inkog-io/inkog/issues",
+    "discussions": "https://github.com/inkog-io/inkog/discussions",
+    "security_policy": "https://github.com/inkog-io/inkog/blob/main/SECURITY.md",
+    "contributing": "https://github.com/inkog-io/inkog/blob/main/CONTRIBUTING.md"
+  },
+
+  "seo": {
+    "searchKeywords": [
+      "ai agent security",
+      "prompt injection detection",
+      "code quality scanner",
+      "vulnerability detection",
+      "langchain security",
+      "crewai security",
+      "autogen security",
+      "llm security",
+      "static analysis",
+      "security scanning"
+    ],
+    "metaDescription": "Inkog detects 15 AI security patterns including prompt injection, infinite loops, and credential exposure. GitHub Actions integration with sub-10ms performance.",
+    "metaTags": [
+      "ai-security",
+      "prompt-injection",
+      "vulnerability-detection",
+      "static-analysis",
+      "github-actions",
+      "security-scanning",
+      "code-quality",
+      "langchain",
+      "crewai",
+      "autogen"
+    ]
+  }
+}

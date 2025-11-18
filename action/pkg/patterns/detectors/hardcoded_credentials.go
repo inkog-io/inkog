@@ -2,7 +2,6 @@ package detectors
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 
 	"github.com/inkog-io/inkog/action/pkg/patterns"
@@ -15,11 +14,40 @@ type HardcodedCredentialsDetector struct {
 	regexes    []credentialPattern
 }
 
-// credentialPattern holds a regex and its name
+// credentialPattern holds a regex pattern string and its metadata
 type credentialPattern struct {
-	regex       *regexp.Regexp
+	pattern     string
 	name        string
 	description string
+}
+
+// Regex patterns for credentials (pre-compiled via cache on first use)
+var credentialPatterns = []credentialPattern{
+	{
+		pattern:     `(?i)(sk-|sk_|sk_live_|ghp_|sk-ant-)[a-zA-Z0-9_\-]{20,}`,
+		name:        "Known API Key Format",
+		description: "OpenAI (sk-proj-, sk-ant-), Stripe (sk_live_), GitHub (ghp_) and other service prefixes",
+	},
+	{
+		pattern:     `(?i)(api_?key|secret_?key|secret|token|password|api_?secret)\s*[=:]\s*["']([a-zA-Z0-9_\-\.]{15,})["']`,
+		name:        "Hardcoded Credential Variable",
+		description: "Variable assignment with 15+ character value",
+	},
+	{
+		pattern:     `(?i)(openai|stripe|github|anthropic|database|api|secret|token)_?(key|password|secret|token)\s*=\s*["']([a-zA-Z0-9_\-\.]{15,})["']`,
+		name:        "Hardcoded Service Credential",
+		description: "Named constant with secret value",
+	},
+	{
+		pattern:     `(?i)(jwt|token|auth|bearer)\s*[=:]\s*["']([a-zA-Z0-9_\-\.]{20,})["']`,
+		name:        "Hardcoded Token",
+		description: "JWT, auth token, or bearer token",
+	},
+	{
+		pattern:     `(?i)(db_?password|db_?user|db_?host|database_?url)\s*[=:]\s*["']([^"']{8,})["']`,
+		name:        "Hardcoded Database Credential",
+		description: "Database connection string or password",
+	},
 }
 
 // NewHardcodedCredentialsDetector creates a new hardcoded credentials detector
@@ -46,33 +74,9 @@ func NewHardcodedCredentialsDetector() *HardcodedCredentialsDetector {
 		},
 	}
 
-	regexes := []credentialPattern{
-		{
-			regex:       regexp.MustCompile(`(?i)(sk-|sk_|sk_live_|ghp_|sk-ant-)[a-zA-Z0-9_\-]{20,}`),
-			name:        "Known API Key Format",
-			description: "OpenAI (sk-proj-, sk-ant-), Stripe (sk_live_), GitHub (ghp_) and other service prefixes",
-		},
-		{
-			regex:       regexp.MustCompile(`(?i)(api_?key|secret_?key|secret|token|password|api_?secret)\s*[=:]\s*["']([a-zA-Z0-9_\-\.]{15,})["']`),
-			name:        "Hardcoded Credential Variable",
-			description: "Variable assignment with 15+ character value",
-		},
-		{
-			regex:       regexp.MustCompile(`(?i)(openai|stripe|github|anthropic|database|api|secret|token)_?(key|password|secret|token)\s*=\s*["']([a-zA-Z0-9_\-\.]{15,})["']`),
-			name:        "Hardcoded Service Credential",
-			description: "Named constant with secret value",
-		},
-		{
-			regex:       regexp.MustCompile(`(?i)(jwt|token|auth|bearer)\s*[=:]\s*["']([a-zA-Z0-9_\-\.]{20,})["']`),
-			name:        "Hardcoded Token",
-			description: "JWT, auth token, or bearer token",
-		},
-		{
-			regex:       regexp.MustCompile(`(?i)(db_?password|db_?user|db_?host|database_?url)\s*[=:]\s*["']([^"']{8,})["']`),
-			name:        "Hardcoded Database Credential",
-			description: "Database connection string or password",
-		},
-	}
+	// Use the global regex cache - patterns are compiled once and reused
+	regexes := make([]credentialPattern, len(credentialPatterns))
+	copy(regexes, credentialPatterns)
 
 	return &HardcodedCredentialsDetector{
 		pattern:    pattern,
@@ -125,11 +129,17 @@ func (d *HardcodedCredentialsDetector) Detect(filePath string, src []byte) ([]pa
 			continue
 		}
 
-		// Check each regex pattern
+		// Check each regex pattern (using global regex cache for performance)
 		for _, credPattern := range d.regexes {
-			if credPattern.regex.MatchString(line) {
+			// Get regex from cache (compiled once, reused thereafter)
+			regex, err := GlobalRegexCache.Get(credPattern.pattern)
+			if err != nil {
+				continue
+			}
+
+			if regex.MatchString(line) {
 				// Extract the secret for masking
-				matches := credPattern.regex.FindStringSubmatch(line)
+				matches := regex.FindStringSubmatch(line)
 				var maskedSecret string
 				if len(matches) > 0 {
 					maskedSecret = d.maskSecret(matches[0])

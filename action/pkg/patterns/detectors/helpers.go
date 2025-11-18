@@ -16,21 +16,11 @@ func isSupportedFile(path string) bool {
 }
 
 // isTestFile checks if file is a test file (false positive reduction)
+// Uses FileClassifier for consistent, maintainable test file detection
+// Covers: test_ prefix, _test suffix, tests/ directories, spec files, mocks, fixtures, etc.
 func isTestFile(path string) bool {
-	testPatterns := []string{
-		"test_", "_test.py", "/tests/", "test/",
-		".test.js", ".test.ts", "spec.js", "spec.ts",
-		"example", "sample", "demo",
-	}
-
-	lowerPath := strings.ToLower(path)
-	for _, pattern := range testPatterns {
-		if strings.Contains(lowerPath, pattern) {
-			return true
-		}
-	}
-
-	return false
+	classifier := NewFileClassifier()
+	return classifier.IsTestFile(path)
 }
 
 // isInLLMContext checks if code is within an LLM function call context

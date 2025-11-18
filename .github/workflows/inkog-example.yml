@@ -1,0 +1,65 @@
+name: Inkog Security Scan Example
+
+on: [push, pull_request]
+
+jobs:
+  inkog-scan:
+    runs-on: ubuntu-latest
+    name: Run Inkog Scanner
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Run Inkog Security Scanner
+        id: inkog
+        uses: inkog-io/inkog@v1
+        with:
+          path: ./
+          risk-threshold: high
+          framework: auto-detect
+          json-report: ./inkog-report.json
+
+      - name: Check scan results
+        run: |
+          echo "Risk Score: ${{ steps.inkog.outputs.risk-score }}"
+          echo "Findings: ${{ steps.inkog.outputs.findings-count }}"
+          echo "High Risk: ${{ steps.inkog.outputs.high-risk-count }}"
+
+      - name: Upload report as artifact
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: inkog-security-report
+          path: ./inkog-report.json
+
+      - name: Comment PR with results
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const report = JSON.parse(fs.readFileSync('./inkog-report.json', 'utf8'));
+
+            const comment = `## 🛡️ Inkog Security Scan Results
+
+            | Metric | Value |
+            |--------|-------|
+            | Risk Score | ${{ steps.inkog.outputs.risk-score }}/100 |
+            | Total Findings | ${{ steps.inkog.outputs.findings-count }} |
+            | High Risk | ${{ steps.inkog.outputs.high-risk-count }} |
+            | Critical | ${report.critical_count || 0} |
+
+            `;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+      - name: Fail if threshold exceeded
+        if: steps.inkog.outputs.risk-score >= 70
+        run: |
+          echo "❌ Risk score exceeds acceptable threshold"
+          exit 1

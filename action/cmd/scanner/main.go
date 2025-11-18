@@ -14,8 +14,18 @@ func main() {
 	scanPath := flag.String("path", ".", "Path to scan")
 	riskThreshold := flag.String("risk-threshold", "high", "Minimum risk level (critical, high, medium, low)")
 	jsonReport := flag.String("json-report", "", "Output JSON report file path")
+	jsonStdout := flag.Bool("json", false, "Output JSON report to stdout instead of text report")
+	configFile := flag.String("config", "", "Configuration file path (JSON format)")
 	listPatterns := flag.Bool("list-patterns", false, "List available patterns")
 	flag.Parse()
+
+	// Load configuration from file if provided
+	if *configFile != "" {
+		if err := loadConfigFile(*configFile, scanPath, riskThreshold, jsonReport); err != nil {
+			fmt.Fprintf(os.Stderr, "❌ Error loading config file: %v\n", err)
+			os.Exit(1)
+		}
+	}
 
 	// Initialize pattern registry
 	registry := InitializeRegistry()
@@ -36,10 +46,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Print report
-	printReport(result)
+	// Output results based on format flag
+	if *jsonStdout {
+		// Output JSON to stdout
+		outputJSONToStdout(result)
+	} else {
+		// Print text report
+		printReport(result)
+	}
 
-	// Write JSON report if requested
+	// Write JSON report to file if requested
 	if *jsonReport != "" {
 		if err := writeJSONReport(result, *jsonReport); err != nil {
 			fmt.Fprintf(os.Stderr, "❌ Error writing report: %v\n", err)
@@ -137,4 +153,48 @@ func repeatingString(s string, count int) string {
 		result += s
 	}
 	return result
+}
+
+// outputJSONToStdout outputs the scan result as JSON to stdout
+func outputJSONToStdout(result *patterns.ScanResult) {
+	data, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "❌ Error marshalling JSON: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println(string(data))
+}
+
+// ConfigFile represents the structure of a configuration file
+type ConfigFile struct {
+	Path          string `json:"path"`
+	RiskThreshold string `json:"risk_threshold"`
+	JSONReport    string `json:"json_report"`
+}
+
+// loadConfigFile loads configuration from a JSON file and updates flags
+func loadConfigFile(filePath string, path, riskThreshold, jsonReport *string) error {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to read config file: %w", err)
+	}
+
+	var config ConfigFile
+	if err := json.Unmarshal(data, &config); err != nil {
+		return fmt.Errorf("failed to parse config file: %w", err)
+	}
+
+	// Update flags from config file (only if not already set via command line)
+	// Note: This is a simple implementation that prefers config file values
+	if config.Path != "" {
+		*path = config.Path
+	}
+	if config.RiskThreshold != "" {
+		*riskThreshold = config.RiskThreshold
+	}
+	if config.JSONReport != "" {
+		*jsonReport = config.JSONReport
+	}
+
+	return nil
 }

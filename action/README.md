@@ -4,12 +4,14 @@ A production-ready AI agent security scanner that detects behavioral risks befor
 
 ## Features
 
-- ✅ **3 Security Patterns**: Prompt injection, infinite loops, API key exposure
-- ✅ **Fast AST Parsing**: tree-sitter (36x faster than alternatives)
+- ✅ **15 Security Patterns**: Comprehensive AI agent vulnerability detection
+- ✅ **Fast AST Parsing**: Tree-sitter + regex-based detection (36x faster than alternatives)
 - ✅ **Multi-Framework**: Auto-detects LangChain, CrewAI, AutoGen
 - ✅ **GitHub Integration**: Automatic PR annotations + JSON reports
 - ✅ **Enterprise-Grade**: Concurrent processing, <10s scan time for 10K LoC
 - ✅ **Zero Configuration**: Auto-detect framework and scan intelligently
+- ✅ **Panic Recovery**: Single detector failure doesn't crash entire scanner
+- ✅ **Error Tracking**: Comprehensive logging of failed files and detector panics
 
 ## Usage
 
@@ -71,44 +73,13 @@ jobs:
 
 ## Detected Patterns
 
-### 1. Prompt Injection (CWE-94, CWE-95)
+### 1. Hardcoded Credentials (CWE-798, CWE-259)
 
-Detects when user input is directly interpolated into prompt strings without sanitization.
+Finds hardcoded API keys, tokens, and private credentials in code.
 
-**Example (High Risk):**
-```python
-# ❌ Dangerous
-user_input = request.args.get('query')
-prompt = f"Answer the question: {user_input}"
+**Severity**: CRITICAL | **Confidence**: 95%
 
-# ✅ Safe
-user_input = sanitize_input(request.args.get('query'))
-prompt = f"Answer the question: {user_input}"
-```
-
-### 2. Infinite Loops (CWE-835)
-
-Identifies infinite loops and unbounded recursion patterns.
-
-**Example (High Risk):**
-```python
-# ❌ Dangerous
-while True:
-    process_agent()
-    # No break condition!
-
-# ✅ Safe
-while True:
-    result = process_agent()
-    if result.is_complete:
-        break
-```
-
-### 3. API Key Exposure (CWE-798, CWE-259)
-
-Finds hardcoded credentials and insecure environment variable access.
-
-**Example (High Risk):**
+**Example:**
 ```python
 # ❌ Dangerous
 api_key = "sk-1234567890abcdefghij"
@@ -121,26 +92,201 @@ if not api_key:
 openai.api_key = api_key
 ```
 
-## Local Testing
+**Financial Impact**: $50K/year per exposed credential (credential theft, unauthorized API usage)
 
-### Build
+---
+
+### 2. Prompt Injection (CWE-94, CWE-95)
+
+Detects when user input is directly interpolated into LLM prompts without sanitization.
+
+**Severity**: HIGH | **Confidence**: 85%
+
+**Example:**
+```python
+# ❌ Dangerous
+user_input = request.args.get('query')
+prompt = f"Answer the question: {user_input}"
+
+# ✅ Safe
+from langchain.prompts import PromptTemplate
+prompt_template = PromptTemplate.from_template(
+    "Answer the question: {question}"
+)
+# Use parameterized prompts instead of f-strings
+```
+
+**Financial Impact**: $10K-$100K+ per breach (prompt injection attacks, jailbreaks)
+
+---
+
+### 3. Infinite Loops & Unbounded Recursion (CWE-835, CWE-674)
+
+Identifies infinite loops, unbounded recursion, and resource exhaustion patterns.
+
+**Severity**: HIGH | **Confidence**: 90%
+
+**Example:**
+```python
+# ❌ Dangerous
+def process_recursively(data):
+    process_agent(data)
+    return process_recursively(data)  # No base case!
+
+# ✅ Safe
+def process_with_limit(data, depth=0, max_depth=10):
+    if depth >= max_depth:
+        return None
+    return process_agent(data, depth+1)
+```
+
+**Financial Impact**: $270K/year (CPU exhaustion, API cost explosion, downtime)
+
+---
+
+### 4. Unsafe Environment Variable Access (CWE-665)
+
+Detects environment variable access without defaults or validation.
+
+**Severity**: MEDIUM | **Confidence**: 92%
+
+**Example:**
+```python
+# ❌ Dangerous
+api_key = os.environ['OPENAI_KEY']  # Crashes if missing!
+
+# ✅ Safe
+api_key = os.environ.get('OPENAI_KEY')
+if not api_key:
+    raise ValueError("OPENAI_KEY environment variable not set")
+```
+
+**Financial Impact**: $50K/year (agent crashes on missing config, production downtime)
+
+---
+
+### 5. Token Bombing / Unbounded API Calls (CWE-400, CWE-770)
+
+Detects unbounded LLM API calls that can cause cost explosion or DoS.
+
+**Severity**: CRITICAL | **Confidence**: 88%
+
+**Example:**
+```python
+# ❌ Dangerous
+for item in items:
+    response = llm.generate(item)  # No rate limiting!
+
+# ✅ Safe
+from tenacity import rate_limit
+@rate_limit(5)  # 5 calls per second
+def safe_generate(item):
+    return llm.generate(item)
+```
+
+**Financial Impact**: $100K+/year (unbounded API costs, DoS attacks)
+
+---
+
+### 6. Recursive Tool Calling / Agent Delegation Loops (CWE-674, CWE-835)
+
+Detects agent-to-agent delegation loops, mutual recursion, and circular dependencies.
+
+**Severity**: CRITICAL | **Confidence**: 90%
+
+**Example:**
+```python
+# ❌ Dangerous - CrewAI with delegation enabled
+agent_a = Agent(role="task_agent", allow_delegation=True)
+agent_b = Agent(role="supervisor", allow_delegation=True)
+# Both can delegate to each other = infinite loop!
+
+# ✅ Safe - Only specific agents can delegate
+supervisor = Agent(role="supervisor", allow_delegation=True)
+worker_a = Agent(role="worker_a", allow_delegation=False)
+worker_b = Agent(role="worker_b", allow_delegation=False)
+```
+
+**Financial Impact**: $270K/year (agent loops, infinite API calls, resource exhaustion)
+
+## Installation
+
+### From Source
+
+```bash
+git clone https://github.com/inkog-io/inkog.git
+cd inkog/action
+go build -o inkog-scanner ./cmd/scanner
+```
+
+### As GitHub Action
+
+Add to your workflow (see Quick Start above).
+
+### Docker
+
+```bash
+docker build -t inkog:latest .
+docker run -v $(pwd):/workspace inkog:latest --path /workspace
+```
+
+## Local Testing & Development
+
+### Build Scanner
 
 ```bash
 cd action
 go build -o inkog-scanner ./cmd/scanner
 ```
 
-### Test Scan
+### Run Scan
 
 ```bash
-./inkog-scanner --path ../path/to/agent --json-report report.json
+# Scan current directory (text output)
+./inkog-scanner --path .
+
+# Output JSON to stdout
+./inkog-scanner --path . --json
+
+# Generate JSON report file
+./inkog-scanner --path . --json-report report.json
+
+# Set risk threshold (low, medium, high, critical)
+./inkog-scanner --path . --risk-threshold high
+
+# Load configuration from file
+./inkog-scanner --config config.json
+
+# Combine flags
+./inkog-scanner --path ./src --risk-threshold medium --json-report report.json
 ```
 
-### Docker Build
+### Configuration File
+
+Create `inkog-config.json`:
+
+```json
+{
+  "path": "./src",
+  "risk_threshold": "high",
+  "json_report": "./inkog-report.json"
+}
+```
+
+Then run:
 
 ```bash
-docker build -t inkog:latest .
-docker run -v $(pwd):/workspace inkog:latest --path /workspace
+./inkog-scanner --config inkog-config.json
+```
+
+### Run Tests
+
+```bash
+# All tests including panic recovery and error handling
+go test -v ./cmd/scanner ./pkg/patterns/detectors
+
+# Specific test
+go test -v -run TestPanicRecovery ./cmd/scanner
 ```
 
 ## Output Examples
@@ -204,6 +350,32 @@ docker run -v $(pwd):/workspace inkog:latest --path /workspace
 - ✅ Python (.py)
 - ✅ JavaScript (.js)
 - ✅ TypeScript (.ts, .tsx)
+- ✅ Go (.go)
+
+## Reliability Features
+
+### Panic Recovery
+Single detector failures won't crash the entire scanner. If one pattern detector panics, scanning continues with remaining patterns.
+
+```json
+{
+  "panicked_detectors": ["unsafe_detector"],
+  "failed_files_count": 2,
+  "failed_files": ["/path/to/unreadable.py"],
+  "files_scanned": 1234,
+  "findings_count": 45
+}
+```
+
+### Error Tracking
+All file read failures and detector errors are logged to stderr and included in results:
+
+```
+⚠️  Cannot read file /path/to/file.py: permission denied
+🚨 PANIC in detector token_bombing: index out of range (file: /path/to/agent.py)
+```
+
+Both errors are tracked in the scan results so you know exactly what failed.
 
 ## Exit Codes
 
@@ -246,7 +418,7 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md) for development guidelines.
 
 ## License
 
-Apache 2.0 - See [LICENSE](../LICENSE) for details
+MIT - See [LICENSE](../LICENSE) for details
 
 ## Support
 
