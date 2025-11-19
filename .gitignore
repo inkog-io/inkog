@@ -1,0 +1,40 @@
+# Binaries
+inkog-scanner
+inkog
+*.exe
+*.exe~
+*.dll
+*.so
+*.so.*
+*.dylib
+
+# Test binaries
+*.test
+
+# Output of coverage
+*.out
+*.prof
+
+# Go dependencies
+vendor/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Build outputs
+dist/
+build/
+
+# Environment
+.env
+.env.local
+
+# Reports
+*.json
+report.json
+inkog-report.json
