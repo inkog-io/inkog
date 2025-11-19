@@ -15,7 +15,8 @@ RUN go mod download
 COPY . .
 
 # Build the scanner
-RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build \
+# Docker buildx automatically sets GOOS and GOARCH based on the target platform
+RUN CGO_ENABLED=1 go build \
     -ldflags="-s -w" \
     -o inkog-scanner \
     ./cmd/scanner
