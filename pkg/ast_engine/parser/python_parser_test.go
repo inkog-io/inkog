@@ -2,8 +2,10 @@ package parser
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
+	"github.com/inkog-io/inkog/action/pkg/ast_engine/analysis"
 	"github.com/inkog-io/inkog/action/pkg/ast_engine/ast"
 )
 
@@ -414,4 +416,107 @@ func TestPythonNestedScopes(t *testing.T) {
 	if symTable.FileScope == nil {
 		t.Error("FileScope is nil")
 	}
+}
+
+// TestExtractDocstringRanges_Nested verifies that nested function docstrings are detected
+// This test case specifically addresses the issue where nested docstrings were not being caught
+func TestExtractDocstringRanges_Nested(t *testing.T) {
+	config := DefaultConfig()
+	parser, _ := NewPythonParser(config)
+
+	// Code with nested function containing a docstring with vulnerability keywords
+	code := `"""
+Module docstring
+"""
+
+def outer_function():
+    """Outer function docstring"""
+
+    def evaluate_expression(expr):
+        """
+        Evaluate dangerous expressions with eval and exec.
+        This docstring contains keywords that would trigger detectors
+        but should be IGNORED since it's a docstring.
+        """
+        return eval(expr)
+
+    return evaluate_expression("test")
+`
+
+	// Extract docstring ranges
+	ranges := parser.ExtractDocstringRanges(code)
+	if ranges == nil {
+		t.Fatal("ExtractDocstringRanges returned nil")
+	}
+
+	// Count docstrings found
+	docstringRanges := ranges.GetRangesByType(analysis.RangeTypeDocstring)
+	if len(docstringRanges) < 3 {
+		t.Errorf("Expected at least 3 docstrings (module, outer, nested), got %d", len(docstringRanges))
+		for i, r := range docstringRanges {
+			t.Logf("  Docstring %d: StartByte=%d, EndByte=%d", i, r.StartByte, r.EndByte)
+		}
+	}
+
+	// Verify that lines within the nested function's docstring are marked as ignored
+	lines := strings.Split(code, "\n")
+	for i, line := range lines {
+		if strings.Contains(line, "Evaluate dangerous expressions") {
+			// This line should be in an ignored range
+			byteOffset := lineColToByteOffsetForTest(code, i+1, 0)
+			if !ranges.IsBytePositionIgnored(byteOffset) {
+				t.Errorf("Line %d containing docstring text should be ignored: %s", i+1, line)
+			}
+		}
+	}
+
+	// Verify that the actual eval() call is NOT in a docstring range
+	// (the eval on the "return eval(expr)" line should not be ignored)
+	evalLineNum := 0
+	for i, line := range lines {
+		if strings.Contains(line, "return eval(expr)") {
+			evalLineNum = i + 1
+			break
+		}
+	}
+
+	if evalLineNum > 0 {
+		// Find the position of "eval" on that line
+		evalCol := strings.Index(lines[evalLineNum-1], "eval")
+		byteOffset := lineColToByteOffsetForTest(code, evalLineNum, evalCol)
+		if ranges.IsBytePositionIgnored(byteOffset) {
+			t.Error("The actual eval() call should NOT be in a docstring range")
+		}
+	}
+
+	t.Logf("✓ Nested docstring detection working: found %d docstring ranges", len(docstringRanges))
+}
+
+// lineColToByteOffsetForTest converts line/column to byte offset for testing
+// This mirrors the logic in cmd/scanner/scanner.go
+func lineColToByteOffsetForTest(content string, line int, col int) int {
+	if line <= 0 || col < 0 {
+		return 0
+	}
+
+	lines := strings.Split(content, "\n")
+	byteOffset := 0
+
+	// Add bytes from all lines before the target line
+	for i := 0; i < line-1 && i < len(lines); i++ {
+		byteOffset += len(lines[i])
+		byteOffset += 1 // Account for the newline character
+	}
+
+	// Add column offset to the target line
+	if line > 0 && line <= len(lines) {
+		targetLine := lines[line-1]
+		if col > len(targetLine) {
+			byteOffset += len(targetLine)
+		} else {
+			byteOffset += col
+		}
+	}
+
+	return byteOffset
 }

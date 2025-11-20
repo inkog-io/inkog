@@ -350,24 +350,83 @@ func lineColToByteOffset(content []byte, line int, col int) int {
 }
 
 // filterFindingsInIgnoredRanges removes findings that fall within ignored ranges
+// It uses two strategies: AST-based filtering and regex fallback for extra safety
 func (s *Scanner) filterFindingsInIgnoredRanges(filePath string, content []byte,
 	findings []patterns.Finding, ignoredRanges *analysis.IgnoredRanges) []patterns.Finding {
-
-	if ignoredRanges == nil || ignoredRanges.Count() == 0 {
-		return findings
-	}
 
 	var filtered []patterns.Finding
 
 	for _, finding := range findings {
-		// Convert finding's line/column to byte offset
-		byteOffset := lineColToByteOffset(content, finding.Line, finding.Column)
-
-		// Check if this byte position is in an ignored range
-		if !ignoredRanges.IsBytePositionIgnored(byteOffset) {
-			filtered = append(filtered, finding)
+		// Strategy 1: AST-based filtering (primary)
+		if ignoredRanges != nil && ignoredRanges.Count() > 0 {
+			byteOffset := lineColToByteOffset(content, finding.Line, finding.Column)
+			if ignoredRanges.IsBytePositionIgnored(byteOffset) {
+				// This finding is in an ignored range, skip it
+				continue
+			}
 		}
+
+		// Strategy 2: Regex fallback (safety net for edge cases)
+		if isInCommentOrDocstring(content, finding.Line, finding.Column) {
+			// This finding is in a comment or docstring, skip it
+			continue
+		}
+
+		// Finding passed both filters, keep it
+		filtered = append(filtered, finding)
 	}
 
 	return filtered
+}
+
+// isInCommentOrDocstring checks if a line/column position is within a comment or docstring
+// This is a regex-based safety net to catch edge cases missed by AST analysis
+func isInCommentOrDocstring(content []byte, line int, col int) bool {
+	sourceStr := string(content)
+	lines := strings.Split(sourceStr, "\n")
+
+	if line <= 0 || line > len(lines) {
+		return false
+	}
+
+	lineContent := lines[line-1]
+
+	// Check 1: Is this line a comment (starts with # after trimming)?
+	trimmedLine := strings.TrimSpace(lineContent)
+	if strings.HasPrefix(trimmedLine, "#") {
+		return true
+	}
+
+	// Check 2: Is this position inside a triple-quoted string (docstring)?
+	// Look backward and forward for """ or ''' markers
+	inTripleDouble := isInTripleQuoteBlock(sourceStr, line, col, `"""`)
+	inTripleSingle := isInTripleQuoteBlock(sourceStr, line, col, `'''`)
+
+	return inTripleDouble || inTripleSingle
+}
+
+// isInTripleQuoteBlock checks if a line/column position is inside a triple-quoted block
+func isInTripleQuoteBlock(sourceStr string, targetLine int, targetCol int, quoteMarker string) bool {
+	lines := strings.Split(sourceStr, "\n")
+	quoteCount := 0
+
+	// Iterate through all lines up to and including the target line
+	for i := 0; i < len(lines); i++ {
+		line := lines[i]
+
+		// Count occurrences of the quote marker on this line
+		parts := strings.Split(line, quoteMarker)
+		quoteCount += len(parts) - 1
+
+		// If we've reached the target line
+		if i+1 == targetLine {
+			// If quoteCount is odd, we're inside a triple-quoted block
+			if quoteCount%2 == 1 {
+				return true
+			}
+			return false
+		}
+	}
+
+	return false
 }

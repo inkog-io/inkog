@@ -474,8 +474,8 @@ func (pp *PythonParser) ExtractDocstringRanges(sourceCode string) *analysis.Igno
 	return ignoredRanges
 }
 
-// extractDocstringsRecursive recursively finds docstrings in the AST
-// isFirstStatement tracks if we're looking at the first statement in a scope
+// extractDocstringsRecursive recursively finds ALL docstrings in the AST
+// It traverses the entire tree and marks all string expression statements as docstrings
 func (pp *PythonParser) extractDocstringsRecursive(
 	tsNode *sitter.Node,
 	sourceCode string,
@@ -487,27 +487,32 @@ func (pp *PythonParser) extractDocstringsRecursive(
 	}
 
 	nodeType := tsNode.Type()
+	childCount := tsNode.ChildCount()
 
-	// Check if this is a string that is a statement (docstring candidate)
-	if isFirstStatement && nodeType == "string" {
-		startByte := int(tsNode.StartByte())
-		endByte := int(tsNode.EndByte())
-		ignoredRanges.Add(
-			startByte,
-			endByte,
-			analysis.RangeTypeDocstring,
-			"Python docstring",
-		)
-		return
+	// Strategy 1: Catch expression_statement nodes that contain only a string
+	// This is the most reliable way to find ALL docstrings (including nested ones)
+	if nodeType == "expression_statement" {
+		// Check if the first child is a string
+		if childCount > 0 {
+			firstChild := tsNode.Child(0)
+			if firstChild != nil && firstChild.Type() == "string" {
+				startByte := int(firstChild.StartByte())
+				endByte := int(firstChild.EndByte())
+				ignoredRanges.Add(
+					startByte,
+					endByte,
+					analysis.RangeTypeDocstring,
+					"Python docstring or string literal as statement",
+				)
+			}
+		}
 	}
 
-	// For function/class definitions, the first statement in the body might be a docstring
-	switch nodeType {
-	case "function_definition", "class_definition":
-		// Find the body block (usually inside ':')
-		childCount := tsNode.ChildCount()
+	// Strategy 2: For function/class definitions, explicitly mark first statement in body as docstring
+	// This handles the common pattern where docstrings appear right after the function/class line
+	if nodeType == "function_definition" || nodeType == "class_definition" {
 		bodyStarted := false
-		isFirst := true
+		isFirstBodyStatement := true
 
 		for i := uint32(0); i < childCount; i++ {
 			child := tsNode.Child(int(i))
@@ -523,38 +528,49 @@ func (pp *PythonParser) extractDocstringsRecursive(
 				continue
 			}
 
-			if bodyStarted {
-				// Process the first statement in the body as a potential docstring
-				if isFirst && (childType == "string" || childType == "expression_statement") {
-					if childType == "string" {
-						startByte := int(child.StartByte())
-						endByte := int(child.EndByte())
-						ignoredRanges.Add(startByte, endByte, analysis.RangeTypeDocstring, "Function/class docstring")
-					} else if childType == "expression_statement" {
-						// Check if the expression is a string
-						exprChild := child.Child(0)
+			if bodyStarted && isFirstBodyStatement {
+				// Mark the first statement in a function/class body as a docstring
+				// (even if we already caught it via Strategy 1)
+				if childType == "expression_statement" {
+					// Ensure it contains a string
+					exprChild := child.Child(0)
+					if exprChild != nil && exprChild.Type() == "string" {
+						startByte := int(exprChild.StartByte())
+						endByte := int(exprChild.EndByte())
+						ignoredRanges.Add(
+							startByte,
+							endByte,
+							analysis.RangeTypeDocstring,
+							"Function/class docstring",
+						)
+					}
+				} else if childType == "block" || childType == "indent" {
+					// If we hit a block, look inside for the first statement
+					blockChild := child.Child(0)
+					if blockChild != nil && blockChild.Type() == "expression_statement" {
+						exprChild := blockChild.Child(0)
 						if exprChild != nil && exprChild.Type() == "string" {
 							startByte := int(exprChild.StartByte())
 							endByte := int(exprChild.EndByte())
-							ignoredRanges.Add(startByte, endByte, analysis.RangeTypeDocstring, "Function/class docstring")
+							ignoredRanges.Add(
+								startByte,
+								endByte,
+								analysis.RangeTypeDocstring,
+								"Function/class docstring in block",
+							)
 						}
 					}
-					isFirst = false
-					continue
 				}
-				// After the first statement, process normally
-				if childType != ":" {
-					isFirst = false
-				}
+				isFirstBodyStatement = false
 			}
 
+			// Recursively process all children
 			pp.extractDocstringsRecursive(child, sourceCode, ignoredRanges, false)
 		}
 		return
 	}
 
-	// For other node types, recurse with isFirstStatement=false
-	childCount := tsNode.ChildCount()
+	// For all other node types, recursively traverse all children
 	for i := uint32(0); i < childCount; i++ {
 		child := tsNode.Child(int(i))
 		if child != nil {
