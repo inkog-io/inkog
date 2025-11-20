@@ -170,10 +170,23 @@ func printReport(result *patterns.ScanResult) {
 		fmt.Println("──────────────────────────────────────")
 
 		for i, f := range result.Findings {
-			fmt.Printf("\n%d. [%s] %s\n", i+1, f.Severity, f.Pattern)
+			// Use Pattern as title, fallback to Message if Pattern is empty
+			title := f.Pattern
+			if title == "" {
+				title = f.Message
+			}
+
+			fmt.Printf("\n%d. [%s] %s\n", i+1, f.Severity, title)
 			fmt.Printf("   File:       %s:%d\n", f.File, f.Line)
 			fmt.Printf("   Message:    %s\n", f.Message)
-			fmt.Printf("   CWE:        %s | CVSS: %.1f\n", f.CWE, f.CVSS)
+
+			// Only print CVSS if it's not 0.0 (hides missing CVSS values)
+			if f.CVSS != 0.0 {
+				fmt.Printf("   CWE:        %s | CVSS: %.1f\n", f.CWE, f.CVSS)
+			} else if f.CWE != "" {
+				fmt.Printf("   CWE:        %s\n", f.CWE)
+			}
+
 			fmt.Printf("   Confidence: %.0f%%\n", f.Confidence*100)
 			if f.Code != "" && len(f.Code) < 100 {
 				fmt.Printf("   Code:       %s\n", f.Code)

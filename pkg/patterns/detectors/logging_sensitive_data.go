@@ -1,6 +1,7 @@
 package detectors
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -387,13 +388,20 @@ func (d *LoggingSensitiveDataDetector) createFinding(
 	severity string,
 	confidence float32,
 ) patterns.Finding {
+	pattern := d.GetPattern()
 	return patterns.Finding{
+		ID:         fmt.Sprintf("logging_sensitive_%d", lineNum),
+		PatternID:  "logging_sensitive_data",
+		Pattern:    pattern.Name,
 		File:       filePath,
 		Line:       lineNum,
+		Column:     0,
 		Message:    title + ": " + message,
 		Severity:   severity,
 		Confidence: confidence,
-		PatternID:  "logging_sensitive_data",
+		CWE:        "CWE-532",
+		CVSS:       4.0, // Medium severity for sensitive data exposure (not RCE)
+		OWASP:      "A01:2021",
 	}
 }
 

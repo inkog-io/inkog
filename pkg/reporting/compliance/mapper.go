@@ -103,39 +103,42 @@ func (cm *ComplianceMapper) GenerateComplianceReport(findings []patterns.Finding
 	report.CriticalFindings = criticalCount
 
 	// Create compliance checklists
+	euControls := []string{
+		"Article 14: Human Oversight",
+		"Article 15: Accuracy, Robustness and Cybersecurity",
+	}
 	report.EUAIActStatus = &ComplianceChecklist{
-		Regulation:      EU_AI_ACT,
-		RequiredControls: []string{
-			"Article 14: Human Oversight",
-			"Article 15: Accuracy, Robustness and Cybersecurity",
-		},
-		Findings:        euIssues,
-		PassStatus:      len(euIssues) == 0,
-		ComplianceScore: cm.calculateComplianceScore(len(euIssues), criticalCount),
+		Regulation:       EU_AI_ACT,
+		RequiredControls: euControls,
+		Findings:         euIssues,
+		PassStatus:       len(euIssues) == 0,
+		ComplianceScore:  cm.calculateComplianceScoreByControls(len(euIssues), len(euControls)),
 	}
 
+	nistControls := []string{
+		"MAP 1.1: Input/Output Validation",
+		"MAP 1.3: System Reliability",
+		"MEASURE 2.2: Security Risk Assessment",
+		"MEASURE 2.4: AI System Risks",
+	}
 	report.NISTAIRMFStatus = &ComplianceChecklist{
-		Regulation:      NIST_AI_RMF,
-		RequiredControls: []string{
-			"MAP 1.1: Input/Output Validation",
-			"MAP 1.3: System Reliability",
-			"MEASURE 2.2: Security Risk Assessment",
-			"MEASURE 2.4: AI System Risks",
-		},
-		Findings:        nistIssues,
-		PassStatus:      len(nistIssues) == 0,
-		ComplianceScore: cm.calculateComplianceScore(len(nistIssues), criticalCount),
+		Regulation:       NIST_AI_RMF,
+		RequiredControls: nistControls,
+		Findings:         nistIssues,
+		PassStatus:       len(nistIssues) == 0,
+		ComplianceScore:  cm.calculateComplianceScoreByControls(len(nistIssues), len(nistControls)),
 	}
 
+	owaspControls := []string{
+		OWASP_LLM01, OWASP_LLM02, OWASP_LLM04, OWASP_LLM06,
+		OWASP_LLM08, OWASP_LLM09,
+	}
 	report.OWASPLLMStatus = &ComplianceChecklist{
-		Regulation:      OWASP_LLM_TOP10,
-		RequiredControls: []string{
-			OWASP_LLM01, OWASP_LLM02, OWASP_LLM04, OWASP_LLM06,
-			OWASP_LLM08, OWASP_LLM09,
-		},
-		Findings:        owaspIssues,
-		PassStatus:      len(owaspIssues) == 0,
-		ComplianceScore: cm.calculateComplianceScore(len(owaspIssues), criticalCount),
+		Regulation:       OWASP_LLM_TOP10,
+		RequiredControls: owaspControls,
+		Findings:         owaspIssues,
+		PassStatus:       len(owaspIssues) == 0,
+		ComplianceScore:  cm.calculateComplianceScoreByControls(len(owaspIssues), len(owaspControls)),
 	}
 
 	// Calculate overall compliance
@@ -160,17 +163,26 @@ func (cm *ComplianceMapper) GenerateComplianceReport(findings []patterns.Finding
 	return report
 }
 
-// calculateComplianceScore calculates a compliance score (0.0-1.0)
-func (cm *ComplianceMapper) calculateComplianceScore(issueCount int, criticalCount int) float32 {
-	if issueCount == 0 {
-		return 1.0
+// calculateComplianceScoreByControls calculates compliance score based on passing controls
+// Score = (PassingControls / TotalControls) * 100
+// A control passes if there are NO issues found for that regulatory requirement
+func (cm *ComplianceMapper) calculateComplianceScoreByControls(issueCount int, totalControls int) float32 {
+	if totalControls == 0 {
+		return 1.0 // No controls defined, score as perfect
 	}
 
-	// Heavily penalize critical issues
-	score := 1.0 - (float32(criticalCount)*0.2 + float32(issueCount)*0.05)
-	if score < 0.0 {
-		score = 0.0
+	if issueCount == 0 {
+		return 1.0 // All controls pass (no issues found)
 	}
+
+	// Calculate: (totalControls - issues) / totalControls
+	// Since we count issues per control/finding, we assume one issue = one control fails
+	passingControls := totalControls - issueCount
+	if passingControls < 0 {
+		passingControls = 0
+	}
+
+	score := float32(passingControls) / float32(totalControls)
 	return score
 }
 
@@ -292,6 +304,20 @@ func (cm *ComplianceMapper) getDefaultMapping(finding *patterns.Finding) *Compli
 
 // FormatComplianceReport creates a human-readable compliance report
 func (cm *ComplianceMapper) FormatComplianceReport(report *ComplianceReport) string {
+	// Calculate passing controls for each framework
+	euPassing := len(report.EUAIActStatus.RequiredControls) - len(report.EUAIActStatus.Findings)
+	if euPassing < 0 {
+		euPassing = 0
+	}
+	nistPassing := len(report.NISTAIRMFStatus.RequiredControls) - len(report.NISTAIRMFStatus.Findings)
+	if nistPassing < 0 {
+		nistPassing = 0
+	}
+	owaspPassing := len(report.OWASPLLMStatus.RequiredControls) - len(report.OWASPLLMStatus.Findings)
+	if owaspPassing < 0 {
+		owaspPassing = 0
+	}
+
 	output := fmt.Sprintf(`
 ╔════════════════════════════════════════════════════════════╗
 ║         AI SYSTEM COMPLIANCE REPORT                        ║
@@ -302,9 +328,9 @@ Total Findings: %d
 Critical Findings: %d
 
 ┌─ REGULATORY SUMMARY ─────────────────────────────────────┐
-│ EU AI Act:        %s (Score: %.1f%%)
-│ NIST AI RMF:      %s (Score: %.1f%%)
-│ OWASP LLM Top 10: %s (Score: %.1f%%)
+│ EU AI Act:        %s (%d/%d Controls) - %.1f%%
+│ NIST AI RMF:      %s (%d/%d Controls) - %.1f%%
+│ OWASP LLM Top 10: %s (%d/%d Controls) - %.1f%%
 │ Overall:          %.1f%% Compliant
 └──────────────────────────────────────────────────────────┘
 
@@ -313,10 +339,16 @@ Critical Findings: %d
 		report.TotalFindings,
 		report.CriticalFindings,
 		statusString(report.EUAIActStatus.PassStatus),
+		euPassing,
+		len(report.EUAIActStatus.RequiredControls),
 		report.EUAIActStatus.ComplianceScore*100,
 		statusString(report.NISTAIRMFStatus.PassStatus),
+		nistPassing,
+		len(report.NISTAIRMFStatus.RequiredControls),
 		report.NISTAIRMFStatus.ComplianceScore*100,
 		statusString(report.OWASPLLMStatus.PassStatus),
+		owaspPassing,
+		len(report.OWASPLLMStatus.RequiredControls),
 		report.OWASPLLMStatus.ComplianceScore*100,
 		report.OverallCompliance*100,
 	)
