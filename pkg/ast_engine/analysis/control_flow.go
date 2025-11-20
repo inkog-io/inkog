@@ -76,7 +76,10 @@ func (cfg *ControlFlowGraph) SetSymbolTable(symTable *SymbolTable) {
 }
 
 // ResolveFunctionDefinition resolves a function call node to its definition
-// Handles both direct calls (func()) and method calls (obj.method())
+// Handles:
+// 1. Direct calls (func()) -> looks in file scope
+// 2. Method calls (obj.method()) -> looks in file scope by method name
+// 3. Self method calls (self.method()) -> looks in enclosing class scope (Python/JS)
 func (cfg *ControlFlowGraph) ResolveFunctionDefinition(callNode *ast.Node) *ScopeFunction {
 	if cfg.symbolTable == nil || callNode == nil {
 		return nil
@@ -92,7 +95,43 @@ func (cfg *ControlFlowGraph) ResolveFunctionDefinition(callNode *ast.Node) *Scop
 		return nil
 	}
 
-	// For method calls like obj.method(), get the last part
+	// Check if this is a self.method() or this.method() call (class method)
+	if strings.HasPrefix(funcName, "self.") || strings.HasPrefix(funcName, "this.") {
+		log.Printf("[TAINT_DEBUG] Resolving method call: %s", funcName)
+
+		// Extract method name
+		var methodName string
+		if strings.HasPrefix(funcName, "self.") {
+			methodName = strings.TrimPrefix(funcName, "self.")
+		} else {
+			methodName = strings.TrimPrefix(funcName, "this.")
+		}
+
+		// Try to find the enclosing class definition
+		enclosingClass := cfg.findEnclosingClass(callNode, cfg.root)
+		if enclosingClass != nil {
+			// Look for the method in the class body
+			if methodDef := cfg.findMethodInClass(enclosingClass, methodName); methodDef != nil {
+				className, _ := enclosingClass.GetProperty("name")
+				log.Printf("[TAINT_DEBUG] Resolved 'self.%s': Found in class '%v'", methodName, className)
+				return methodDef
+			}
+		}
+
+		// Fallback: if no class found or method not in class body, try file scope
+		// This handles unit tests and cases where full AST isn't available
+		if cfg.symbolTable.FileScope != nil && cfg.symbolTable.FileScope.Functions != nil {
+			if fn, exists := cfg.symbolTable.FileScope.Functions[methodName]; exists {
+				log.Printf("[TAINT_DEBUG] Resolved 'self.%s': Found in file scope (fallback)", methodName)
+				return fn
+			}
+		}
+
+		log.Printf("[TAINT_DEBUG] Failed to resolve 'self.%s'", methodName)
+		return nil
+	}
+
+	// For non-self method calls like obj.method(), get the last part
 	if contains(funcName, ".") {
 		parts := strings.Split(funcName, ".")
 		if len(parts) > 0 {
@@ -104,7 +143,92 @@ func (cfg *ControlFlowGraph) ResolveFunctionDefinition(callNode *ast.Node) *Scop
 	// Start with file scope and traverse scope chain
 	if cfg.symbolTable.FileScope != nil && cfg.symbolTable.FileScope.Functions != nil {
 		if fn, exists := cfg.symbolTable.FileScope.Functions[funcName]; exists {
+			log.Printf("[TAINT_DEBUG] Resolved function '%s' from file scope", funcName)
 			return fn
+		}
+	}
+
+	log.Printf("[TAINT_DEBUG] Failed to resolve function '%s'", funcName)
+	return nil
+}
+
+// findEnclosingClass traverses up the AST to find the class definition containing this node
+func (cfg *ControlFlowGraph) findEnclosingClass(node *ast.Node, root *ast.Node) *ast.Node {
+	if node == nil || root == nil {
+		return nil
+	}
+
+	// Search for the class that contains this node
+	return cfg.findEnclosingClassInTree(node, root)
+}
+
+// findEnclosingClassInTree recursively searches for a class containing the target node
+func (cfg *ControlFlowGraph) findEnclosingClassInTree(targetNode *ast.Node, currentNode *ast.Node) *ast.Node {
+	if currentNode == nil {
+		return nil
+	}
+
+	// Check if current node is a class definition
+	if currentNode.Type == ast.NodeTypeClass {
+		// Check if targetNode is contained within this class
+		if cfg.nodeContains(currentNode, targetNode) {
+			return currentNode
+		}
+	}
+
+	// Recursively search children
+	for _, child := range currentNode.GetChildren() {
+		if result := cfg.findEnclosingClassInTree(targetNode, child); result != nil {
+			return result
+		}
+	}
+
+	return nil
+}
+
+// nodeContains checks if parentNode contains childNode in its subtree
+func (cfg *ControlFlowGraph) nodeContains(parentNode *ast.Node, childNode *ast.Node) bool {
+	if parentNode == nil || childNode == nil {
+		return false
+	}
+
+	if parentNode == childNode {
+		return true
+	}
+
+	for _, child := range parentNode.GetChildren() {
+		if cfg.nodeContains(child, childNode) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// findMethodInClass searches for a method definition in a class body
+func (cfg *ControlFlowGraph) findMethodInClass(classNode *ast.Node, methodName string) *ScopeFunction {
+	if classNode == nil || classNode.Type != ast.NodeTypeClass {
+		return nil
+	}
+
+	// Get class name for logging
+	var className string
+	if name, ok := classNode.GetProperty("name"); ok && name != nil {
+		className = name.(string)
+	}
+
+	// Search through class body for function definitions
+	for _, child := range classNode.GetChildren() {
+		if child.Type == ast.NodeTypeFunctionDef {
+			if funcName, ok := child.GetProperty("name"); ok && funcName != nil {
+				if funcName.(string) == methodName {
+					log.Printf("[TAINT_DEBUG] Found method '%s' in class '%s'", methodName, className)
+					return &ScopeFunction{
+						Name:      methodName,
+						DefinedAt: child,
+					}
+				}
+			}
 		}
 	}
 
