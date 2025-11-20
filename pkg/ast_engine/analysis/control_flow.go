@@ -1,6 +1,7 @@
 package analysis
 
 import (
+	"strings"
 	"sync"
 
 	"github.com/inkog-io/inkog/action/pkg/ast_engine/ast"
@@ -43,18 +44,20 @@ type LoopInfo struct {
 
 // ControlFlowGraph analyzes control flow structure
 type ControlFlowGraph struct {
-	root   *ast.Node
-	loops  []*LoopInfo
-	taint  *TaintTracker
-	mu     sync.RWMutex
+	root        *ast.Node
+	loops       []*LoopInfo
+	taint       *TaintTracker
+	symbolTable *SymbolTable // For inter-procedural analysis
+	mu          sync.RWMutex
 }
 
 // NewControlFlowGraph creates a new control flow graph analyzer
 func NewControlFlowGraph(root *ast.Node, taint *TaintTracker) *ControlFlowGraph {
 	cfg := &ControlFlowGraph{
-		root:  root,
-		loops: make([]*LoopInfo, 0),
-		taint: taint,
+		root:        root,
+		loops:       make([]*LoopInfo, 0),
+		taint:       taint,
+		symbolTable: nil, // Will be set if provided
 	}
 
 	if root != nil {
@@ -62,6 +65,210 @@ func NewControlFlowGraph(root *ast.Node, taint *TaintTracker) *ControlFlowGraph 
 	}
 
 	return cfg
+}
+
+// SetSymbolTable provides symbol table for inter-procedural analysis
+func (cfg *ControlFlowGraph) SetSymbolTable(symTable *SymbolTable) {
+	cfg.mu.Lock()
+	defer cfg.mu.Unlock()
+	cfg.symbolTable = symTable
+}
+
+// ResolveFunctionDefinition resolves a function call node to its definition
+// Handles both direct calls (func()) and method calls (obj.method())
+func (cfg *ControlFlowGraph) ResolveFunctionDefinition(callNode *ast.Node) *ScopeFunction {
+	if cfg.symbolTable == nil || callNode == nil {
+		return nil
+	}
+
+	// Extract function name from the call node
+	var funcName string
+
+	// Handle function property (direct function call)
+	if funcProp, ok := callNode.GetProperty("function"); ok && funcProp != nil {
+		funcName = funcProp.(string)
+	} else {
+		return nil
+	}
+
+	// For method calls like obj.method(), get the last part
+	if contains(funcName, ".") {
+		parts := strings.Split(funcName, ".")
+		if len(parts) > 0 {
+			funcName = parts[len(parts)-1]
+		}
+	}
+
+	// Search for function definition in symbol table
+	// Start with file scope and traverse scope chain
+	if cfg.symbolTable.FileScope != nil && cfg.symbolTable.FileScope.Functions != nil {
+		if fn, exists := cfg.symbolTable.FileScope.Functions[funcName]; exists {
+			return fn
+		}
+	}
+
+	return nil
+}
+
+// AnalyzeFunctionReturnTaint analyzes if a function returns tainted (non-deterministic) data
+// Uses visited set to prevent infinite recursion for mutually recursive functions
+func (cfg *ControlFlowGraph) AnalyzeFunctionReturnTaint(funcDef *ScopeFunction, visitedFuncs map[string]bool) bool {
+	if funcDef == nil || funcDef.DefinedAt == nil {
+		return false
+	}
+
+	// Prevent infinite recursion
+	if visitedFuncs == nil {
+		visitedFuncs = make(map[string]bool)
+	}
+	if visitedFuncs[funcDef.Name] {
+		return false // Assume not tainted for cyclic functions
+	}
+	visitedFuncs[funcDef.Name] = true
+
+	// Find all return statements in the function
+	returnNodes := cfg.findReturnStatements(funcDef.DefinedAt)
+
+	// If no returns found, assume function returns nil/void (not tainted)
+	if len(returnNodes) == 0 {
+		return false
+	}
+
+	// Check each return statement for taint
+	for _, retNode := range returnNodes {
+		if cfg.isReturnValueTainted(retNode, visitedFuncs) {
+			return true // Found a tainted return path
+		}
+	}
+
+	return false // All return paths are clean
+}
+
+// findReturnStatements recursively finds all return statements in a function
+func (cfg *ControlFlowGraph) findReturnStatements(node *ast.Node) []*ast.Node {
+	var returns []*ast.Node
+
+	if node == nil {
+		return returns
+	}
+
+	// Check if this node is a return statement
+	if node.Type == ast.NodeTypeReturnStmt {
+		returns = append(returns, node)
+	}
+
+	// Don't recurse into nested function definitions beyond the first level
+	// to avoid analyzing nested functions as part of parent function returns
+	if node.Type == ast.NodeTypeFunctionDef {
+		// Skip recursion for nested functions
+		return returns
+	}
+
+	// Recurse into children
+	for _, child := range node.GetChildren() {
+		returns = append(returns, cfg.findReturnStatements(child)...)
+	}
+
+	return returns
+}
+
+// isReturnValueTainted checks if a return statement returns a tainted value
+func (cfg *ControlFlowGraph) isReturnValueTainted(retNode *ast.Node, visitedFuncs map[string]bool) bool {
+	if retNode == nil {
+		return false
+	}
+
+	// Get the expression being returned
+	returnChildren := retNode.GetChildren()
+	if len(returnChildren) == 0 {
+		return false
+	}
+
+	returnExpr := returnChildren[0]
+
+	// Non-deterministic keywords
+	nonDetKeywords := []string{
+		"llm_call", "gpt", "chat", "completion", "ollama",
+		"random", "rand", "choice", "shuffle",
+		"request", "get", "post", "fetch",
+		"input", "stdin",
+	}
+
+	// Check if return expression is a function call that might be tainted
+	if returnExpr.Type == ast.NodeTypeFunctionCall {
+		if funcName, ok := returnExpr.GetProperty("function"); ok && funcName != nil {
+			fname := funcName.(string)
+			// Check if it's a non-deterministic function
+			for _, keyword := range nonDetKeywords {
+				if contains(fname, keyword) {
+					return true
+				}
+			}
+
+			// Try to resolve and recursively analyze the called function
+			if def := cfg.ResolveFunctionDefinition(returnExpr); def != nil {
+				return cfg.AnalyzeFunctionReturnTaint(def, visitedFuncs)
+			}
+		}
+	}
+
+	// Check if return is a variable that might be tainted
+	if returnExpr.Type == ast.NodeTypeVariableRef {
+		if varName, ok := returnExpr.GetProperty("name"); ok && varName != nil {
+			vname := varName.(string)
+			// Check if variable is tainted via taint tracker
+			if cfg.taint != nil && cfg.taint.IsVariableTainted(vname) {
+				return true
+			}
+		}
+	}
+
+	// Fallback: check return expression text for non-deterministic keywords
+	returnText := returnExpr.GetText()
+	for _, keyword := range nonDetKeywords {
+		if contains(returnText, keyword) {
+			return true // Return is tainted
+		}
+	}
+
+	return false // Return appears to be clean
+}
+
+// HasFunctionCallInCondition finds if there's a function call in loop condition
+func (cfg *ControlFlowGraph) HasFunctionCallInCondition(loopInfo *LoopInfo) *ast.Node {
+	if loopInfo == nil {
+		return nil
+	}
+
+	// Check condition nodes for function calls
+	for _, condNode := range loopInfo.ConditionNodes {
+		callNode := cfg.findFirstFunctionCall(condNode)
+		if callNode != nil {
+			return callNode
+		}
+	}
+
+	return nil
+}
+
+// findFirstFunctionCall recursively finds the first function call in a node tree
+func (cfg *ControlFlowGraph) findFirstFunctionCall(node *ast.Node) *ast.Node {
+	if node == nil {
+		return nil
+	}
+
+	if node.Type == ast.NodeTypeFunctionCall {
+		return node
+	}
+
+	// Recurse into children
+	for _, child := range node.GetChildren() {
+		if result := cfg.findFirstFunctionCall(child); result != nil {
+			return result
+		}
+	}
+
+	return nil
 }
 
 // ExtractLoops finds and analyzes all loops in the AST
@@ -126,6 +333,10 @@ func (cfg *ControlFlowGraph) analyzeLoop(loopNode *ast.Node) *LoopInfo {
 }
 
 // isConditionDeterministic checks if a loop condition depends on non-deterministic sources
+// Implements three strategies:
+// 1. Direct keyword matching
+// 2. Inter-procedural taint analysis for function calls
+// 3. Deterministic built-in whitelist to prevent false positives
 func (cfg *ControlFlowGraph) isConditionDeterministic(loopInfo *LoopInfo) bool {
 	// Non-deterministic keywords
 	nonDetKeywords := []string{
@@ -135,6 +346,7 @@ func (cfg *ControlFlowGraph) isConditionDeterministic(loopInfo *LoopInfo) bool {
 		"input", "stdin",
 	}
 
+	// STRATEGY 1: Direct keyword matching
 	conditionText := loopInfo.ConditionText
 	for _, keyword := range nonDetKeywords {
 		if contains(conditionText, keyword) {
@@ -142,7 +354,123 @@ func (cfg *ControlFlowGraph) isConditionDeterministic(loopInfo *LoopInfo) bool {
 		}
 	}
 
+	// STRATEGY 2: Check for function calls in condition
+	// If found, analyze if they return tainted (non-deterministic) data
+	callNode := cfg.HasFunctionCallInCondition(loopInfo)
+	if callNode != nil {
+		// Try to resolve function definition
+		funcDef := cfg.ResolveFunctionDefinition(callNode)
+		if funcDef != nil {
+			// Analyze if the function returns tainted data
+			if cfg.AnalyzeFunctionReturnTaint(funcDef, nil) {
+				return false // Function returns tainted data
+			}
+			return true // Function returns clean data
+		}
+
+		// Function not found in symbol table - check whitelist
+		// STRATEGY 3: Deterministic Built-in Whitelist
+		// This prevents false positives on functions like len(), range(), etc.
+		// that are guaranteed deterministic but not defined in user code
+		deterministicBuiltins := cfg.getDeterministicBuiltinWhitelist()
+
+		if funcName, ok := callNode.GetProperty("function"); ok && funcName != nil {
+			fname := funcName.(string)
+
+			// For method calls like obj.method(), get the last part
+			if contains(fname, ".") {
+				parts := strings.Split(fname, ".")
+				if len(parts) > 0 {
+					fname = parts[len(parts)-1]
+				}
+			}
+
+			// If function is in the whitelist, it's deterministic
+			if deterministicBuiltins[fname] {
+				return true
+			}
+
+			// If function is not found and not in whitelist, assume non-deterministic (safe default)
+			return false
+		}
+	}
+
 	return true
+}
+
+// getDeterministicBuiltinWhitelist returns the set of Python built-in functions
+// and common safe methods that are guaranteed to be deterministic
+func (cfg *ControlFlowGraph) getDeterministicBuiltinWhitelist() map[string]bool {
+	return map[string]bool{
+		// Python built-in functions
+		"len":        true,
+		"range":      true,
+		"enumerate":  true,
+		"zip":        true,
+		"isinstance": true,
+		"type":       true,
+		"str":        true,
+		"int":        true,
+		"float":      true,
+		"bool":       true,
+		"list":       true,
+		"dict":       true,
+		"set":        true,
+		"tuple":      true,
+		"abs":        true,
+		"min":        true,
+		"max":        true,
+		"sum":        true,
+		"sorted":     true,
+		"reversed":   true,
+		"all":        true,
+		"any":        true,
+		"iter":       true,
+		"next":       true,
+		"ord":        true,
+		"chr":        true,
+		"hex":        true,
+		"oct":        true,
+		"bin":        true,
+		"hash":       true,
+
+		// Common safe string methods
+		"strip":      true,
+		"lstrip":     true,
+		"rstrip":     true,
+		"upper":      true,
+		"lower":      true,
+		"split":      true,
+		"join":       true,
+		"replace":    true,
+		"startswith": true,
+		"endswith":   true,
+		"find":       true,
+		"format":     true,
+
+		// Common safe list/dict methods
+		"append":  true,
+		"extend":  true,
+		"pop":     true,
+		"remove":  true,
+		"clear":   true,
+		"count":   true,
+		"index":   true,
+		"sort":    true,
+		"reverse": true,
+		"copy":    true,
+		"keys":    true,
+		"values":  true,
+		"items":   true,
+		"get":     true,
+		"update":  true,
+
+		// Type checking helpers
+		"callable": true,
+		"hasattr":  true,
+		"getattr":  true,
+		"setattr":  true,
+	}
 }
 
 // findBreakCounter extracts a counter variable if the loop has one
