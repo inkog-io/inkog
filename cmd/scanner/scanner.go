@@ -8,22 +8,35 @@ import (
 	"sync"
 	"time"
 
+	"github.com/inkog-io/inkog/action/pkg/ast_engine/analysis"
+	"github.com/inkog-io/inkog/action/pkg/ast_engine/parser"
 	"github.com/inkog-io/inkog/action/pkg/patterns"
 )
 
 // Scanner orchestrates the security scanning process
 type Scanner struct {
-	registry    *patterns.Registry
-	semaphore   chan struct{} // Limits concurrent file processing
+	registry      *patterns.Registry
+	semaphore     chan struct{} // Limits concurrent file processing
 	riskThreshold string
+	pythonParser  parser.Parser // Parser for extracting docstring ranges
+	parserMu      sync.Mutex    // Protect parser instance
 }
 
 // NewScanner creates a new security scanner
 func NewScanner(registry *patterns.Registry, maxConcurrency int, riskThreshold string) *Scanner {
+	// Initialize Python parser for docstring detection
+	pythonParser, err := parser.NewPythonParser(parser.DefaultConfig())
+	if err != nil {
+		// If parser initialization fails, continue with nil parser
+		// The scanner will gracefully skip docstring extraction for Python files
+		pythonParser = nil
+	}
+
 	return &Scanner{
 		registry:      registry,
 		semaphore:     make(chan struct{}, maxConcurrency),
 		riskThreshold: riskThreshold,
+		pythonParser:  pythonParser,
 	}
 }
 
@@ -126,10 +139,17 @@ func (s *Scanner) scanFileWithAllDetectors(filePath string, content []byte) Dete
 	var findings []patterns.Finding
 	var panicedDetectors []string
 
+	// Extract ignored ranges for this file (e.g., docstrings for Python files)
+	ignoredRanges := s.extractIgnoredRanges(filePath, content)
+
 	for _, detector := range s.registry.GetAll() {
 		// Wrap detector call with panic recovery
 		detectorFindings, panicked := s.safeDetect(detector, filePath, content)
-		findings = append(findings, detectorFindings...)
+
+		// Filter findings to exclude those in ignored ranges
+		filteredFindings := s.filterFindingsInIgnoredRanges(filePath, content, detectorFindings, ignoredRanges)
+		findings = append(findings, filteredFindings...)
+
 		if panicked {
 			panicedDetectors = append(panicedDetectors, detector.Name())
 		}
@@ -270,4 +290,84 @@ func (s *Scanner) ShouldFailOnThreshold(result *patterns.ScanResult) bool {
 	default:
 		return result.CriticalCount > 0
 	}
+}
+
+// extractIgnoredRanges extracts ignored ranges (docstrings, comments) from a file
+func (s *Scanner) extractIgnoredRanges(filePath string, content []byte) *analysis.IgnoredRanges {
+	ignoredRanges := analysis.NewIgnoredRanges()
+
+	// Only extract docstrings for Python files
+	if !strings.HasSuffix(filePath, ".py") {
+		return ignoredRanges
+	}
+
+	// Check if Python parser is available
+	if s.pythonParser == nil {
+		return ignoredRanges
+	}
+
+	// Get or cast Python parser
+	pythonParser, ok := s.pythonParser.(*parser.PythonParser)
+	if !ok {
+		return ignoredRanges
+	}
+
+	// Extract docstring ranges from Python source code
+	sourceCode := string(content)
+	docstringRanges := pythonParser.ExtractDocstringRanges(sourceCode)
+
+	return docstringRanges
+}
+
+// lineColToByteOffset converts a line/column position to a byte offset in the source code
+func lineColToByteOffset(content []byte, line int, col int) int {
+	if line <= 0 || col < 0 {
+		return 0
+	}
+
+	sourceStr := string(content)
+	lines := strings.Split(sourceStr, "\n")
+
+	byteOffset := 0
+
+	// Add bytes from all lines before the target line
+	for i := 0; i < line-1 && i < len(lines); i++ {
+		byteOffset += len(lines[i])
+		byteOffset += 1 // Account for the newline character
+	}
+
+	// Add column offset to the target line
+	if line > 0 && line <= len(lines) {
+		targetLine := lines[line-1]
+		if col > len(targetLine) {
+			byteOffset += len(targetLine)
+		} else {
+			byteOffset += col
+		}
+	}
+
+	return byteOffset
+}
+
+// filterFindingsInIgnoredRanges removes findings that fall within ignored ranges
+func (s *Scanner) filterFindingsInIgnoredRanges(filePath string, content []byte,
+	findings []patterns.Finding, ignoredRanges *analysis.IgnoredRanges) []patterns.Finding {
+
+	if ignoredRanges == nil || ignoredRanges.Count() == 0 {
+		return findings
+	}
+
+	var filtered []patterns.Finding
+
+	for _, finding := range findings {
+		// Convert finding's line/column to byte offset
+		byteOffset := lineColToByteOffset(content, finding.Line, finding.Column)
+
+		// Check if this byte position is in an ignored range
+		if !ignoredRanges.IsBytePositionIgnored(byteOffset) {
+			filtered = append(filtered, finding)
+		}
+	}
+
+	return filtered
 }
