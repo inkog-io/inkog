@@ -109,7 +109,8 @@ func deduplicateByLocation(findings []patterns.Finding) []patterns.Finding {
 	return result
 }
 
-// selectBestFindings chooses which finding to keep when multiple exist at same location
+// selectBestFindings chooses exactly ONE finding to keep when multiple exist at same location
+// Strategy: Highest severity first, filter out language mismatches (e.g., JavaScript for Python)
 func selectBestFindings(group []patterns.Finding) []patterns.Finding {
 	if len(group) == 0 {
 		return []patterns.Finding{}
@@ -132,20 +133,24 @@ func selectBestFindings(group []patterns.Finding) []patterns.Finding {
 		return group[i].Confidence > group[j].Confidence
 	})
 
-	// Keep highest severity finding
-	best := []patterns.Finding{group[0]}
+	// STRICT DEDUPLICATION: Return exactly ONE finding (the best)
+	// Filter out language mismatches (e.g., JavaScript detectors for Python files)
+	isPythonFile := strings.HasSuffix(group[0].File, ".py")
 
-	// Include other findings with same severity (different pattern IDs)
-	for i := 1; i < len(group); i++ {
-		if severityScore(group[i].Severity) == severityScore(group[0].Severity) {
-			// Check if this is a different type of finding
-			if group[i].PatternID != group[0].PatternID {
-				best = append(best, group[i])
-			}
+	for i := 0; i < len(group); i++ {
+		finding := group[i]
+
+		// Skip findings that mention JavaScript when scanning Python files
+		if isPythonFile && strings.Contains(strings.ToLower(finding.Message), "javascript") {
+			continue
 		}
+
+		// Return the first valid (best-scored) finding
+		return []patterns.Finding{finding}
 	}
 
-	return best
+	// Fallback: return highest severity regardless (shouldn't reach here)
+	return []patterns.Finding{group[0]}
 }
 
 // severityScore converts severity string to numeric score for comparison

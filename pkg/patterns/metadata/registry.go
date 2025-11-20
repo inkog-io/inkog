@@ -374,11 +374,27 @@ var registry = map[string]*VulnerabilityMetadata{
 	},
 }
 
-// Get retrieves metadata by vulnerability ID
+// Get retrieves metadata by vulnerability ID, supporting legacy detector aliases
 func Get(id string) *VulnerabilityMetadata {
+	// Legacy detector ID aliases mapping to canonical registry IDs
+	aliases := map[string]string{
+		"context_window_accumulation":  ID_CONTEXT_EXHAUSTION,
+		"missing_human_oversight":      ID_TAINTED_EVAL,
+		"output_validation_failures":   ID_OUTPUT_VALIDATION,
+		"unvalidated_exec_eval":        ID_UNVALIDATED_EXEC_EVAL,
+	}
+
+	// Check if this is a legacy alias and resolve to canonical ID
+	if canonical, ok := aliases[id]; ok {
+		id = canonical
+	}
+
+	// Look up in registry
 	if meta, ok := registry[id]; ok {
 		return meta
 	}
+
+	// Fallback for unknown vulnerabilities
 	return &VulnerabilityMetadata{
 		ID:              id,
 		Title:           fmt.Sprintf("Unknown Vulnerability (%s)", id),
