@@ -1,6 +1,7 @@
 package analysis
 
 import (
+	"log"
 	"strings"
 	"sync"
 
@@ -117,11 +118,14 @@ func (cfg *ControlFlowGraph) AnalyzeFunctionReturnTaint(funcDef *ScopeFunction, 
 		return false
 	}
 
+	log.Printf("[TAINT_DEBUG] Analyzing function return taint: %s", funcDef.Name)
+
 	// Prevent infinite recursion
 	if visitedFuncs == nil {
 		visitedFuncs = make(map[string]bool)
 	}
 	if visitedFuncs[funcDef.Name] {
+		log.Printf("[TAINT_DEBUG] Function '%s' already visited (cyclic), assuming not tainted", funcDef.Name)
 		return false // Assume not tainted for cyclic functions
 	}
 	visitedFuncs[funcDef.Name] = true
@@ -131,16 +135,22 @@ func (cfg *ControlFlowGraph) AnalyzeFunctionReturnTaint(funcDef *ScopeFunction, 
 
 	// If no returns found, assume function returns nil/void (not tainted)
 	if len(returnNodes) == 0 {
+		log.Printf("[TAINT_DEBUG] Function '%s' has no return statements, assuming CLEAN", funcDef.Name)
 		return false
 	}
 
+	log.Printf("[TAINT_DEBUG] Function '%s' has %d return statement(s)", funcDef.Name, len(returnNodes))
+
 	// Check each return statement for taint
-	for _, retNode := range returnNodes {
+	for i, retNode := range returnNodes {
+		log.Printf("[TAINT_DEBUG] Checking return statement %d of %d in function '%s'", i+1, len(returnNodes), funcDef.Name)
 		if cfg.isReturnValueTainted(retNode, visitedFuncs) {
+			log.Printf("[TAINT_DEBUG] Function '%s' returns TAINTED data", funcDef.Name)
 			return true // Found a tainted return path
 		}
 	}
 
+	log.Printf("[TAINT_DEBUG] Function '%s' all return statements are CLEAN", funcDef.Name)
 	return false // All return paths are clean
 }
 
@@ -192,6 +202,9 @@ func (cfg *ControlFlowGraph) isReturnValueTainted(retNode *ast.Node, visitedFunc
 		"random", "rand", "choice", "shuffle",
 		"request", "get", "post", "fetch",
 		"input", "stdin",
+		// Modern SDK patterns
+		"completions.create", "embeddings.create", "messages.create",
+		"invoke", "stream", "batch",
 	}
 
 	// Check if return expression is a function call that might be tainted
@@ -201,13 +214,19 @@ func (cfg *ControlFlowGraph) isReturnValueTainted(retNode *ast.Node, visitedFunc
 			// Check if it's a non-deterministic function
 			for _, keyword := range nonDetKeywords {
 				if contains(fname, keyword) {
+					log.Printf("[TAINT_DEBUG] Return value is TAINTED: detected LLM/external call '%s'", fname)
 					return true
 				}
 			}
 
 			// Try to resolve and recursively analyze the called function
 			if def := cfg.ResolveFunctionDefinition(returnExpr); def != nil {
-				return cfg.AnalyzeFunctionReturnTaint(def, visitedFuncs)
+				log.Printf("[TAINT_DEBUG] Recursively analyzing return value from function call: %s", fname)
+				isTainted := cfg.AnalyzeFunctionReturnTaint(def, visitedFuncs)
+				if isTainted {
+					log.Printf("[TAINT_DEBUG] Return value is TAINTED: called function '%s' returns tainted data", fname)
+				}
+				return isTainted
 			}
 		}
 	}
@@ -218,8 +237,10 @@ func (cfg *ControlFlowGraph) isReturnValueTainted(retNode *ast.Node, visitedFunc
 			vname := varName.(string)
 			// Check if variable is tainted via taint tracker
 			if cfg.taint != nil && cfg.taint.IsVariableTainted(vname) {
+				log.Printf("[TAINT_DEBUG] Return value is TAINTED: variable '%s' is marked as tainted", vname)
 				return true
 			}
+			log.Printf("[TAINT_DEBUG] Return value is CLEAN: variable '%s' has no taint sources", vname)
 		}
 	}
 
@@ -227,10 +248,12 @@ func (cfg *ControlFlowGraph) isReturnValueTainted(retNode *ast.Node, visitedFunc
 	returnText := returnExpr.GetText()
 	for _, keyword := range nonDetKeywords {
 		if contains(returnText, keyword) {
+			log.Printf("[TAINT_DEBUG] Return value is TAINTED: detected keyword '%s' in return expression", keyword)
 			return true // Return is tainted
 		}
 	}
 
+	log.Printf("[TAINT_DEBUG] Return value is CLEAN: no taint sources detected")
 	return false // Return appears to be clean
 }
 
@@ -344,12 +367,18 @@ func (cfg *ControlFlowGraph) isConditionDeterministic(loopInfo *LoopInfo) bool {
 		"random", "rand", "choice", "shuffle",
 		"request", "get", "post", "fetch",
 		"input", "stdin",
+		// Modern SDK patterns
+		"completions.create", "embeddings.create", "messages.create",
+		"invoke", "stream", "batch",
 	}
+
+	log.Printf("[TAINT_DEBUG] Checking loop condition determinism: %s", loopInfo.ConditionText)
 
 	// STRATEGY 1: Direct keyword matching
 	conditionText := loopInfo.ConditionText
 	for _, keyword := range nonDetKeywords {
 		if contains(conditionText, keyword) {
+			log.Printf("[TAINT_DEBUG] Condition is NON-DETERMINISTIC: detected keyword '%s' in condition text", keyword)
 			return false
 		}
 	}
@@ -358,15 +387,21 @@ func (cfg *ControlFlowGraph) isConditionDeterministic(loopInfo *LoopInfo) bool {
 	// If found, analyze if they return tainted (non-deterministic) data
 	callNode := cfg.HasFunctionCallInCondition(loopInfo)
 	if callNode != nil {
+		log.Printf("[TAINT_DEBUG] Found function call in loop condition")
 		// Try to resolve function definition
 		funcDef := cfg.ResolveFunctionDefinition(callNode)
 		if funcDef != nil {
+			log.Printf("[TAINT_DEBUG] Resolved function '%s' from symbol table", funcDef.Name)
 			// Analyze if the function returns tainted data
 			if cfg.AnalyzeFunctionReturnTaint(funcDef, nil) {
+				log.Printf("[TAINT_DEBUG] Condition is NON-DETERMINISTIC: function '%s' returns tainted data", funcDef.Name)
 				return false // Function returns tainted data
 			}
+			log.Printf("[TAINT_DEBUG] Condition is DETERMINISTIC: function '%s' returns clean data", funcDef.Name)
 			return true // Function returns clean data
 		}
+
+		log.Printf("[TAINT_DEBUG] Function not found in symbol table, checking whitelist")
 
 		// Function not found in symbol table - check whitelist
 		// STRATEGY 3: Deterministic Built-in Whitelist
@@ -387,14 +422,17 @@ func (cfg *ControlFlowGraph) isConditionDeterministic(loopInfo *LoopInfo) bool {
 
 			// If function is in the whitelist, it's deterministic
 			if deterministicBuiltins[fname] {
+				log.Printf("[TAINT_DEBUG] Condition is DETERMINISTIC: '%s' is in built-in whitelist", fname)
 				return true
 			}
 
 			// If function is not found and not in whitelist, assume non-deterministic (safe default)
+			log.Printf("[TAINT_DEBUG] Condition is NON-DETERMINISTIC: '%s' not found in symbol table and not in whitelist", fname)
 			return false
 		}
 	}
 
+	log.Printf("[TAINT_DEBUG] Condition is DETERMINISTIC: no non-deterministic patterns detected")
 	return true
 }
 

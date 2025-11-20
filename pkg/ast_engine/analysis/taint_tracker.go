@@ -1,6 +1,7 @@
 package analysis
 
 import (
+	"log"
 	"sync"
 
 	"github.com/inkog-io/inkog/action/pkg/ast_engine/ast"
@@ -41,10 +42,25 @@ func NewTaintTracker(resolver *ReferenceResolver) *TaintTracker {
 		taintMap:    make(map[string]TaintStatus),
 		taintEvents: make(map[string][]*TaintEvent),
 		sources: []string{
+			// LLM Core keywords
 			"llm_call", "gpt", "chat", "completion", "ollama", "generate",
-			"request", "get", "post", "fetch", "recv",
+			// Modern SDK patterns (OpenAI v1)
+			"completions.create", "embeddings.create", "chat.completions",
+			// Anthropic SDK
+			"messages.create", "beta.messages",
+			// LangChain patterns
+			"invoke", "stream", "batch", "LLMChain", "run",
+			// Google Vertex
+			"predictions.create", "generate_content",
+			// Other LLM providers
+			"replicate", "together", "cohere", "huggingface",
+			// Network/External
+			"request", "get", "post", "put", "delete", "patch", "fetch", "recv",
+			"http", "requests", "urllib", "httpx",
+			// User input
 			"input", "argv", "environ", "getenv",
-			"read", "stdin", "socket",
+			// File/Stream operations
+			"read", "stdin", "socket", "file",
 		},
 		sanitizers: []string{
 			"escape", "sanitize", "validate", "strip", "encode",
@@ -207,9 +223,36 @@ func (tt *TaintTracker) DetectTaintedFunctionArgument(callInfo *ast.FunctionCall
 }
 
 // isSourceCall checks if a string represents a known taint source
+// It handles both simple keywords and chained method patterns
 func (tt *TaintTracker) isSourceCall(valueStr string) bool {
 	for _, source := range tt.sources {
+		// Check for exact substring match (e.g., "chat" in "client.chat.completions.create")
 		if contains(valueStr, source) {
+			// Additional validation for method chain patterns to avoid false positives
+			// For example, "request" should match "requests.get()" but also standalone "request()"
+			if source == "get" || source == "post" {
+				// For HTTP methods, be more careful - check context
+				if matchesHTTPPattern(valueStr) {
+					log.Printf("[TAINT_DEBUG] Detected taint source '%s' in: %s", source, valueStr)
+					return true
+				}
+			} else {
+				log.Printf("[TAINT_DEBUG] Detected taint source '%s' in: %s", source, valueStr)
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// matchesHTTPPattern checks if a value string is an HTTP request pattern
+func matchesHTTPPattern(valueStr string) bool {
+	httpPatterns := []string{
+		"requests.", "urllib.", "httpx.", "http.", ".get(", ".post(",
+		".put(", ".delete(", ".patch(", ".fetch(",
+	}
+	for _, pattern := range httpPatterns {
+		if contains(valueStr, pattern) {
 			return true
 		}
 	}
