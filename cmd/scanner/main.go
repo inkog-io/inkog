@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/inkog-io/inkog/action/pkg/patterns"
+	"github.com/inkog-io/inkog/action/pkg/patterns/aggregator"
 	"github.com/inkog-io/inkog/action/pkg/reporting/compliance"
 	"github.com/inkog-io/inkog/action/pkg/reporting/sarif"
 )
@@ -49,6 +50,18 @@ func main() {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Scan error: %v\n", err)
 		os.Exit(1)
+	}
+
+	// Deduplicate and enrich findings using centralized metadata registry
+	result.Findings = aggregator.DeduplicateAndEnrich(result.Findings)
+
+	// Validate enriched findings
+	validationIssues := aggregator.ValidateFindings(result.Findings)
+	if len(validationIssues) > 0 {
+		fmt.Fprintf(os.Stderr, "⚠ Validation issues detected:\n")
+		for _, issue := range validationIssues {
+			fmt.Fprintf(os.Stderr, "  - %s\n", issue)
+		}
 	}
 
 	// Handle deprecated --json flag for backward compatibility
