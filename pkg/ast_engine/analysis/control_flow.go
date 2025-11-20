@@ -851,6 +851,15 @@ func (cfg *ControlFlowGraph) findDataGrowthRecursive(node *ast.Node, keywords []
 // - No hard break counter
 // - Non-deterministic exit condition
 func (cfg *ControlFlowGraph) HasDoomLoopPattern(loopInfo *LoopInfo) bool {
+	// SIGNATURE: "should_continue" pattern is a high-confidence infinite loop indicator
+	// This pattern is commonly used in agent loops (LangGraph, AutoGPT, etc.)
+	// where the LLM decides whether to continue, implying non-deterministic behavior
+	if contains(loopInfo.ConditionText, "_should_continue_") ||
+		contains(loopInfo.ConditionText, "should_continue") {
+		log.Printf("[DOOM_LOOP_DEBUG] Detected 'should_continue' signature in condition: %s", loopInfo.ConditionText)
+		return true
+	}
+
 	// Must have LLM calls
 	if !loopInfo.HasLLMCallInBody && !cfg.conditionHasLLMCall(loopInfo.ConditionText) {
 		return false
