@@ -1,6 +1,7 @@
 package detectors
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -147,16 +148,17 @@ func (d *OutputValidationFailuresDetector) Detect(filePath string, src []byte) (
 	lang := detectLanguage(filePath)
 
 	// Check for dangerous code execution patterns
-	findings = append(findings, d.checkCodeExecution(sourceStr, lines, lang)...)
+	findings = append(findings, d.checkCodeExecution(filePath, sourceStr, lines, lang)...)
 
 	// Check for HTML/XSS injection
-	findings = append(findings, d.checkHTMLInjection(sourceStr, lines, lang)...)
+	findings = append(findings, d.checkHTMLInjection(filePath, sourceStr, lines, lang)...)
 
-	// Check for command injection
-	findings = append(findings, d.checkCommandInjection(sourceStr, lines, lang)...)
+	// NOTE: Skip checkCommandInjection() to avoid duplicates with UnvalidatedExecEvalDetector
+	// UnvalidatedExecEvalDetector provides higher-fidelity command injection detection
+	// findings = append(findings, d.checkCommandInjection(filePath, sourceStr, lines, lang)...)
 
 	// Check for SQL injection
-	findings = append(findings, d.checkSQLInjection(sourceStr, lines, lang)...)
+	findings = append(findings, d.checkSQLInjection(filePath, sourceStr, lines, lang)...)
 
 	// Apply context-aware confidence adjustments
 	findings = d.applyContextAwareness(sourceStr, lines, findings)
@@ -165,7 +167,7 @@ func (d *OutputValidationFailuresDetector) Detect(filePath string, src []byte) (
 }
 
 // checkCodeExecution detects eval, exec, and similar dangerous functions
-func (d *OutputValidationFailuresDetector) checkCodeExecution(source string, lines []string, lang string) []patterns.Finding {
+func (d *OutputValidationFailuresDetector) checkCodeExecution(filePath string, source string, lines []string, lang string) []patterns.Finding {
 	var findings []patterns.Finding
 
 	for i, line := range lines {
@@ -198,7 +200,10 @@ func (d *OutputValidationFailuresDetector) checkCodeExecution(source string, lin
 					// Check if properly sanitized
 					if !d.hasSanitization(source, i) {
 						finding := patterns.Finding{
+							ID:          fmt.Sprintf("output_validation_%d", i+1),
 							PatternID:   "output_validation_failures",
+							Pattern:     "Output Validation Failures",
+							File:        filePath,
 							Confidence:  0.95,
 							Line:        i + 1,
 							Column:      1,
@@ -219,7 +224,7 @@ func (d *OutputValidationFailuresDetector) checkCodeExecution(source string, lin
 }
 
 // checkHTMLInjection detects XSS vulnerabilities (innerHTML, dangerouslySetInnerHTML, etc.)
-func (d *OutputValidationFailuresDetector) checkHTMLInjection(source string, lines []string, lang string) []patterns.Finding {
+func (d *OutputValidationFailuresDetector) checkHTMLInjection(filePath string, source string, lines []string, lang string) []patterns.Finding {
 	var findings []patterns.Finding
 
 	for i, line := range lines {
@@ -256,7 +261,10 @@ func (d *OutputValidationFailuresDetector) checkHTMLInjection(source string, lin
 					if !needsHTMLContext || d.isHTMLContext(source, i) {
 						if !d.hasSanitization(source, i) {
 							finding := patterns.Finding{
+								ID:          fmt.Sprintf("output_validation_%d", i+1),
 								PatternID:   "output_validation_failures",
+								Pattern:     "Output Validation Failures",
+								File:        filePath,
 								Confidence:  0.90,
 								Line:        i + 1,
 								Column:      1,
@@ -308,7 +316,7 @@ func (d *OutputValidationFailuresDetector) checkCommandInjection(source string, 
 }
 
 // checkSQLInjection detects SQL injection vulnerabilities
-func (d *OutputValidationFailuresDetector) checkSQLInjection(source string, lines []string, lang string) []patterns.Finding {
+func (d *OutputValidationFailuresDetector) checkSQLInjection(filePath string, source string, lines []string, lang string) []patterns.Finding {
 	var findings []patterns.Finding
 
 	for i, line := range lines {
@@ -320,7 +328,10 @@ func (d *OutputValidationFailuresDetector) checkSQLInjection(source string, line
 			// Check if not using parameterized query
 			if !d.parameterizedQueryPattern.MatchString(line) && d.isFromUntrustedSource(source, i) {
 				finding := patterns.Finding{
+					ID:          fmt.Sprintf("output_validation_%d", i+1),
 					PatternID:   "output_validation_failures",
+					Pattern:     "Output Validation Failures",
+					File:        filePath,
 					Confidence:  0.92,
 					Line:        i + 1,
 					Column:      1,
