@@ -479,11 +479,56 @@ func (cfg *ControlFlowGraph) analyzeLoop(loopNode *ast.Node) *LoopInfo {
 	return loopInfo
 }
 
+// containsLLMKeywords checks if function body text contains high-risk LLM keywords
+// This is a heuristic fallback when inter-procedural taint analysis doesn't catch tainted returns
+func (cfg *ControlFlowGraph) containsLLMKeywords(funcDef *ScopeFunction) bool {
+	if funcDef == nil || funcDef.DefinedAt == nil {
+		return false
+	}
+
+	// LLM keywords that indicate non-deterministic behavior
+	llmKeywords := []string{
+		"chat.completions", "openai", "llm", "invoke", "predict",
+		"messages.create", "anthropic", "langchain",
+		"generate_content", "vertex", "replicate", "together", "cohere",
+		"huggingface", "completions.create", "embeddings.create",
+		"client.chat", "client.messages",
+	}
+
+	// Get function body text
+	bodyText := cfg.getFunctionBodyText(funcDef.DefinedAt)
+
+	for _, keyword := range llmKeywords {
+		if contains(bodyText, keyword) {
+			log.Printf("[TAINT_DEBUG] Heuristic detected LLM keyword '%s' in function '%s' body", keyword, funcDef.Name)
+			return true
+		}
+	}
+
+	return false
+}
+
+// getFunctionBodyText extracts the text content of a function's body
+func (cfg *ControlFlowGraph) getFunctionBodyText(node *ast.Node) string {
+	if node == nil {
+		return ""
+	}
+
+	bodyText := ""
+	for _, child := range node.Children {
+		if child != nil && child.Text != "" {
+			bodyText += child.Text + " "
+		}
+	}
+	return bodyText
+}
+
 // isConditionDeterministic checks if a loop condition depends on non-deterministic sources
-// Implements three strategies:
+// Implements four strategies:
 // 1. Direct keyword matching
 // 2. Inter-procedural taint analysis for function calls
 // 3. Deterministic built-in whitelist to prevent false positives
+// 4. Heuristic body text check - fallback when formal analysis fails
 func (cfg *ControlFlowGraph) isConditionDeterministic(loopInfo *LoopInfo) bool {
 	// Non-deterministic keywords
 	nonDetKeywords := []string{
@@ -521,8 +566,16 @@ func (cfg *ControlFlowGraph) isConditionDeterministic(loopInfo *LoopInfo) bool {
 				log.Printf("[TAINT_DEBUG] Condition is NON-DETERMINISTIC: function '%s' returns tainted data", funcDef.Name)
 				return false // Function returns tainted data
 			}
-			log.Printf("[TAINT_DEBUG] Condition is DETERMINISTIC: function '%s' returns clean data", funcDef.Name)
-			return true // Function returns clean data
+			log.Printf("[TAINT_DEBUG] Function '%s' returns clean data, checking heuristic fallback", funcDef.Name)
+
+			// STRATEGY 4: Heuristic body text check (fallback when formal analysis fails)
+			if cfg.containsLLMKeywords(funcDef) {
+				log.Printf("[TAINT_DEBUG] Condition is NON-DETERMINISTIC: function '%s' body contains LLM keywords (heuristic)", funcDef.Name)
+				return false // Function body contains LLM keywords, likely non-deterministic
+			}
+
+			log.Printf("[TAINT_DEBUG] Condition is DETERMINISTIC: function '%s' returns clean data and no LLM keywords", funcDef.Name)
+			return true // Function returns clean data and no LLM keywords found
 		}
 
 		log.Printf("[TAINT_DEBUG] Function not found in symbol table, checking whitelist")
