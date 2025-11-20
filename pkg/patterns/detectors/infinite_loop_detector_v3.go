@@ -2,6 +2,7 @@ package detectors
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/inkog-io/inkog/action/pkg/ast_engine/analysis"
 	"github.com/inkog-io/inkog/action/pkg/ast_engine/parser"
@@ -78,10 +79,18 @@ func (d *InfiniteLoopDetectorV3) DetectSemantic(filePath string, src []byte) ([]
 	loops := cfg.ExtractLoops()
 	sourceLines := getSourceLines(src)
 
-	for _, loopInfo := range loops {
+	log.Printf("[INFINITE_LOOP_DETECTOR] Checking %d loops in %s", len(loops), filePath)
+
+	for i, loopInfo := range loops {
+		log.Printf("[INFINITE_LOOP_DETECTOR] Evaluating loop %d at line %d: condition='%s', isDeterministic=%v",
+			i, loopInfo.Line, loopInfo.ConditionText, loopInfo.IsDeterministic)
+
 		if cfg.HasDoomLoopPattern(loopInfo) {
+			log.Printf("[INFINITE_LOOP_DETECTOR] ✓ Loop at line %d MATCHED Doom Loop pattern", loopInfo.Line)
 			finding := d.createDoomLoopFinding(filePath, loopInfo, sourceLines)
 			findings = append(findings, finding)
+		} else {
+			log.Printf("[INFINITE_LOOP_DETECTOR] ✗ Loop at line %d does NOT match Doom Loop pattern", loopInfo.Line)
 		}
 	}
 

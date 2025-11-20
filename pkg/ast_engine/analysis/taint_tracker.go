@@ -25,14 +25,39 @@ type TaintEvent struct {
 	Evidence    *ast.Node
 }
 
+// SinkCategory identifies the type of dangerous function sink
+type SinkCategory int
+
+const (
+	CodeExecutionSink SinkCategory = iota // eval, exec, os.system, subprocess.run
+	LoggingSink                             // print, logger.info, logger.debug
+	DataAccessSink                          // read, query
+)
+
+// String returns the string representation of a sink category
+func (sc SinkCategory) String() string {
+	switch sc {
+	case CodeExecutionSink:
+		return "CodeExecution"
+	case LoggingSink:
+		return "Logging"
+	case DataAccessSink:
+		return "DataAccess"
+	default:
+		return "Unknown"
+	}
+}
+
 // TaintTracker tracks variable taintedness through data flow
 type TaintTracker struct {
-	resolver    *ReferenceResolver
-	taintMap    map[string]TaintStatus
-	taintEvents map[string][]*TaintEvent
-	sources     []string // Known taint sources
-	sanitizers  []string // Known sanitizers
-	mu          sync.RWMutex
+	resolver               *ReferenceResolver
+	taintMap               map[string]TaintStatus
+	taintEvents            map[string][]*TaintEvent
+	sources                []string // Known taint sources
+	sanitizers             []string // Known sanitizers
+	codeExecutionSinks     []string // RCE/Command Injection sinks
+	loggingSinks           []string // Sensitive data exposure sinks
+	mu                     sync.RWMutex
 }
 
 // NewTaintTracker creates a new taint tracker
@@ -65,6 +90,22 @@ func NewTaintTracker(resolver *ReferenceResolver) *TaintTracker {
 		sanitizers: []string{
 			"escape", "sanitize", "validate", "strip", "encode",
 			"urlencode", "htmlencode", "quote", "format",
+		},
+		codeExecutionSinks: []string{
+			// Direct code execution
+			"eval", "exec", "system", "subprocess",
+			// Python-specific
+			"os.system", "subprocess.run", "subprocess.call", "subprocess.Popen",
+			// JavaScript-specific
+			"eval", "Function", "setTimeout", "setInterval",
+			// Template engines
+			"Jinja2.from_string", "render_template_string",
+		},
+		loggingSinks: []string{
+			// Python logging
+			"print", "log", "logger.info", "logger.debug", "logger.warning", "logger.error",
+			// JavaScript/Node logging
+			"console.log", "console.error", "console.debug",
 		},
 	}
 }
@@ -314,4 +355,54 @@ func (tt *TaintTracker) AddSanitizer(sanitizer string) {
 	defer tt.mu.Unlock()
 
 	tt.sanitizers = append(tt.sanitizers, sanitizer)
+}
+
+// GetSinkCategory identifies which category a sink function belongs to
+// Returns the category and true if found, or Unknown category and false if not found
+func (tt *TaintTracker) GetSinkCategory(funcName string) (SinkCategory, bool) {
+	tt.mu.RLock()
+	defer tt.mu.RUnlock()
+
+	// Check code execution sinks first (highest severity)
+	for _, sink := range tt.codeExecutionSinks {
+		if contains(funcName, sink) {
+			return CodeExecutionSink, true
+		}
+	}
+
+	// Check logging sinks (medium severity)
+	for _, sink := range tt.loggingSinks {
+		if contains(funcName, sink) {
+			return LoggingSink, true
+		}
+	}
+
+	// Not a known sink
+	return DataAccessSink, false
+}
+
+// IsCodeExecutionSink checks if a function is a code execution sink
+func (tt *TaintTracker) IsCodeExecutionSink(funcName string) bool {
+	tt.mu.RLock()
+	defer tt.mu.RUnlock()
+
+	for _, sink := range tt.codeExecutionSinks {
+		if contains(funcName, sink) {
+			return true
+		}
+	}
+	return false
+}
+
+// IsLoggingSink checks if a function is a logging sink
+func (tt *TaintTracker) IsLoggingSink(funcName string) bool {
+	tt.mu.RLock()
+	defer tt.mu.RUnlock()
+
+	for _, sink := range tt.loggingSinks {
+		if contains(funcName, sink) {
+			return true
+		}
+	}
+	return false
 }

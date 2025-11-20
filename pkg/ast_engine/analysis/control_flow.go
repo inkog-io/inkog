@@ -425,6 +425,14 @@ func (cfg *ControlFlowGraph) ExtractLoops() []*LoopInfo {
 
 	result := make([]*LoopInfo, len(cfg.loops))
 	copy(result, cfg.loops)
+
+	// DEBUG: Log all extracted loops
+	log.Printf("[CFG_DEBUG] ExtractLoops found %d total loops", len(cfg.loops))
+	for i, loop := range cfg.loops {
+		log.Printf("[CFG_DEBUG]   Loop %d: Line %d, IsDeterministic=%v, Condition: %s",
+			i, loop.Line, loop.IsDeterministic, loop.ConditionText)
+	}
+
 	return result
 }
 
