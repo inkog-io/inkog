@@ -97,7 +97,6 @@ func (cfg *ControlFlowGraph) ResolveFunctionDefinition(callNode *ast.Node) *Scop
 
 	// Check if this is a self.method() or this.method() call (class method)
 	if strings.HasPrefix(funcName, "self.") || strings.HasPrefix(funcName, "this.") {
-		log.Printf("[TAINT_DEBUG] Resolving method call: %s", funcName)
 
 		// Extract method name
 		var methodName string
@@ -112,8 +111,6 @@ func (cfg *ControlFlowGraph) ResolveFunctionDefinition(callNode *ast.Node) *Scop
 		if enclosingClass != nil {
 			// Look for the method in the class body
 			if methodDef := cfg.findMethodInClass(enclosingClass, methodName); methodDef != nil {
-				className, _ := enclosingClass.GetProperty("name")
-				log.Printf("[TAINT_DEBUG] Resolved 'self.%s': Found in class '%v'", methodName, className)
 				return methodDef
 			}
 		}
@@ -122,12 +119,10 @@ func (cfg *ControlFlowGraph) ResolveFunctionDefinition(callNode *ast.Node) *Scop
 		// This handles unit tests and cases where full AST isn't available
 		if cfg.symbolTable.FileScope != nil && cfg.symbolTable.FileScope.Functions != nil {
 			if fn, exists := cfg.symbolTable.FileScope.Functions[methodName]; exists {
-				log.Printf("[TAINT_DEBUG] Resolved 'self.%s': Found in file scope (fallback)", methodName)
 				return fn
 			}
 		}
 
-		log.Printf("[TAINT_DEBUG] Failed to resolve 'self.%s'", methodName)
 		return nil
 	}
 
@@ -143,12 +138,10 @@ func (cfg *ControlFlowGraph) ResolveFunctionDefinition(callNode *ast.Node) *Scop
 	// Start with file scope and traverse scope chain
 	if cfg.symbolTable.FileScope != nil && cfg.symbolTable.FileScope.Functions != nil {
 		if fn, exists := cfg.symbolTable.FileScope.Functions[funcName]; exists {
-			log.Printf("[TAINT_DEBUG] Resolved function '%s' from file scope", funcName)
 			return fn
 		}
 	}
 
-	log.Printf("[TAINT_DEBUG] Failed to resolve function '%s'", funcName)
 	return nil
 }
 
@@ -211,18 +204,11 @@ func (cfg *ControlFlowGraph) findMethodInClass(classNode *ast.Node, methodName s
 		return nil
 	}
 
-	// Get class name for logging
-	var className string
-	if name, ok := classNode.GetProperty("name"); ok && name != nil {
-		className = name.(string)
-	}
-
 	// Search through class body for function definitions
 	for _, child := range classNode.GetChildren() {
 		if child.Type == ast.NodeTypeFunctionDef {
 			if funcName, ok := child.GetProperty("name"); ok && funcName != nil {
 				if funcName.(string) == methodName {
-					log.Printf("[TAINT_DEBUG] Found method '%s' in class '%s'", methodName, className)
 					return &ScopeFunction{
 						Name:      methodName,
 						DefinedAt: child,
@@ -242,14 +228,12 @@ func (cfg *ControlFlowGraph) AnalyzeFunctionReturnTaint(funcDef *ScopeFunction, 
 		return false
 	}
 
-	log.Printf("[TAINT_DEBUG] Analyzing function return taint: %s", funcDef.Name)
 
 	// Prevent infinite recursion
 	if visitedFuncs == nil {
 		visitedFuncs = make(map[string]bool)
 	}
 	if visitedFuncs[funcDef.Name] {
-		log.Printf("[TAINT_DEBUG] Function '%s' already visited (cyclic), assuming not tainted", funcDef.Name)
 		return false // Assume not tainted for cyclic functions
 	}
 	visitedFuncs[funcDef.Name] = true
@@ -259,22 +243,17 @@ func (cfg *ControlFlowGraph) AnalyzeFunctionReturnTaint(funcDef *ScopeFunction, 
 
 	// If no returns found, assume function returns nil/void (not tainted)
 	if len(returnNodes) == 0 {
-		log.Printf("[TAINT_DEBUG] Function '%s' has no return statements, assuming CLEAN", funcDef.Name)
 		return false
 	}
 
-	log.Printf("[TAINT_DEBUG] Function '%s' has %d return statement(s)", funcDef.Name, len(returnNodes))
 
 	// Check each return statement for taint
-	for i, retNode := range returnNodes {
-		log.Printf("[TAINT_DEBUG] Checking return statement %d of %d in function '%s'", i+1, len(returnNodes), funcDef.Name)
+	for _, retNode := range returnNodes {
 		if cfg.isReturnValueTainted(retNode, visitedFuncs) {
-			log.Printf("[TAINT_DEBUG] Function '%s' returns TAINTED data", funcDef.Name)
 			return true // Found a tainted return path
 		}
 	}
 
-	log.Printf("[TAINT_DEBUG] Function '%s' all return statements are CLEAN", funcDef.Name)
 	return false // All return paths are clean
 }
 
@@ -338,17 +317,14 @@ func (cfg *ControlFlowGraph) isReturnValueTainted(retNode *ast.Node, visitedFunc
 			// Check if it's a non-deterministic function
 			for _, keyword := range nonDetKeywords {
 				if contains(fname, keyword) {
-					log.Printf("[TAINT_DEBUG] Return value is TAINTED: detected LLM/external call '%s'", fname)
 					return true
 				}
 			}
 
 			// Try to resolve and recursively analyze the called function
 			if def := cfg.ResolveFunctionDefinition(returnExpr); def != nil {
-				log.Printf("[TAINT_DEBUG] Recursively analyzing return value from function call: %s", fname)
 				isTainted := cfg.AnalyzeFunctionReturnTaint(def, visitedFuncs)
 				if isTainted {
-					log.Printf("[TAINT_DEBUG] Return value is TAINTED: called function '%s' returns tainted data", fname)
 				}
 				return isTainted
 			}
@@ -361,10 +337,8 @@ func (cfg *ControlFlowGraph) isReturnValueTainted(retNode *ast.Node, visitedFunc
 			vname := varName.(string)
 			// Check if variable is tainted via taint tracker
 			if cfg.taint != nil && cfg.taint.IsVariableTainted(vname) {
-				log.Printf("[TAINT_DEBUG] Return value is TAINTED: variable '%s' is marked as tainted", vname)
 				return true
 			}
-			log.Printf("[TAINT_DEBUG] Return value is CLEAN: variable '%s' has no taint sources", vname)
 		}
 	}
 
@@ -372,12 +346,10 @@ func (cfg *ControlFlowGraph) isReturnValueTainted(retNode *ast.Node, visitedFunc
 	returnText := returnExpr.GetText()
 	for _, keyword := range nonDetKeywords {
 		if contains(returnText, keyword) {
-			log.Printf("[TAINT_DEBUG] Return value is TAINTED: detected keyword '%s' in return expression", keyword)
 			return true // Return is tainted
 		}
 	}
 
-	log.Printf("[TAINT_DEBUG] Return value is CLEAN: no taint sources detected")
 	return false // Return appears to be clean
 }
 
@@ -426,13 +398,6 @@ func (cfg *ControlFlowGraph) ExtractLoops() []*LoopInfo {
 	result := make([]*LoopInfo, len(cfg.loops))
 	copy(result, cfg.loops)
 
-	// DEBUG: Log all extracted loops
-	log.Printf("[CFG_DEBUG] ExtractLoops found %d total loops", len(cfg.loops))
-	for i, loop := range cfg.loops {
-		log.Printf("[CFG_DEBUG]   Loop %d: Line %d, IsDeterministic=%v, Condition: %s",
-			i, loop.Line, loop.IsDeterministic, loop.ConditionText)
-	}
-
 	return result
 }
 
@@ -443,9 +408,15 @@ func (cfg *ControlFlowGraph) analyzeControlFlow(node *ast.Node) {
 	}
 
 	// Check if this is a loop
-	if node.Type == ast.NodeTypeLoop {
+	// Accept ALL valid loop types: NodeTypeLoop (generic), NodeTypeWhileStatement, NodeTypeForStatement
+	// This ensures loops inside methods/classes are properly detected and analyzed
+	if node.Type == ast.NodeTypeLoop ||
+		node.Type == ast.NodeTypeWhileStatement ||
+		node.Type == ast.NodeTypeForStatement {
 		loopInfo := cfg.analyzeLoop(node)
-		cfg.loops = append(cfg.loops, loopInfo)
+		if loopInfo != nil {
+			cfg.loops = append(cfg.loops, loopInfo)
+		}
 	}
 
 	// Recurse through children
@@ -458,15 +429,12 @@ func (cfg *ControlFlowGraph) analyzeControlFlow(node *ast.Node) {
 // analyzeLoop analyzes a single loop node
 func (cfg *ControlFlowGraph) analyzeLoop(loopNode *ast.Node) *LoopInfo {
 	// CRITICAL: Verify we're processing an actual loop node, not a parent scope
-	if loopNode == nil || loopNode.Type != ast.NodeTypeLoop {
-		log.Printf("[SCOPE_INTEGRITY] WARNING: analyzeLoop called with non-loop node! Type=%v, StartLine=%d",
-			loopNode.Type, loopNode.StartLine)
+	// Accept ALL valid loop types: NodeTypeLoop (generic), NodeTypeWhileStatement, NodeTypeForStatement
+	if loopNode == nil || (loopNode.Type != ast.NodeTypeLoop &&
+		loopNode.Type != ast.NodeTypeWhileStatement &&
+		loopNode.Type != ast.NodeTypeForStatement) {
 		return nil
 	}
-
-	// Log loop node identification for debugging scope inheritance issues
-	log.Printf("[LOOP_EXTRACTION] Processing loop node: Type=%v, StartLine=%d (1-indexed: %d), Text preview: %.50s",
-		loopNode.Type, loopNode.StartLine, loopNode.StartLine+1, loopNode.Text)
 
 	loopInfo := &LoopInfo{
 		Node:           loopNode,
@@ -519,7 +487,6 @@ func (cfg *ControlFlowGraph) containsLLMKeywords(funcDef *ScopeFunction) bool {
 
 	for _, keyword := range llmKeywords {
 		if contains(bodyText, keyword) {
-			log.Printf("[TAINT_DEBUG] Heuristic detected LLM keyword '%s' in function '%s' body", keyword, funcDef.Name)
 			return true
 		}
 	}
@@ -560,13 +527,11 @@ func (cfg *ControlFlowGraph) isConditionDeterministic(loopInfo *LoopInfo) bool {
 		"invoke", "stream", "batch",
 	}
 
-	log.Printf("[TAINT_DEBUG] Checking loop condition determinism: %s", loopInfo.ConditionText)
 
 	// STRATEGY 1: Direct keyword matching
 	conditionText := loopInfo.ConditionText
 	for _, keyword := range nonDetKeywords {
 		if contains(conditionText, keyword) {
-			log.Printf("[TAINT_DEBUG] Condition is NON-DETERMINISTIC: detected keyword '%s' in condition text", keyword)
 			return false
 		}
 	}
@@ -575,29 +540,22 @@ func (cfg *ControlFlowGraph) isConditionDeterministic(loopInfo *LoopInfo) bool {
 	// If found, analyze if they return tainted (non-deterministic) data
 	callNode := cfg.HasFunctionCallInCondition(loopInfo)
 	if callNode != nil {
-		log.Printf("[TAINT_DEBUG] Found function call in loop condition")
 		// Try to resolve function definition
 		funcDef := cfg.ResolveFunctionDefinition(callNode)
 		if funcDef != nil {
-			log.Printf("[TAINT_DEBUG] Resolved function '%s' from symbol table", funcDef.Name)
 			// Analyze if the function returns tainted data
 			if cfg.AnalyzeFunctionReturnTaint(funcDef, nil) {
-				log.Printf("[TAINT_DEBUG] Condition is NON-DETERMINISTIC: function '%s' returns tainted data", funcDef.Name)
 				return false // Function returns tainted data
 			}
-			log.Printf("[TAINT_DEBUG] Function '%s' returns clean data, checking heuristic fallback", funcDef.Name)
 
 			// STRATEGY 4: Heuristic body text check (fallback when formal analysis fails)
 			if cfg.containsLLMKeywords(funcDef) {
-				log.Printf("[TAINT_DEBUG] Condition is NON-DETERMINISTIC: function '%s' body contains LLM keywords (heuristic)", funcDef.Name)
 				return false // Function body contains LLM keywords, likely non-deterministic
 			}
 
-			log.Printf("[TAINT_DEBUG] Condition is DETERMINISTIC: function '%s' returns clean data and no LLM keywords", funcDef.Name)
 			return true // Function returns clean data and no LLM keywords found
 		}
 
-		log.Printf("[TAINT_DEBUG] Function not found in symbol table, checking whitelist")
 
 		// Function not found in symbol table - check whitelist
 		// STRATEGY 3: Deterministic Built-in Whitelist
@@ -618,17 +576,14 @@ func (cfg *ControlFlowGraph) isConditionDeterministic(loopInfo *LoopInfo) bool {
 
 			// If function is in the whitelist, it's deterministic
 			if deterministicBuiltins[fname] {
-				log.Printf("[TAINT_DEBUG] Condition is DETERMINISTIC: '%s' is in built-in whitelist", fname)
 				return true
 			}
 
 			// If function is not found and not in whitelist, assume non-deterministic (safe default)
-			log.Printf("[TAINT_DEBUG] Condition is NON-DETERMINISTIC: '%s' not found in symbol table and not in whitelist", fname)
 			return false
 		}
 	}
 
-	log.Printf("[TAINT_DEBUG] Condition is DETERMINISTIC: no non-deterministic patterns detected")
 	return true
 }
 
@@ -875,7 +830,6 @@ func (cfg *ControlFlowGraph) HasDoomLoopPattern(loopInfo *LoopInfo) bool {
 	// where the LLM decides whether to continue, implying non-deterministic behavior
 	if contains(loopInfo.ConditionText, "_should_continue_") ||
 		contains(loopInfo.ConditionText, "should_continue") {
-		log.Printf("[DOOM_LOOP_DEBUG] Detected 'should_continue' signature in condition: %s", loopInfo.ConditionText)
 		return true
 	}
 

@@ -2,7 +2,6 @@ package detectors
 
 import (
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/inkog-io/inkog/action/pkg/ast_engine/analysis"
@@ -96,25 +95,18 @@ func (d *InfiniteLoopDetectorV3) DetectSemantic(filePath string, src []byte) ([]
 	loops := cfg.ExtractLoops()
 	sourceLines := getSourceLines(src)
 
-	log.Printf("[INFINITE_LOOP_DETECTOR] Checking %d loops in %s", len(loops), filePath)
-
-	for i, loopInfo := range loops {
-		log.Printf("[INFINITE_LOOP_DETECTOR] Evaluating loop %d at line %d: condition='%s', isDeterministic=%v",
-			i, loopInfo.Line, loopInfo.ConditionText, loopInfo.IsDeterministic)
-
+	for _, loopInfo := range loops {
 		isBoomLoop := false
 		isSignatureMatch := false
 
 		// Primary detection: CFG-based Doom Loop pattern
 		if cfg.HasDoomLoopPattern(loopInfo) {
-			log.Printf("[INFINITE_LOOP_DETECTOR] ✓ Loop at line %d MATCHED Doom Loop pattern", loopInfo.Line)
 			isBoomLoop = true
 		} else {
 			// Signature fallback: Check for "should_continue" pattern (catches Line 99 case)
 			// This handles loops like: while self._should_continue_solving():
 			// Signature matches get HIGHEST priority: Confidence 1.0, Severity CRITICAL
 			if strings.Contains(strings.ToLower(loopInfo.ConditionText), "should_continue") {
-				log.Printf("[INFINITE_LOOP_DETECTOR] ✓ Loop at line %d MATCHED signature pattern (should_continue) - ENFORCING CRITICAL PRIORITY", loopInfo.Line)
 				isBoomLoop = true
 				isSignatureMatch = true
 			}
@@ -126,11 +118,8 @@ func (d *InfiniteLoopDetectorV3) DetectSemantic(filePath string, src []byte) ([]
 			if isSignatureMatch {
 				finding.Confidence = 1.0
 				finding.Severity = "CRITICAL"
-				log.Printf("[INFINITE_LOOP_DETECTOR] ENFORCED: Line %d signature match now has Confidence=1.0, Severity=CRITICAL", loopInfo.Line)
 			}
 			findings = append(findings, finding)
-		} else {
-			log.Printf("[INFINITE_LOOP_DETECTOR] ✗ Loop at line %d does NOT match Doom Loop pattern", loopInfo.Line)
 		}
 	}
 
@@ -143,15 +132,6 @@ func (d *InfiniteLoopDetectorV3) createDoomLoopFinding(
 	loopInfo *analysis.LoopInfo,
 	sourceLines []string,
 ) patterns.Finding {
-	// ASSERTION: Verify loop line is reasonable (not a function start or very early in file)
-	// This catches scope inheritance errors where function start line bleeds into loop detection
-	// Loops are unlikely to be in first 20 lines, and function definitions are typically before loops
-	if loopInfo.Line < 20 {
-		log.Printf("[SCOPE_INTEGRITY_CHECK] WARNING: Loop line is suspiciously early (line %d). "+
-			"This may indicate scope inheritance error where function start line is being used. "+
-			"Code snippet: %.50s", loopInfo.Line, loopInfo.Node.Text)
-	}
-
 	// Get loop code snippet
 	codeSnippet := ""
 	if loopInfo.Line-1 >= 0 && loopInfo.Line-1 < len(sourceLines) {
@@ -186,10 +166,6 @@ func (d *InfiniteLoopDetectorV3) createDoomLoopFinding(
 		OWASP:      d.pattern.OWASP,
 		FinancialRisk: financialRisk,
 	}
-
-	// Verify final finding line is reasonable
-	log.Printf("[FINDING_VALIDATION] Created infinite loop finding at line %d for file %s, "+
-		"code snippet: %.40s", finding.Line, filePath, finding.Code)
 
 	return finding
 }

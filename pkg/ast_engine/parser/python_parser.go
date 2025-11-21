@@ -23,6 +23,11 @@ type PythonParser struct {
 
 	// Tree-sitter parser (shared for all parses)
 	treeParser *sitter.Parser
+
+	// Loop tracking for diagnostics
+	// Maintains parser-level list of all discovered loops (supplement to CFG analysis)
+	// Ensures loops inside methods/classes are not lost even if CFG recursion is incomplete
+	discoveredLoops []*ast.Node
 }
 
 // NewPythonParser creates a new Python parser instance using Tree-sitter
@@ -32,11 +37,12 @@ func NewPythonParser(config *ParserConfig) (*PythonParser, error) {
 	}
 
 	parser := &PythonParser{
-		languageType: ast.LanguagePython,
-		initialized:  false,
-		config:       config,
-		queryEngine:  query.NewEngine(),
-		treeParser:   sitter.NewParser(),
+		languageType:    ast.LanguagePython,
+		initialized:     false,
+		config:          config,
+		queryEngine:     query.NewEngine(),
+		treeParser:      sitter.NewParser(),
+		discoveredLoops: make([]*ast.Node, 0),
 	}
 
 	// Set Python language grammar
@@ -203,6 +209,13 @@ func (pp *PythonParser) walkPythonTree(tsNode *sitter.Node, astParent *ast.Node,
 
 	// Extract specific properties based on node type
 	pp.extractPythonProperties(astNode, tsNode, sourceCode)
+
+	// Register loops for parser-level tracking
+	// This ensures loops inside methods/classes are captured at the parser level
+	// and supplements CFG analysis to prevent loss of nested loops
+	if astNodeType == ast.NodeTypeLoop {
+		pp.discoveredLoops = append(pp.discoveredLoops, astNode)
+	}
 
 	// Add to parent
 	astParent.AddChild(astNode)

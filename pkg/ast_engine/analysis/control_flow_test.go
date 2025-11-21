@@ -383,3 +383,68 @@ func TestIsConditionDeterministic_Integration_SafeHelperFunction(t *testing.T) {
 		t.Error("Expected loop condition to be deterministic (calls safe helper), got non-deterministic")
 	}
 }
+
+// TestDeeplyNestedLoopDetection tests detection of loops nested inside methods/classes
+// This is the critical test for the Line 104 issue where while loops inside methods
+// were being missed by the CFG analysis
+func TestDeeplyNestedLoopDetection(t *testing.T) {
+	// Create a structure that mirrors agent.py:
+	// class SolverAgent:
+	//     def solve(self):
+	//         while self._should_continue_solving():
+	//             ... (loop body)
+
+	// Create the while loop node (NodeTypeLoop)
+	whileLoop := ast.NewNode("while_loop_1", ast.NodeTypeLoop, ast.LanguagePython)
+	whileLoop.StartLine = 104 // Line 104 where the while statement is
+	whileLoop.SetProperty("condition", "self._should_continue_solving()")
+
+	// Create a loop body (could be empty or contain statements)
+	loopBody := ast.NewNode("loop_body_1", ast.NodeTypeBlock, ast.LanguagePython)
+	whileLoop.Children = append(whileLoop.Children, loopBody)
+
+	// Create the method definition containing the loop
+	method := ast.NewNode("method_solve", ast.NodeTypeFunctionDef, ast.LanguagePython)
+	method.StartLine = 95
+	method.SetProperty("name", "solve")
+	method.Children = append(method.Children, whileLoop)
+
+	// Create the class definition containing the method
+	class := ast.NewNode("class_agent", ast.NodeTypeClass, ast.LanguagePython)
+	class.StartLine = 90
+	class.SetProperty("name", "SolverAgent")
+	class.Children = append(class.Children, method)
+
+	// Create root module and add class
+	root := ast.NewNode("root", ast.NodeTypeModule, ast.LanguagePython)
+	root.Children = append(root.Children, class)
+
+	// Create CFG and analyze
+	cfg := NewControlFlowGraph(root, nil)
+
+	// Extract loops
+	loops := cfg.ExtractLoops()
+
+	// Test: Should find exactly 1 loop
+	if len(loops) != 1 {
+		t.Fatalf("Expected to find 1 loop inside method, found %d", len(loops))
+	}
+
+	// Test: Loop should be at correct line (104, not 90 or 95)
+	loopInfo := loops[0]
+	if loopInfo.Line != 104 && loopInfo.Line != 105 { // 105 because of 0-indexed to 1-indexed conversion
+		t.Errorf("Expected loop at Line 104/105, got Line %d", loopInfo.Line)
+	}
+
+	// Test: Loop should be of type NodeTypeLoop
+	if loopInfo.Node.Type != ast.NodeTypeLoop {
+		t.Errorf("Expected loop node type to be NodeTypeLoop, got %s", loopInfo.Node.Type)
+	}
+
+	// Test: Loop condition should be extracted correctly
+	if loopInfo.ConditionText != "self._should_continue_solving()" {
+		t.Errorf("Expected condition 'self._should_continue_solving()', got '%s'", loopInfo.ConditionText)
+	}
+
+	t.Log("✓ Deeply nested loop detection passed - loops inside methods are now properly detected")
+}
