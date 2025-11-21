@@ -457,12 +457,23 @@ func (cfg *ControlFlowGraph) analyzeControlFlow(node *ast.Node) {
 
 // analyzeLoop analyzes a single loop node
 func (cfg *ControlFlowGraph) analyzeLoop(loopNode *ast.Node) *LoopInfo {
+	// CRITICAL: Verify we're processing an actual loop node, not a parent scope
+	if loopNode == nil || loopNode.Type != ast.NodeTypeLoop {
+		log.Printf("[SCOPE_INTEGRITY] WARNING: analyzeLoop called with non-loop node! Type=%v, StartLine=%d",
+			loopNode.Type, loopNode.StartLine)
+		return nil
+	}
+
+	// Log loop node identification for debugging scope inheritance issues
+	log.Printf("[LOOP_EXTRACTION] Processing loop node: Type=%v, StartLine=%d (1-indexed: %d), Text preview: %.50s",
+		loopNode.Type, loopNode.StartLine, loopNode.StartLine+1, loopNode.Text)
+
 	loopInfo := &LoopInfo{
 		Node:           loopNode,
 		ExitConditions: make([]*ExitCondition, 0),
 		LLMCallNodes:   make([]*ast.Node, 0),
 		Body:           loopNode.GetChildren(),
-		Line:           loopNode.StartLine + 1, // Convert from 0-indexed AST to 1-indexed display format
+		Line:           loopNode.StartLine + 1, // Convert from 0-indexed AST to 1-indexed display format (LOOP'S OWN LINE, NOT PARENT)
 	}
 
 	// Extract condition text if available
@@ -1036,10 +1047,23 @@ func (cfg *ControlFlowGraph) conditionHasLLMCall(conditionText string) bool {
 }
 
 // getConditionText extracts condition text from a loop node
+// Prefers explicit "condition" property (extracted by parser from loop statement)
+// Falls back to node.GetText() only if property not found (with logging)
 func getConditionText(node *ast.Node) string {
+	if node == nil {
+		return ""
+	}
+
 	if condText, ok := node.GetProperty("condition"); ok && condText != nil {
+		// Explicit condition property was set by parser - best case (from Phase 1 fix)
 		return condText.(string)
 	}
+
+	// Fallback: Use node's text if no explicit condition property
+	// This should only happen if the parser didn't set the condition property
+	// (e.g., for older/edge-case loop patterns not covered by extractPythonProperties)
+	log.Printf("[CONDITION_EXTRACTION] Using fallback GetText() for loop at line %d - property not found",
+		node.StartLine+1)
 	return node.GetText()
 }
 

@@ -143,6 +143,15 @@ func (d *InfiniteLoopDetectorV3) createDoomLoopFinding(
 	loopInfo *analysis.LoopInfo,
 	sourceLines []string,
 ) patterns.Finding {
+	// ASSERTION: Verify loop line is reasonable (not a function start or very early in file)
+	// This catches scope inheritance errors where function start line bleeds into loop detection
+	// Loops are unlikely to be in first 20 lines, and function definitions are typically before loops
+	if loopInfo.Line < 20 {
+		log.Printf("[SCOPE_INTEGRITY_CHECK] WARNING: Loop line is suspiciously early (line %d). "+
+			"This may indicate scope inheritance error where function start line is being used. "+
+			"Code snippet: %.50s", loopInfo.Line, loopInfo.Node.Text)
+	}
+
 	// Get loop code snippet
 	codeSnippet := ""
 	if loopInfo.Line-1 >= 0 && loopInfo.Line-1 < len(sourceLines) {
@@ -161,12 +170,12 @@ func (d *InfiniteLoopDetectorV3) createDoomLoopFinding(
 		financialRisk = "CRITICAL"
 	}
 
-	return patterns.Finding{
+	finding := patterns.Finding{
 		ID:         fmt.Sprintf("doom_loop_%d", loopInfo.Line),
 		PatternID:  d.GetPatternID(),
 		Pattern:    d.pattern.Name,
 		File:       filePath,
-		Line:       loopInfo.Line,
+		Line:       loopInfo.Line,  // EXPLICITLY using loopInfo.Line (loop's own line, not parent)
 		Column:     0,
 		Message:    message,
 		Code:       codeSnippet,
@@ -177,6 +186,12 @@ func (d *InfiniteLoopDetectorV3) createDoomLoopFinding(
 		OWASP:      d.pattern.OWASP,
 		FinancialRisk: financialRisk,
 	}
+
+	// Verify final finding line is reasonable
+	log.Printf("[FINDING_VALIDATION] Created infinite loop finding at line %d for file %s, "+
+		"code snippet: %.40s", finding.Line, filePath, finding.Code)
+
+	return finding
 }
 
 // isSupportedLanguage checks if file type is supported

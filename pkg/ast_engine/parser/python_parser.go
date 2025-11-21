@@ -277,6 +277,30 @@ func (pp *PythonParser) extractPythonProperties(astNode *ast.Node, tsNode *sitte
 
 	case ast.NodeTypeIdentifier:
 		astNode.SetProperty("name", tsNode.Content([]byte(sourceCode)))
+
+	case ast.NodeTypeLoop:
+		// Extract loop condition from while/for statement
+		// For while loops: while condition: body -> condition is first child
+		// For for loops: for target in iterable: body -> condition is "iterable"
+		if tsNode.ChildCount() > 0 {
+			// For while loops, the condition is typically the second child after 'while' keyword
+			// For for loops, we need to find the iterable part
+			nodeType := tsNode.Type()
+			if nodeType == "while_statement" && tsNode.ChildCount() >= 2 {
+				// while_statement structure: 'while' test ':' block [else_block]
+				condNode := tsNode.Child(1)
+				if condNode != nil && condNode.Type() != ":" {
+					astNode.SetProperty("condition", condNode.Content([]byte(sourceCode)))
+				}
+			} else if nodeType == "for_statement" && tsNode.ChildCount() >= 4 {
+				// for_statement structure: 'for' target 'in' iterable ':' block [else_block]
+				// iterable is at child index 3
+				iterNode := tsNode.Child(3)
+				if iterNode != nil && iterNode.Type() != ":" {
+					astNode.SetProperty("condition", iterNode.Content([]byte(sourceCode)))
+				}
+			}
+		}
 	}
 }
 
