@@ -66,5 +66,3 @@ runs:
     - ${{ inputs.framework }}
     - '--json-report'
     - ${{ inputs.json-report }}
-    - '--github-output'
-    - ${{ github.output }}
