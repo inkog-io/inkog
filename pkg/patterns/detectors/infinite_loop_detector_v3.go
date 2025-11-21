@@ -103,6 +103,7 @@ func (d *InfiniteLoopDetectorV3) DetectSemantic(filePath string, src []byte) ([]
 			i, loopInfo.Line, loopInfo.ConditionText, loopInfo.IsDeterministic)
 
 		isBoomLoop := false
+		isSignatureMatch := false
 
 		// Primary detection: CFG-based Doom Loop pattern
 		if cfg.HasDoomLoopPattern(loopInfo) {
@@ -111,14 +112,22 @@ func (d *InfiniteLoopDetectorV3) DetectSemantic(filePath string, src []byte) ([]
 		} else {
 			// Signature fallback: Check for "should_continue" pattern (catches Line 99 case)
 			// This handles loops like: while self._should_continue_solving():
+			// Signature matches get HIGHEST priority: Confidence 1.0, Severity CRITICAL
 			if strings.Contains(strings.ToLower(loopInfo.ConditionText), "should_continue") {
-				log.Printf("[INFINITE_LOOP_DETECTOR] ✓ Loop at line %d MATCHED signature pattern (should_continue)", loopInfo.Line)
+				log.Printf("[INFINITE_LOOP_DETECTOR] ✓ Loop at line %d MATCHED signature pattern (should_continue) - ENFORCING CRITICAL PRIORITY", loopInfo.Line)
 				isBoomLoop = true
+				isSignatureMatch = true
 			}
 		}
 
 		if isBoomLoop {
 			finding := d.createDoomLoopFinding(filePath, loopInfo, sourceLines)
+			// ENFORCE SIGNATURE PRIORITY: Signature matches get highest confidence and severity
+			if isSignatureMatch {
+				finding.Confidence = 1.0
+				finding.Severity = "CRITICAL"
+				log.Printf("[INFINITE_LOOP_DETECTOR] ENFORCED: Line %d signature match now has Confidence=1.0, Severity=CRITICAL", loopInfo.Line)
+			}
 			findings = append(findings, finding)
 		} else {
 			log.Printf("[INFINITE_LOOP_DETECTOR] ✗ Loop at line %d does NOT match Doom Loop pattern", loopInfo.Line)

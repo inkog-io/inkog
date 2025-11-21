@@ -462,7 +462,7 @@ func (cfg *ControlFlowGraph) analyzeLoop(loopNode *ast.Node) *LoopInfo {
 		ExitConditions: make([]*ExitCondition, 0),
 		LLMCallNodes:   make([]*ast.Node, 0),
 		Body:           loopNode.GetChildren(),
-		Line:           loopNode.StartLine,
+		Line:           loopNode.StartLine + 1, // Convert from 0-indexed AST to 1-indexed display format
 	}
 
 	// Extract condition text if available
