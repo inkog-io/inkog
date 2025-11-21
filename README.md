@@ -1,6 +1,6 @@
 # Inkog: The Compliance Engine for Agentic AI
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![Go Report Card](https://goreportcard.com/badge/github.com/inkog-io/inkog)](https://goreportcard.com/report/github.com/inkog-io/inkog)
 [![Docker Automated](https://img.shields.io/badge/Docker-Automated-blue?logo=docker)](https://github.com/inkog-io/inkog/pkgs/container/inkog)
 
@@ -267,7 +267,7 @@ We welcome security researchers and open-source contributors. See [CONTRIBUTING.
 
 ## License
 
-MIT - See [LICENSE](LICENSE) for full text.
+GNU Affero General Public License v3.0 - See [LICENSE](LICENSE) for full text.
 
 ---
 
