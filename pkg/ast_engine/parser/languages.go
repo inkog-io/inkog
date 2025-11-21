@@ -10,55 +10,57 @@ import (
 	"github.com/smacker/go-tree-sitter/typescript/tsx"
 )
 
-// LanguageManager manages Tree-sitter language grammars with singleton pattern
-// Grammars are loaded ONCE at program startup, not re-loaded for every file
-type LanguageManager struct {
-	pythonLang     *sitter.Language
-	jsLang         *sitter.Language
-	tsLang         *sitter.Language
-	tsxLang        *sitter.Language
-	mu             sync.RWMutex
-}
+// Lazy-loaded singleton language grammars
+// Each language is loaded on-demand using sync.Once to avoid C library deadlocks
+// during program startup. This prevents the initialization hang that occurred when
+// all grammars were loaded at init() time.
 
-var langManager *LanguageManager
-var initOnce sync.Once
+var (
+	pythonLang   *sitter.Language
+	pythonOnce   sync.Once
 
-// init() ensures grammars are loaded exactly once when the package is imported
-func init() {
-	initOnce.Do(func() {
-		langManager = &LanguageManager{
-			pythonLang: python.GetLanguage(),
-			jsLang:     javascript.GetLanguage(),
-			tsLang:     typescript.GetLanguage(),
-			tsxLang:    tsx.GetLanguage(),
-		}
-	})
-}
+	jsLang       *sitter.Language
+	jsOnce       sync.Once
 
-// GetPythonLanguage returns the Python language grammar (singleton)
+	tsLang       *sitter.Language
+	tsOnce       sync.Once
+
+	tsxLang      *sitter.Language
+	tsxOnce      sync.Once
+)
+
+// GetPythonLanguage returns the Python language grammar (lazy singleton)
+// The grammar is loaded on first call, not during program initialization.
 func GetPythonLanguage() *sitter.Language {
-	langManager.mu.RLock()
-	defer langManager.mu.RUnlock()
-	return langManager.pythonLang
+	pythonOnce.Do(func() {
+		pythonLang = python.GetLanguage()
+	})
+	return pythonLang
 }
 
-// GetJavaScriptLanguage returns the JavaScript language grammar (singleton)
+// GetJavaScriptLanguage returns the JavaScript language grammar (lazy singleton)
+// The grammar is loaded on first call, not during program initialization.
 func GetJavaScriptLanguage() *sitter.Language {
-	langManager.mu.RLock()
-	defer langManager.mu.RUnlock()
-	return langManager.jsLang
+	jsOnce.Do(func() {
+		jsLang = javascript.GetLanguage()
+	})
+	return jsLang
 }
 
-// GetTypeScriptLanguage returns the TypeScript language grammar (singleton)
+// GetTypeScriptLanguage returns the TypeScript language grammar (lazy singleton)
+// The grammar is loaded on first call, not during program initialization.
 func GetTypeScriptLanguage() *sitter.Language {
-	langManager.mu.RLock()
-	defer langManager.mu.RUnlock()
-	return langManager.tsLang
+	tsOnce.Do(func() {
+		tsLang = typescript.GetLanguage()
+	})
+	return tsLang
 }
 
-// GetTSXLanguage returns the TypeScript JSX (.tsx) language grammar (singleton)
+// GetTSXLanguage returns the TypeScript JSX (.tsx) language grammar (lazy singleton)
+// The grammar is loaded on first call, not during program initialization.
 func GetTSXLanguage() *sitter.Language {
-	langManager.mu.RLock()
-	defer langManager.mu.RUnlock()
-	return langManager.tsxLang
+	tsxOnce.Do(func() {
+		tsxLang = tsx.GetLanguage()
+	})
+	return tsxLang
 }
