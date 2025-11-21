@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/inkog-io/inkog/action/pkg/patterns"
+	"github.com/inkog-io/inkog/action/pkg/patterns/metadata"
 )
 
 // EnhancedInfiniteLoopDetector detects infinite loops with simplified confidence
@@ -87,6 +88,12 @@ func (d *EnhancedInfiniteLoopDetector) Detect(filePath string, src []byte) ([]pa
 func (d *EnhancedInfiniteLoopDetector) Name() string {
 	return "infinite_loops_enhanced"
 }
+
+// GetPatternID returns the canonical detector ID (implements Detector interface)
+func (d *EnhancedInfiniteLoopDetector) GetPatternID() string {
+	return metadata.ID_INFINITE_LOOP
+}
+
 
 func (d *EnhancedInfiniteLoopDetector) IsEnabled() bool {
 	patternConfig := d.config.GetPatternConfig("infinite_loops")

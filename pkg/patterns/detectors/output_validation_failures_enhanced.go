@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/inkog-io/inkog/action/pkg/patterns"
+	"github.com/inkog-io/inkog/action/pkg/patterns/metadata"
 )
 
 // EnhancedOutputValidationFailuresDetector detects improper output handling in LLM agent code
@@ -296,6 +297,12 @@ func (d *EnhancedOutputValidationFailuresDetector) isDocstringExample(line strin
 func (d *EnhancedOutputValidationFailuresDetector) Name() string {
 	return "output_validation_failures_enhanced"
 }
+
+// GetPatternID returns the canonical detector ID (implements Detector interface)
+func (d *EnhancedOutputValidationFailuresDetector) GetPatternID() string {
+	return metadata.ID_OUTPUT_VALIDATION
+}
+
 
 // IsEnabled checks if pattern is enabled
 func (d *EnhancedOutputValidationFailuresDetector) IsEnabled() bool {

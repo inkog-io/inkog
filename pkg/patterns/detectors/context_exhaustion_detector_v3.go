@@ -6,6 +6,7 @@ import (
 	"github.com/inkog-io/inkog/action/pkg/ast_engine/analysis"
 	"github.com/inkog-io/inkog/action/pkg/ast_engine/parser"
 	"github.com/inkog-io/inkog/action/pkg/patterns"
+	"github.com/inkog-io/inkog/action/pkg/patterns/metadata"
 )
 
 // ContextExhaustionDetectorV3 detects unbounded context/token growth in loops
@@ -17,12 +18,12 @@ type ContextExhaustionDetectorV3 struct {
 // NewContextExhaustionDetectorV3 creates a context exhaustion detector
 func NewContextExhaustionDetectorV3() *ContextExhaustionDetectorV3 {
 	pattern := patterns.Pattern{
-		ID:       "context_exhaustion_semantic",
+		ID: metadata.ID_CONTEXT_EXHAUSTION,
 		Name:     "Context Exhaustion (Semantic Analysis)",
 		Version:  "3.0",
 		Category: "resource_exhaustion",
-		Severity: "MEDIUM",
-		CVSS:     5.5,
+		Severity: "HIGH",
+		CVSS: 7.5,
 		CWEIDs:   []string{"CWE-770"},
 		OWASP:    "LLM10",
 		Description: "Unbounded growth of message history, conversation context, or data structures in loops can exhaust LLM token limits",
@@ -42,6 +43,21 @@ func NewContextExhaustionDetectorV3() *ContextExhaustionDetectorV3 {
 		pattern:    pattern,
 		confidence: 0.85,
 	}
+}
+
+// GetPatternID returns the canonical detector ID (implements Detector interface)
+func (d *ContextExhaustionDetectorV3) GetPatternID() string {
+	return metadata.ID_CONTEXT_EXHAUSTION
+}
+
+// GetPattern returns the pattern definition (implements Detector interface)
+func (d *ContextExhaustionDetectorV3) GetPattern() patterns.Pattern {
+	return d.pattern
+}
+
+// Detect performs the vulnerability detection and returns findings (implements Detector interface)
+func (d *ContextExhaustionDetectorV3) Detect(filePath string, source []byte) ([]patterns.Finding, error) {
+	return d.DetectSemantic(filePath, source)
 }
 
 // DetectSemantic analyzes code for context exhaustion patterns

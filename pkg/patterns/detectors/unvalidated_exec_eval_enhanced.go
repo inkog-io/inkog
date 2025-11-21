@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/inkog-io/inkog/action/pkg/patterns"
+	"github.com/inkog-io/inkog/action/pkg/patterns/metadata"
 )
 
 // EnhancedUnvalidatedExecEvalDetector detects unvalidated exec/eval with simplified confidence scoring
@@ -32,8 +33,23 @@ func NewEnhancedUnvalidatedExecEvalDetector(
 	}
 }
 
-// Detect performs unvalidated exec/eval detection with simplified confidence
+// GetPatternID returns the canonical detector ID (implements Detector interface)
+func (d *EnhancedUnvalidatedExecEvalDetector) GetPatternID() string {
+	return metadata.ID_UNVALIDATED_EXEC_EVAL
+}
+
+// GetPattern returns the pattern definition (implements Detector interface)
+func (d *EnhancedUnvalidatedExecEvalDetector) GetPattern() patterns.Pattern {
+	return d.baseDetector.GetPattern()
+}
+
+// Detect performs unvalidated exec/eval detection with simplified confidence (implements Detector interface)
 func (d *EnhancedUnvalidatedExecEvalDetector) Detect(filePath string, src []byte) ([]patterns.Finding, error) {
+	return d.DetectEnhanced(filePath, src)
+}
+
+// DetectEnhanced is the original enhanced detection logic
+func (d *EnhancedUnvalidatedExecEvalDetector) DetectEnhanced(filePath string, src []byte) ([]patterns.Finding, error) {
 	// Step 1: Check if pattern is enabled
 	patternConfig := d.config.GetPatternConfig("unvalidated_exec_eval")
 	if !patternConfig.Enabled {

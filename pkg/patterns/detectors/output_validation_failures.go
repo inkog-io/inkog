@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/inkog-io/inkog/action/pkg/patterns"
+	"github.com/inkog-io/inkog/action/pkg/patterns/metadata"
 )
 
 // OutputValidationFailuresDetector detects improper handling of LLM/untrusted output without validation or sanitization
@@ -516,6 +517,12 @@ func detectLanguage(filePath string) string {
 func (d *OutputValidationFailuresDetector) Name() string {
 	return "output_validation_failures"
 }
+
+// GetPatternID returns the canonical detector ID (implements Detector interface)
+func (d *OutputValidationFailuresDetector) GetPatternID() string {
+	return metadata.ID_OUTPUT_VALIDATION
+}
+
 
 // GetPattern returns the pattern metadata
 func (d *OutputValidationFailuresDetector) GetPattern() patterns.Pattern {

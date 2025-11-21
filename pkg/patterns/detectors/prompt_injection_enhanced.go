@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/inkog-io/inkog/action/pkg/patterns"
+	"github.com/inkog-io/inkog/action/pkg/patterns/metadata"
 )
 
 // EnhancedPromptInjectionDetector detects prompt injection with simplified confidence scoring
@@ -97,6 +98,12 @@ func (d *EnhancedPromptInjectionDetector) Detect(filePath string, src []byte) ([
 func (d *EnhancedPromptInjectionDetector) Name() string {
 	return "prompt_injection_enhanced"
 }
+
+// GetPatternID returns the canonical detector ID (implements Detector interface)
+func (d *EnhancedPromptInjectionDetector) GetPatternID() string {
+	return metadata.ID_PROMPT_INJECTION
+}
+
 
 // IsEnabled checks if pattern is enabled
 func (d *EnhancedPromptInjectionDetector) IsEnabled() bool {

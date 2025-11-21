@@ -24,6 +24,10 @@ const (
 	ID_MISSING_AUTH_CHECK         = "missing_authentication_check"
 	ID_PATH_TRAVERSAL             = "path_traversal"
 	ID_RACE_CONDITION             = "race_condition"
+	ID_TOKEN_BOMBING              = "token_bombing"
+	ID_RECURSIVE_TOOL_CALLING     = "recursive_tool_calling"
+	ID_MISSING_RATE_LIMITS        = "missing_rate_limits"
+	ID_RAG_OVER_FETCHING          = "rag_over_fetching"
 )
 
 // VulnerabilityMetadata represents canonical metadata for a vulnerability type
@@ -371,6 +375,46 @@ var registry = map[string]*VulnerabilityMetadata{
 		CWEIDs:          []string{"CWE-362"},
 		Remediation:     "Use atomic operations, proper locking, transactional consistency",
 		Category:        "Concurrency",
+	},
+	ID_TOKEN_BOMBING: {
+		ID:              ID_TOKEN_BOMBING,
+		Title:           "Token Bombing Attack",
+		Description:     "Excessive token consumption through crafted inputs causing resource exhaustion",
+		DefaultSeverity: "CRITICAL",
+		CVSS:            9.0,
+		CWEIDs:          []string{"CWE-770"},
+		Remediation:     "Implement token rate limiting, set maximum tokens per request, monitor token usage patterns",
+		Category:        "Resource Exhaustion",
+	},
+	ID_RECURSIVE_TOOL_CALLING: {
+		ID:              ID_RECURSIVE_TOOL_CALLING,
+		Title:           "Recursive Tool Calling",
+		Description:     "Tool recursively calls itself leading to exponential resource consumption or infinite loops",
+		DefaultSeverity: "HIGH",
+		CVSS:            7.5,
+		CWEIDs:          []string{"CWE-674"},
+		Remediation:     "Add recursion depth limits, implement memoization, use iterative approaches instead of recursion",
+		Category:        "Resource Exhaustion",
+	},
+	ID_MISSING_RATE_LIMITS: {
+		ID:              ID_MISSING_RATE_LIMITS,
+		Title:           "Missing Rate Limits",
+		Description:     "API endpoints lack rate limiting allowing abuse and denial of service attacks",
+		DefaultSeverity: "HIGH",
+		CVSS:            7.5,
+		CWEIDs:          []string{"CWE-400"},
+		Remediation:     "Implement rate limiting per user/IP, use token bucket algorithm, set request timeouts",
+		Category:        "Resource Exhaustion",
+	},
+	ID_RAG_OVER_FETCHING: {
+		ID:              ID_RAG_OVER_FETCHING,
+		Title:           "RAG Over-Fetching",
+		Description:     "Retrieval-Augmented Generation fetches excessive documents causing context bloat and resource waste",
+		DefaultSeverity: "MEDIUM",
+		CVSS:            5.0,
+		CWEIDs:          []string{"CWE-400"},
+		Remediation:     "Limit number of retrieved documents, implement pagination, add relevance scoring cutoffs",
+		Category:        "Resource Exhaustion",
 	},
 }
 

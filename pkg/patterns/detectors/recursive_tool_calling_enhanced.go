@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/inkog-io/inkog/action/pkg/patterns"
+	"github.com/inkog-io/inkog/action/pkg/patterns/metadata"
 )
 
 // EnhancedRecursiveToolCallingDetector detects recursive tool calling with simplified confidence scoring
@@ -97,6 +98,12 @@ func (d *EnhancedRecursiveToolCallingDetector) Detect(filePath string, src []byt
 func (d *EnhancedRecursiveToolCallingDetector) Name() string {
 	return "recursive_tool_calling_enhanced"
 }
+
+// GetPatternID returns the canonical detector ID (implements Detector interface)
+func (d *EnhancedRecursiveToolCallingDetector) GetPatternID() string {
+	return metadata.ID_RECURSIVE_TOOL_CALLING
+}
+
 
 // IsEnabled checks if pattern is enabled
 func (d *EnhancedRecursiveToolCallingDetector) IsEnabled() bool {

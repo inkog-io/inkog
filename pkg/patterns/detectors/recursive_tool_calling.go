@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/inkog-io/inkog/action/pkg/patterns"
+	"github.com/inkog-io/inkog/action/pkg/patterns/metadata"
 )
 
 // RecursiveToolCallingDetector detects recursive function calls and agent delegation loops
@@ -32,6 +33,11 @@ func NewRecursiveToolCallingDetector() patterns.Detector {
 
 func (d *RecursiveToolCallingDetector) Name() string {
 	return "recursive_tool_calling"
+}
+
+// GetPatternID returns the canonical detector ID (implements Detector interface)
+func (d *RecursiveToolCallingDetector) GetPatternID() string {
+	return metadata.ID_RECURSIVE_TOOL_CALLING
 }
 
 // Detect finds recursive tool calling vulnerabilities

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/inkog-io/inkog/action/pkg/patterns"
+	"github.com/inkog-io/inkog/action/pkg/patterns/metadata"
 )
 
 // PromptInjectionDetector detects unvalidated user input in LLM prompts
@@ -54,6 +55,12 @@ func NewPromptInjectionDetector() *PromptInjectionDetector {
 func (d *PromptInjectionDetector) Name() string {
 	return "prompt_injection"
 }
+
+// GetPatternID returns the canonical detector ID (implements Detector interface)
+func (d *PromptInjectionDetector) GetPatternID() string {
+	return metadata.ID_PROMPT_INJECTION
+}
+
 
 // GetPattern returns the pattern metadata
 func (d *PromptInjectionDetector) GetPattern() patterns.Pattern {

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/inkog-io/inkog/action/pkg/patterns"
+	"github.com/inkog-io/inkog/action/pkg/patterns/metadata"
 )
 
 // ContextWindowAccumulationDetector detects unbounded conversation history accumulation in AI agents
@@ -607,6 +608,12 @@ func (d *ContextWindowAccumulationDetector) createFinding(
 func (d *ContextWindowAccumulationDetector) Name() string {
 	return "context_window_accumulation"
 }
+
+// GetPatternID returns the canonical detector ID (implements Detector interface)
+func (d *ContextWindowAccumulationDetector) GetPatternID() string {
+	return metadata.ID_CONTEXT_EXHAUSTION
+}
+
 
 // GetPattern returns the pattern metadata
 func (d *ContextWindowAccumulationDetector) GetPattern() patterns.Pattern {

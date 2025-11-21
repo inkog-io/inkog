@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/inkog-io/inkog/action/pkg/patterns"
+	"github.com/inkog-io/inkog/action/pkg/patterns/metadata"
 )
 
 // EnhancedMissingHumanOversightDetector detects missing human oversight in AI agent actions
@@ -302,6 +303,12 @@ func (d *EnhancedMissingHumanOversightDetector) isDocstringExample(line string) 
 func (d *EnhancedMissingHumanOversightDetector) Name() string {
 	return "missing_human_oversight_enhanced"
 }
+
+// GetPatternID returns the canonical detector ID (implements Detector interface)
+func (d *EnhancedMissingHumanOversightDetector) GetPatternID() string {
+	return metadata.ID_TAINTED_EVAL
+}
+
 
 // IsEnabled checks if pattern is enabled
 func (d *EnhancedMissingHumanOversightDetector) IsEnabled() bool {

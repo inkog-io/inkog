@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/inkog-io/inkog/action/pkg/patterns"
+	"github.com/inkog-io/inkog/action/pkg/patterns/metadata"
 )
 
 // MissingRateLimitsDetector detects endpoints and loops without rate limiting
@@ -74,6 +75,12 @@ func NewMissingRateLimitsDetector() *MissingRateLimitsDetector {
 func (d *MissingRateLimitsDetector) Name() string {
 	return "missing_rate_limits"
 }
+
+// GetPatternID returns the canonical detector ID (implements Detector interface)
+func (d *MissingRateLimitsDetector) GetPatternID() string {
+	return metadata.ID_MISSING_RATE_LIMITS
+}
+
 
 // GetPattern returns the pattern metadata
 func (d *MissingRateLimitsDetector) GetPattern() patterns.Pattern {

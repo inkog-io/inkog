@@ -50,6 +50,10 @@ func (d *DebugDetector) Detect(filePath string, src []byte) ([]patterns.Finding,
 	return findings, nil
 }
 
+func (d *DebugDetector) GetPatternID() string {
+	return "debug_test"
+}
+
 func (d *DebugDetector) GetPattern() patterns.Pattern {
 	return d.pattern
 }

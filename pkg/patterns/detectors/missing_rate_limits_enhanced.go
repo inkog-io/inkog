@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/inkog-io/inkog/action/pkg/patterns"
+	"github.com/inkog-io/inkog/action/pkg/patterns/metadata"
 )
 
 // EnhancedMissingRateLimitsDetector detects missing rate limits with simplified confidence scoring
@@ -135,6 +136,12 @@ func (d *EnhancedMissingRateLimitsDetector) isDocstringExample(line string) bool
 func (d *EnhancedMissingRateLimitsDetector) Name() string {
 	return "missing_rate_limits_enhanced"
 }
+
+// GetPatternID returns the canonical detector ID (implements Detector interface)
+func (d *EnhancedMissingRateLimitsDetector) GetPatternID() string {
+	return metadata.ID_MISSING_RATE_LIMITS
+}
+
 
 // IsEnabled checks if pattern is enabled
 func (d *EnhancedMissingRateLimitsDetector) IsEnabled() bool {

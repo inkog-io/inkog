@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/inkog-io/inkog/action/pkg/patterns"
+	"github.com/inkog-io/inkog/action/pkg/patterns/metadata"
 )
 
 // EnhancedLoggingSensitiveDataDetector detects logging of sensitive data with confidence scoring
@@ -227,6 +228,12 @@ func (d *EnhancedLoggingSensitiveDataDetector) isDocstringExample(line string) b
 func (d *EnhancedLoggingSensitiveDataDetector) Name() string {
 	return "logging_sensitive_data_enhanced"
 }
+
+// GetPatternID returns the canonical detector ID (implements Detector interface)
+func (d *EnhancedLoggingSensitiveDataDetector) GetPatternID() string {
+	return metadata.ID_LOGGING_SENSITIVE_DATA
+}
+
 
 // IsEnabled checks if pattern is enabled
 func (d *EnhancedLoggingSensitiveDataDetector) IsEnabled() bool {

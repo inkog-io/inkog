@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/inkog-io/inkog/action/pkg/patterns"
+	"github.com/inkog-io/inkog/action/pkg/patterns/metadata"
 )
 
 // HardcodedCredentialsDetector detects hardcoded API keys, tokens, and passwords
@@ -89,6 +90,12 @@ func NewHardcodedCredentialsDetector() *HardcodedCredentialsDetector {
 func (d *HardcodedCredentialsDetector) Name() string {
 	return "hardcoded_credentials"
 }
+
+// GetPatternID returns the canonical detector ID (implements Detector interface)
+func (d *HardcodedCredentialsDetector) GetPatternID() string {
+	return metadata.ID_HARDCODED_CREDENTIALS
+}
+
 
 // GetPattern returns the pattern metadata
 func (d *HardcodedCredentialsDetector) GetPattern() patterns.Pattern {

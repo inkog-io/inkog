@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/inkog-io/inkog/action/pkg/patterns"
+	"github.com/inkog-io/inkog/action/pkg/patterns/metadata"
 )
 
 // EnhancedContextWindowAccumulationDetector detects context window accumulation with confidence scoring
@@ -188,6 +189,12 @@ func (d *EnhancedContextWindowAccumulationDetector) isDocstringExample(line stri
 func (d *EnhancedContextWindowAccumulationDetector) Name() string {
 	return "context_window_accumulation_enhanced"
 }
+
+// GetPatternID returns the canonical detector ID (implements Detector interface)
+func (d *EnhancedContextWindowAccumulationDetector) GetPatternID() string {
+	return metadata.ID_CONTEXT_EXHAUSTION
+}
+
 
 // IsEnabled checks if pattern is enabled
 func (d *EnhancedContextWindowAccumulationDetector) IsEnabled() bool {

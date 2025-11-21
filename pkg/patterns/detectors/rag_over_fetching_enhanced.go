@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/inkog-io/inkog/action/pkg/patterns"
+	"github.com/inkog-io/inkog/action/pkg/patterns/metadata"
 )
 
 // EnhancedRAGOverFetchingDetector detects RAG over-fetching with simplified confidence scoring
@@ -133,6 +134,12 @@ func (d *EnhancedRAGOverFetchingDetector) isStringLiteral(line string) bool {
 func (d *EnhancedRAGOverFetchingDetector) Name() string {
 	return "rag_over_fetching_enhanced"
 }
+
+// GetPatternID returns the canonical detector ID (implements Detector interface)
+func (d *EnhancedRAGOverFetchingDetector) GetPatternID() string {
+	return metadata.ID_RAG_OVER_FETCHING
+}
+
 
 // IsEnabled checks if pattern is enabled
 func (d *EnhancedRAGOverFetchingDetector) IsEnabled() bool {

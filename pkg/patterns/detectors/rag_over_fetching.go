@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/inkog-io/inkog/action/pkg/patterns"
+	"github.com/inkog-io/inkog/action/pkg/patterns/metadata"
 )
 
 // RAGOverFetchingDetector detects unrestricted vector store retrievals in RAG systems
@@ -64,6 +65,12 @@ func NewRAGOverFetchingDetector() *RAGOverFetchingDetector {
 func (d *RAGOverFetchingDetector) Name() string {
 	return "rag_over_fetching"
 }
+
+// GetPatternID returns the canonical detector ID (implements Detector interface)
+func (d *RAGOverFetchingDetector) GetPatternID() string {
+	return metadata.ID_RAG_OVER_FETCHING
+}
+
 
 // GetPattern returns the pattern metadata
 func (d *RAGOverFetchingDetector) GetPattern() patterns.Pattern {

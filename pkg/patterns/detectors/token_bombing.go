@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/inkog-io/inkog/action/pkg/patterns"
+	"github.com/inkog-io/inkog/action/pkg/patterns/metadata"
 )
 
 // TokenBombingDetector detects unbounded token consumption in LLM API calls
@@ -32,6 +33,11 @@ func NewTokenBombingDetector() patterns.Detector {
 
 func (d *TokenBombingDetector) Name() string {
 	return "token_bombing"
+}
+
+// GetPatternID returns the canonical detector ID (implements Detector interface)
+func (d *TokenBombingDetector) GetPatternID() string {
+	return metadata.ID_TOKEN_BOMBING
 }
 
 // Detect finds token bombing vulnerabilities in source code

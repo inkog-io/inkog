@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/inkog-io/inkog/action/pkg/patterns"
+	"github.com/inkog-io/inkog/action/pkg/patterns/metadata"
 )
 
 // EnhancedUnsafeEnvAccessDetector detects unsafe environment variable access with simplified confidence scoring
@@ -87,6 +88,12 @@ func (d *EnhancedUnsafeEnvAccessDetector) Detect(filePath string, src []byte) ([
 func (d *EnhancedUnsafeEnvAccessDetector) Name() string {
 	return "unsafe_env_access_enhanced"
 }
+
+// GetPatternID returns the canonical detector ID (implements Detector interface)
+func (d *EnhancedUnsafeEnvAccessDetector) GetPatternID() string {
+	return metadata.ID_UNSAFE_ENV_ACCESS
+}
+
 
 // IsEnabled checks if pattern is enabled
 func (d *EnhancedUnsafeEnvAccessDetector) IsEnabled() bool {

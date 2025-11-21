@@ -3,10 +3,12 @@ package detectors
 import (
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/inkog-io/inkog/action/pkg/ast_engine/analysis"
 	"github.com/inkog-io/inkog/action/pkg/ast_engine/parser"
 	"github.com/inkog-io/inkog/action/pkg/patterns"
+	"github.com/inkog-io/inkog/action/pkg/patterns/metadata"
 )
 
 // InfiniteLoopDetectorV3 detects Doom Loops using semantic analysis
@@ -19,12 +21,12 @@ type InfiniteLoopDetectorV3 struct {
 // NewInfiniteLoopDetectorV3 creates a semantic-aware infinite loop detector
 func NewInfiniteLoopDetectorV3() *InfiniteLoopDetectorV3 {
 	pattern := patterns.Pattern{
-		ID:       "infinite_loop_semantic",
+		ID:       metadata.ID_INFINITE_LOOP,
 		Name:     "Infinite Loop (Semantic Analysis)",
 		Version:  "3.0",
 		Category: "resource_exhaustion",
-		Severity: "HIGH",
-		CVSS:     7.5,
+		Severity: "CRITICAL",
+		CVSS:     9.0,
 		CWEIDs:   []string{"CWE-835", "CWE-400"},
 		OWASP:    "LLM10",
 		Description: "LLM-dependent loops without hard break counters cause unbounded execution and token exhaustion",
@@ -44,6 +46,21 @@ func NewInfiniteLoopDetectorV3() *InfiniteLoopDetectorV3 {
 		pattern:    pattern,
 		confidence: 0.95,
 	}
+}
+
+// GetPatternID returns the canonical detector ID (implements Detector interface)
+func (d *InfiniteLoopDetectorV3) GetPatternID() string {
+	return metadata.ID_INFINITE_LOOP
+}
+
+// GetPattern returns the pattern definition (implements Detector interface)
+func (d *InfiniteLoopDetectorV3) GetPattern() patterns.Pattern {
+	return d.pattern
+}
+
+// Detect performs the vulnerability detection and returns findings (implements Detector interface)
+func (d *InfiniteLoopDetectorV3) Detect(filePath string, source []byte) ([]patterns.Finding, error) {
+	return d.DetectSemantic(filePath, source)
 }
 
 // DetectSemantic analyzes code for Doom Loops using CFG analysis
@@ -85,8 +102,22 @@ func (d *InfiniteLoopDetectorV3) DetectSemantic(filePath string, src []byte) ([]
 		log.Printf("[INFINITE_LOOP_DETECTOR] Evaluating loop %d at line %d: condition='%s', isDeterministic=%v",
 			i, loopInfo.Line, loopInfo.ConditionText, loopInfo.IsDeterministic)
 
+		isBoomLoop := false
+
+		// Primary detection: CFG-based Doom Loop pattern
 		if cfg.HasDoomLoopPattern(loopInfo) {
 			log.Printf("[INFINITE_LOOP_DETECTOR] ✓ Loop at line %d MATCHED Doom Loop pattern", loopInfo.Line)
+			isBoomLoop = true
+		} else {
+			// Signature fallback: Check for "should_continue" pattern (catches Line 99 case)
+			// This handles loops like: while self._should_continue_solving():
+			if strings.Contains(strings.ToLower(loopInfo.ConditionText), "should_continue") {
+				log.Printf("[INFINITE_LOOP_DETECTOR] ✓ Loop at line %d MATCHED signature pattern (should_continue)", loopInfo.Line)
+				isBoomLoop = true
+			}
+		}
+
+		if isBoomLoop {
 			finding := d.createDoomLoopFinding(filePath, loopInfo, sourceLines)
 			findings = append(findings, finding)
 		} else {
@@ -123,7 +154,7 @@ func (d *InfiniteLoopDetectorV3) createDoomLoopFinding(
 
 	return patterns.Finding{
 		ID:         fmt.Sprintf("doom_loop_%d", loopInfo.Line),
-		PatternID:  d.pattern.ID,
+		PatternID:  d.GetPatternID(),
 		Pattern:    d.pattern.Name,
 		File:       filePath,
 		Line:       loopInfo.Line,

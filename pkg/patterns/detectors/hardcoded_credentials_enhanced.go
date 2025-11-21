@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/inkog-io/inkog/action/pkg/patterns"
+	"github.com/inkog-io/inkog/action/pkg/patterns/metadata"
 )
 
 // EnhancedHardcodedCredentialsDetector detects hardcoded credentials with simplified confidence scoring
@@ -107,6 +108,12 @@ func (d *EnhancedHardcodedCredentialsDetector) Detect(filePath string, src []byt
 func (d *EnhancedHardcodedCredentialsDetector) Name() string {
 	return "hardcoded_credentials_enhanced"
 }
+
+// GetPatternID returns the canonical detector ID (implements Detector interface)
+func (d *EnhancedHardcodedCredentialsDetector) GetPatternID() string {
+	return metadata.ID_HARDCODED_CREDENTIALS
+}
+
 
 // IsEnabled checks if pattern is enabled
 func (d *EnhancedHardcodedCredentialsDetector) IsEnabled() bool {

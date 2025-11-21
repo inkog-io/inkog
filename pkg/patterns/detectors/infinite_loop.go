@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/inkog-io/inkog/action/pkg/patterns"
+	"github.com/inkog-io/inkog/action/pkg/patterns/metadata"
 )
 
 // InfiniteLoopDetector detects while True loops that could cause unbounded resource consumption
@@ -53,6 +54,12 @@ func NewInfiniteLoopDetector() *InfiniteLoopDetector {
 func (d *InfiniteLoopDetector) Name() string {
 	return "infinite_loop"
 }
+
+// GetPatternID returns the canonical detector ID (implements Detector interface)
+func (d *InfiniteLoopDetector) GetPatternID() string {
+	return metadata.ID_INFINITE_LOOP
+}
+
 
 // GetPattern returns the pattern metadata
 func (d *InfiniteLoopDetector) GetPattern() patterns.Pattern {

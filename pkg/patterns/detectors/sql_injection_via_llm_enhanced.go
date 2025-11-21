@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/inkog-io/inkog/action/pkg/patterns"
+	"github.com/inkog-io/inkog/action/pkg/patterns/metadata"
 )
 
 // EnhancedSQLInjectionViaLLMDetector detects SQL injection via LLM with simplified confidence scoring
@@ -166,6 +167,12 @@ func (d *EnhancedSQLInjectionViaLLMDetector) isDocstringExample(line string) boo
 func (d *EnhancedSQLInjectionViaLLMDetector) Name() string {
 	return "sql_injection_via_llm_enhanced"
 }
+
+// GetPatternID returns the canonical detector ID (implements Detector interface)
+func (d *EnhancedSQLInjectionViaLLMDetector) GetPatternID() string {
+	return metadata.ID_SQL_INJECTION_LLM
+}
+
 
 // IsEnabled checks if pattern is enabled
 func (d *EnhancedSQLInjectionViaLLMDetector) IsEnabled() bool {

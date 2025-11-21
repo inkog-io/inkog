@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/inkog-io/inkog/action/pkg/patterns"
+	"github.com/inkog-io/inkog/action/pkg/patterns/metadata"
 )
 
 // SQLInjectionViaLLMDetector detects SQL injection vulnerabilities where LLM-generated queries
@@ -61,6 +62,12 @@ func NewSQLInjectionViaLLMDetector() *SQLInjectionViaLLMDetector {
 func (d *SQLInjectionViaLLMDetector) Name() string {
 	return "sql_injection_via_llm"
 }
+
+// GetPatternID returns the canonical detector ID (implements Detector interface)
+func (d *SQLInjectionViaLLMDetector) GetPatternID() string {
+	return metadata.ID_SQL_INJECTION_LLM
+}
+
 
 // GetPattern returns the pattern metadata
 func (d *SQLInjectionViaLLMDetector) GetPattern() patterns.Pattern {

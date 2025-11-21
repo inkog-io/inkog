@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/inkog-io/inkog/action/pkg/patterns"
+	"github.com/inkog-io/inkog/action/pkg/patterns/metadata"
 )
 
 // LoggingSensitiveDataDetector detects logging of sensitive information (CWE-532 & CWE-209)
@@ -409,6 +410,12 @@ func (d *LoggingSensitiveDataDetector) createFinding(
 func (d *LoggingSensitiveDataDetector) Name() string {
 	return "logging_sensitive_data"
 }
+
+// GetPatternID returns the canonical detector ID (implements Detector interface)
+func (d *LoggingSensitiveDataDetector) GetPatternID() string {
+	return metadata.ID_LOGGING_SENSITIVE_DATA
+}
+
 
 // GetPattern returns the pattern metadata
 func (d *LoggingSensitiveDataDetector) GetPattern() patterns.Pattern {

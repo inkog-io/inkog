@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/inkog-io/inkog/action/pkg/patterns"
+	"github.com/inkog-io/inkog/action/pkg/patterns/metadata"
 )
 
 // CrossTenantDataLeakageDetector detects potential cross-tenant data access vulnerabilities
@@ -480,3 +481,9 @@ func (d *CrossTenantDataLeakageDetector) GetConfidence() float32 {
 func (d *CrossTenantDataLeakageDetector) Name() string {
 	return "cross_tenant_data_leakage"
 }
+
+// GetPatternID returns the canonical detector ID (implements Detector interface)
+func (d *CrossTenantDataLeakageDetector) GetPatternID() string {
+	return metadata.ID_CROSS_TENANT_DATA_LEAKAGE
+}
+

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/inkog-io/inkog/action/pkg/patterns"
+	"github.com/inkog-io/inkog/action/pkg/patterns/metadata"
 )
 
 // UnvalidatedExecEvalDetector detects unvalidated exec/eval calls that can lead to RCE
@@ -48,6 +49,12 @@ func NewUnvalidatedExecEvalDetector() *UnvalidatedExecEvalDetector {
 func (d *UnvalidatedExecEvalDetector) Name() string {
 	return "unvalidated_exec_eval"
 }
+
+// GetPatternID returns the canonical detector ID (implements Detector interface)
+func (d *UnvalidatedExecEvalDetector) GetPatternID() string {
+	return metadata.ID_UNVALIDATED_EXEC_EVAL
+}
+
 
 // GetPattern returns the pattern metadata
 func (d *UnvalidatedExecEvalDetector) GetPattern() patterns.Pattern {

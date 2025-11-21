@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/inkog-io/inkog/action/pkg/patterns"
+	"github.com/inkog-io/inkog/action/pkg/patterns/metadata"
 )
 
 // UnsafeEnvAccessDetector detects unsafe environment variable access without defaults
@@ -56,6 +57,12 @@ func NewUnsafeEnvAccessDetector() *UnsafeEnvAccessDetector {
 func (d *UnsafeEnvAccessDetector) Name() string {
 	return "unsafe_env_access"
 }
+
+// GetPatternID returns the canonical detector ID (implements Detector interface)
+func (d *UnsafeEnvAccessDetector) GetPatternID() string {
+	return metadata.ID_UNSAFE_ENV_ACCESS
+}
+
 
 // GetPattern returns the pattern metadata
 func (d *UnsafeEnvAccessDetector) GetPattern() patterns.Pattern {

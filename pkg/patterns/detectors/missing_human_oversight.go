@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/inkog-io/inkog/action/pkg/patterns"
+	"github.com/inkog-io/inkog/action/pkg/patterns/metadata"
 )
 
 // MissingHumanOversightDetector detects AI agents or automation taking high-impact actions without human oversight
@@ -527,6 +528,12 @@ func (d *MissingHumanOversightDetector) createFinding(
 func (d *MissingHumanOversightDetector) Name() string {
 	return "missing_human_oversight"
 }
+
+// GetPatternID returns the canonical detector ID (implements Detector interface)
+func (d *MissingHumanOversightDetector) GetPatternID() string {
+	return metadata.ID_TAINTED_EVAL
+}
+
 
 // GetPattern returns the pattern metadata
 func (d *MissingHumanOversightDetector) GetPattern() patterns.Pattern {

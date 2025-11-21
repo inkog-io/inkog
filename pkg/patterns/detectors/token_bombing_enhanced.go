@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/inkog-io/inkog/action/pkg/patterns"
+	"github.com/inkog-io/inkog/action/pkg/patterns/metadata"
 )
 
 // EnhancedTokenBombingDetector detects token bombing attacks with simplified confidence scoring
@@ -97,6 +98,12 @@ func (d *EnhancedTokenBombingDetector) Detect(filePath string, src []byte) ([]pa
 func (d *EnhancedTokenBombingDetector) Name() string {
 	return "token_bombing_enhanced"
 }
+
+// GetPatternID returns the canonical detector ID (implements Detector interface)
+func (d *EnhancedTokenBombingDetector) GetPatternID() string {
+	return metadata.ID_TOKEN_BOMBING
+}
+
 
 // IsEnabled checks if pattern is enabled
 func (d *EnhancedTokenBombingDetector) IsEnabled() bool {
