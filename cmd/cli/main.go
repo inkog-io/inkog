@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/inkog-io/inkog/pkg/cli"
+	"github.com/inkog-io/inkog/pkg/contract"
 )
 
 // ServerURL is the default server endpoint. Can be overridden via:
@@ -154,7 +155,7 @@ func outputResults(result *cli.ScanResult, format, minSeverity string, verbose b
 	}
 }
 
-// outputText provides human-readable text output
+// outputText provides human-readable text output with rich formatting
 func outputText(result *cli.ScanResult, minSeverity string, verbose bool) error {
 	if verbose {
 		fmt.Println("\n" + strings.Repeat("=", 80))
@@ -162,44 +163,162 @@ func outputText(result *cli.ScanResult, minSeverity string, verbose bool) error 
 		fmt.Println(strings.Repeat("=", 80))
 	}
 
-	// Display local secrets
-	if len(result.LocalSecrets) > 0 {
-		fmt.Printf("\n🔴 LOCAL SECRETS (found on your machine, redacted before upload)\n")
-		fmt.Println(strings.Repeat("-", 80))
-		for i, finding := range result.LocalSecrets {
-			fmt.Printf("[%d] %s\n", i+1, finding.Pattern)
-			fmt.Printf("    Location: %s:%d\n", finding.File, finding.Line)
-			fmt.Printf("    Severity: %s | Confidence: %.0f%%\n", finding.Severity, finding.Confidence*100)
-			if finding.Message != "" {
-				fmt.Printf("    Details: %s\n", finding.Message)
-			}
-		}
-	}
-
-	// Display server findings
-	if len(result.ServerFindings) > 0 {
-		fmt.Printf("\n🟠 LOGIC ISSUES (detected by server analysis of sanitized code)\n")
-		fmt.Println(strings.Repeat("-", 80))
-		for i, finding := range result.ServerFindings {
-			fmt.Printf("[%d] %s\n", i+1, finding.Pattern)
-			fmt.Printf("    Severity: %s | Confidence: %.0f%%\n", finding.Severity, finding.Confidence*100)
-			if finding.Message != "" {
-				fmt.Printf("    Details: %s\n", finding.Message)
-			}
-		}
-	}
-
-	// Summary
 	if len(result.AllFindings) == 0 {
 		fmt.Println("\n✅ No security issues found")
-	} else {
-		fmt.Printf("\n" + strings.Repeat("-", 80))
-		fmt.Printf("SUMMARY: %d total issues found\n", len(result.AllFindings))
-		fmt.Printf("  Local Secrets: %d\n", len(result.LocalSecrets))
-		fmt.Printf("  Server Issues: %d\n", len(result.ServerFindings))
+		return nil
 	}
 
+	// Group findings by severity
+	criticalFindings := filterFindingsBySeverity(result.AllFindings, "CRITICAL")
+	highFindings := filterFindingsBySeverity(result.AllFindings, "HIGH")
+	mediumFindings := filterFindingsBySeverity(result.AllFindings, "MEDIUM")
+	lowFindings := filterFindingsBySeverity(result.AllFindings, "LOW")
+
+	// Display critical findings
+	if len(criticalFindings) > 0 {
+		displayFindingsByCategory("🔴 CRITICAL ISSUES", criticalFindings)
+	}
+
+	// Display high findings
+	if len(highFindings) > 0 {
+		displayFindingsByCategory("🟠 HIGH SEVERITY ISSUES", highFindings)
+	}
+
+	// Display medium findings
+	if len(mediumFindings) > 0 {
+		displayFindingsByCategory("🟡 MEDIUM SEVERITY ISSUES", mediumFindings)
+	}
+
+	// Display low findings
+	if len(lowFindings) > 0 {
+		displayFindingsByCategory("🟢 LOW SEVERITY ISSUES", lowFindings)
+	}
+
+	// Display compliance summary
+	displayComplianceSummary(result.AllFindings)
+
 	return nil
+}
+
+// filterFindingsBySeverity returns findings matching the given severity level
+func filterFindingsBySeverity(findings []contract.Finding, severity string) []contract.Finding {
+	var filtered []contract.Finding
+	for _, f := range findings {
+		if f.Severity == severity {
+			filtered = append(filtered, f)
+		}
+	}
+	return filtered
+}
+
+// displayFindingsByCategory displays findings grouped by category with rich formatting
+func displayFindingsByCategory(category string, findings []contract.Finding) {
+	fmt.Printf("\n%s (%d findings)\n", category, len(findings))
+	fmt.Println(strings.Repeat("─", 80))
+
+	for i, finding := range findings {
+		fmt.Printf("[%d] %s", i+1, finding.Pattern)
+
+		// Add security metadata
+		securityTags := []string{}
+		if finding.CWE != "" {
+			securityTags = append(securityTags, finding.CWE)
+		}
+		if finding.CVSS > 0 {
+			securityTags = append(securityTags, fmt.Sprintf("CVSS %.1f", finding.CVSS))
+		}
+		if len(securityTags) > 0 {
+			fmt.Printf(" [%s]", strings.Join(securityTags, " | "))
+		}
+		fmt.Printf("\n")
+
+		// Location with column number
+		if finding.File != "" {
+			fmt.Printf("    File:       %s:%d", finding.File, finding.Line)
+			if finding.Column > 0 {
+				fmt.Printf(":%d", finding.Column)
+			}
+			fmt.Printf("\n")
+		}
+
+		// Severity and confidence
+		fmt.Printf("    Severity:   %s | Confidence: %.0f%%\n", finding.Severity, finding.Confidence*100)
+
+		// OWASP compliance
+		if finding.OWASP != "" {
+			fmt.Printf("    OWASP:      %s\n", finding.OWASP)
+		}
+
+		// Message/Details
+		if finding.Message != "" {
+			fmt.Printf("    Details:    %s\n", finding.Message)
+		}
+
+		// Code snippet if available
+		if finding.Code != "" {
+			fmt.Printf("\n    Code Context:\n")
+			fmt.Println("    " + strings.Repeat("─", 76))
+			codeLines := strings.Split(finding.Code, "\n")
+			for _, line := range codeLines {
+				// Limit code line length for readability
+				if len(line) > 70 {
+					line = line[:70] + "..."
+				}
+				fmt.Printf("    │ %s\n", line)
+			}
+			fmt.Println("    " + strings.Repeat("─", 76))
+		}
+
+		fmt.Printf("\n")
+	}
+}
+
+// displayComplianceSummary displays the compliance table and risk assessment
+func displayComplianceSummary(findings []contract.Finding) {
+	criticalCount := len(filterFindingsBySeverity(findings, "CRITICAL"))
+	highCount := len(filterFindingsBySeverity(findings, "HIGH"))
+	mediumCount := len(filterFindingsBySeverity(findings, "MEDIUM"))
+	lowCount := len(filterFindingsBySeverity(findings, "LOW"))
+	totalCount := len(findings)
+
+	// Determine compliance status
+	compliancePass := criticalCount == 0 && highCount == 0
+	complianceStatus := "✅ COMPLIANT"
+	if !compliancePass {
+		complianceStatus = "❌ NON-COMPLIANT"
+	}
+
+	// Calculate risk score (0-10 scale)
+	riskScore := float64(criticalCount)*2.5 + float64(highCount)*1.5 + float64(mediumCount)*0.5 + float64(lowCount)*0.1
+	if riskScore > 10 {
+		riskScore = 10
+	}
+
+	// Determine risk level
+	riskLevel := "LOW"
+	if riskScore >= 8 {
+		riskLevel = "CRITICAL"
+	} else if riskScore >= 6 {
+		riskLevel = "HIGH"
+	} else if riskScore >= 3 {
+		riskLevel = "MEDIUM"
+	}
+
+	// Print compliance table
+	fmt.Println("\n" + strings.Repeat("━", 80))
+	fmt.Println("AI SYSTEM COMPLIANCE REPORT")
+	fmt.Println(strings.Repeat("━", 80))
+
+	fmt.Println("")
+	fmt.Printf("  Severity Breakdown:\n")
+	fmt.Printf("    Critical:  %2d  │  Status:     %s\n", criticalCount, complianceStatus)
+	fmt.Printf("    High:      %2d  │  Risk Score: %.1f/10\n", highCount, riskScore)
+	fmt.Printf("    Medium:    %2d  │  Risk Level: %s\n", mediumCount, riskLevel)
+	fmt.Printf("    Low:       %2d  │\n", lowCount)
+	fmt.Println("  " + strings.Repeat("─", 76))
+	fmt.Printf("    Total:     %2d  │\n", totalCount)
+	fmt.Println("")
+	fmt.Println(strings.Repeat("━", 80))
 }
 
 // outputJSON provides JSON output for integration with CI/CD

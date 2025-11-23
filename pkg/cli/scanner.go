@@ -31,10 +31,11 @@ type HybridScanner struct {
 
 // ScanResult contains both local and remote findings
 type ScanResult struct {
-	LocalSecrets   []contract.Finding `json:"local_secrets"`
-	ServerFindings []contract.Finding `json:"server_findings"`
-	AllFindings    []contract.Finding `json:"all_findings"`
-	Report         string             `json:"report"`
+	LocalSecrets      []contract.Finding      `json:"local_secrets"`
+	ServerFindings    []contract.Finding      `json:"server_findings"`
+	AllFindings       []contract.Finding      `json:"all_findings"`
+	ComplianceReport  *contract.ComplianceReport `json:"compliance_report,omitempty"`
+	Report            string                   `json:"report"`
 }
 
 // NewHybridScanner creates a new scanner instance
@@ -91,9 +92,10 @@ func (hs *HybridScanner) Scan() (*ScanResult, error) {
 	allFindings := hs.mergeFindings(localSecrets, serverResult.Findings)
 
 	return &ScanResult{
-		LocalSecrets:   localSecrets,
-		ServerFindings: serverResult.Findings,
-		AllFindings:    allFindings,
+		LocalSecrets:     localSecrets,
+		ServerFindings:   serverResult.Findings,
+		AllFindings:      allFindings,
+		ComplianceReport: serverResult.ComplianceReport,
 	}, nil
 }
 

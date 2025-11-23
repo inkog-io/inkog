@@ -74,6 +74,9 @@ type ScanResult struct {
 	FailedFilesCount int      `json:"failed_files_count"`
 	FailedFiles      []string `json:"failed_files"`
 	PanicedDetectors []string `json:"panicked_detectors"`
+
+	// Compliance Report
+	ComplianceReport *ComplianceReport `json:"compliance_report,omitempty"`
 }
 
 // LocalSecretResult represents secrets detected locally on the CLI
@@ -103,11 +106,12 @@ type ScanRequest struct {
 
 // ScanResponse is returned by server
 type ScanResponse struct {
-	ContractVersion string     `json:"contract_version"`
-	ServerVersion   string     `json:"server_version"`
-	ScanResult      ScanResult `json:"scan_result"`
-	Success         bool       `json:"success"`
-	Error           string     `json:"error,omitempty"`
+	ContractVersion  string             `json:"contract_version"`
+	ServerVersion    string             `json:"server_version"`
+	ScanResult       ScanResult         `json:"scan_result"`
+	ComplianceReport *ComplianceReport  `json:"compliance_report,omitempty"`
+	Success          bool               `json:"success"`
+	Error            string             `json:"error,omitempty"`
 }
 
 // ComplianceReport provides compliance-focused summary
