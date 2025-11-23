@@ -34,7 +34,7 @@ Usage:
 
 Options:
   -path string        Source path to scan (default: .)
-  -server string      Inkog server URL (default: https://api.inkog.io)
+  -server string      Inkog server URL (default: https://inkog-api.fly.dev)
   -output string      Output format: json, text, html (default: text)
   -severity string    Minimum severity level: critical, high, medium, low (default: low)
   -verbose            Enable verbose output
@@ -52,10 +52,10 @@ Examples:
   inkog -path . -output json
 
   # Scan using custom server
-  inkog -path . -server https://inkog-enterprise.example.com
+  inkog -path . -server https://your-inkog-server.com
 
 Environment Variables:
-  INKOG_SERVER         Override default server URL
+  INKOG_SERVER_URL     Override default server URL (highest priority)
   INKOG_API_KEY        API key for authentication (optional)
   INKOG_OUTPUT_FORMAT  Default output format
 
