@@ -12,8 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/inkog-io/inkog-cli/pkg/contract"
-	"github.com/inkog-io/inkog-cli/pkg/patterns/secrets"
+	"github.com/inkog-io/inkog/pkg/contract"
+	"github.com/inkog-io/inkog/pkg/patterns/secrets"
 )
 
 const (

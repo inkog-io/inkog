@@ -8,14 +8,14 @@ import (
 	"os"
 	"strings"
 
-	"github.com/inkog-io/inkog-cli/pkg/cli"
+	"github.com/inkog-io/inkog/pkg/cli"
 )
 
 // ServerURL is the default server endpoint. Can be overridden via:
 // 1. Environment variable INKOG_SERVER_URL (highest priority)
 // 2. Command-line flag -server
 // 3. Build-time via -ldflags "-X main.ServerURL=..."
-var ServerURL = "http://localhost:8080"
+var ServerURL = "https://inkog-api.fly.dev"
 
 func init() {
 	// Allow override via environment variable (highest priority)
