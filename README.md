@@ -1,4 +1,6 @@
-![Inkog](./logo.png)
+<div align="center">
+  <img src="logo.png" width="150" alt="Inkog Logo">
+</div>
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL%203.0-blue)](LICENSE)
 [![Slack Community](https://img.shields.io/badge/Slack-Join%20Community-blueviolet)](https://inkog.io/slack)
@@ -6,11 +8,9 @@
 
 ## The Logic Firewall for AI Agents
 
-Prevent **infinite loops**, **token bombing**, and **RCE** before deployment.
+Prevent infinite loops, token bombing, and critical vulnerabilities before deployment.
 
 ---
-
-## The Hook
 
 ![Inkog detecting a Token Bomb in a LangGraph agent](https://placeholder.inkog.io/demo.gif)
 
@@ -69,20 +69,21 @@ Inkog detects vulnerabilities in agents built with:
 - **LangChain** - Chain composition risks, infinite agent loops
 - **CrewAI** - Tool misuse, recursive delegation patterns
 - **AutoGen** - State explosion, conversation loops
+- ...and more coming soon
 
 Plus native support for Python, JavaScript, TypeScript, Go, Java, Rust, and more.
 
 ---
 
-## Enterprise: Inkog Cloud
+## For Teams
 
-**Inkog is Open Source (AGPLv3).** For Teams:
+Inkog Open Source is free and ready to use. For enterprise deployments:
 
-- ✅ Centralized Security Dashboard
-- ✅ Historical Trends & Risk Tracking
-- ✅ Evidence for SOC2/ISO Audits
-- ✅ Team Collaboration & Reporting
-- ✅ Custom Security Policies
+- Centralized dashboard & reporting
+- Historical trends & risk tracking
+- SOC2/ISO audit evidence
+- Team collaboration
+- Custom security policies
 
 **Early Access:** hello@inkog.io
 
@@ -90,16 +91,11 @@ Plus native support for Python, JavaScript, TypeScript, Go, Java, Rust, and more
 
 ## How It Works
 
-Inkog uses a **hybrid privacy-first architecture**:
-
 ```
-1. Local Secret Detection    → Secrets redacted before upload
-2. Secure Upload            → Only redacted code leaves your machine
-3. Server-Side Logic Analysis → AST analysis detects loops, injection risks
-4. Merged Report            → Combined findings with zero secret exposure
+Local Detection  →  Redact Secrets  →  Secure Upload  →  Remote Analysis  →  Report
 ```
 
-**Your secrets never touch our servers.**
+Your secrets stay on your machine. Only redacted code is analyzed.
 
 ---
 
@@ -126,12 +122,12 @@ For more options, see [CLI Reference](docs/CLI_REFERENCE.md).
 
 ---
 
-## Privacy & Security
+## Privacy First
 
-- ✅ **No telemetry.** We don't track your code.
-- ✅ **Offline mode.** Works without a server.
-- ✅ **Open source.** Audit the code yourself (AGPLv3).
-- ✅ **Redaction first.** Secrets detected before upload.
+- No telemetry. No tracking. No data collection.
+- Works offline. Detects secrets locally without a server.
+- Open source. Audit everything (AGPLv3).
+- Secrets redacted before upload.
 
 See [Privacy Model](docs/CLI_REFERENCE.md#privacy-model) for technical details.
 
@@ -139,14 +135,9 @@ See [Privacy Model](docs/CLI_REFERENCE.md#privacy-model) for technical details.
 
 ## License
 
-Inkog is licensed under **GNU AGPLv3**.
+GNU AGPLv3. [View LICENSE](LICENSE)
 
-**Commercial licenses** available for:
-- Closed-source distributions
-- Proprietary embedded use
-- Enterprise deployments
-
-See [LICENSE](LICENSE) or contact hello@inkog.io.
+Commercial licenses available. Contact hello@inkog.io.
 
 ---
 
