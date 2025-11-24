@@ -250,16 +250,22 @@ func (hs *HybridScanner) sendToServer(redactedFiles map[string][]byte, localSecr
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := ioutil.ReadAll(resp.Body)
-		return nil, fmt.Errorf("server error %d: %s", resp.StatusCode, string(body))
+		// Print error to stderr for visibility
+		fmt.Fprintf(os.Stderr, "❌ Server error %d: %s\n", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("server error %d", resp.StatusCode)
 	}
 
 	// Parse server response
 	var scanResponse contract.ScanResponse
 	if err := json.NewDecoder(resp.Body).Decode(&scanResponse); err != nil {
+		// Print parse error to stderr
+		fmt.Fprintf(os.Stderr, "❌ Failed to parse server response: %v\n", err)
 		return nil, fmt.Errorf("failed to parse server response: %w", err)
 	}
 
 	if !scanResponse.Success {
+		// Print server error to stderr
+		fmt.Fprintf(os.Stderr, "❌ Server returned error: %s\n", scanResponse.Error)
 		return nil, fmt.Errorf("server returned error: %s", scanResponse.Error)
 	}
 
