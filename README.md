@@ -1,251 +1,162 @@
-# Inkog CLI - Hybrid Privacy Security Scanner
+![Inkog](./logo.png)
 
-The public CLI for Inkog, a security scanner designed for AI agent and LLM applications. This repository contains the command-line interface that performs client-side secret detection and communicates with the Inkog backend for advanced logic analysis.
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL%203.0-blue)](LICENSE)
+[![Slack Community](https://img.shields.io/badge/Slack-Join%20Community-blueviolet)](https://inkog.io/slack)
+[![Docker Automated](https://img.shields.io/badge/Docker-Automated-2496ED)](https://ghcr.io/inkog-io/inkog)
 
-## Overview
+## The Logic Firewall for AI Agents
 
-Inkog uses a **hybrid privacy model** to protect your code while providing comprehensive security scanning:
+Prevent **infinite loops**, **token bombing**, and **RCE** before deployment.
 
-1. **Local Secret Detection**: Secrets (API keys, tokens, credentials) are detected and redacted on your machine
-2. **Server-Side Analysis**: Redacted code is sent to the Inkog server for logic analysis
-3. **Privacy First**: Your actual secrets never leave your local environment
-4. **Complete Scanning**: Server analysis detects complex vulnerabilities like infinite loops, token bombing, and prompt injection
+---
 
-## Features
+## The Hook
 
-- **Local Secret Detection**: Identifies hardcoded credentials in your codebase
-- **Client-Side Privacy**: Secrets are redacted before any data leaves your machine
-- **Hybrid Scanning**: Combines local pattern matching with server-side AST analysis
-- **Multiple Output Formats**: JSON, text, and HTML reports
-- **CI/CD Integration**: Easy integration into automated pipelines
+![Inkog detecting a Token Bomb in a LangGraph agent](https://placeholder.inkog.io/demo.gif)
 
-## Installation
+*Inkog scanning a LangGraph agent and detecting a token bombing vulnerability in real-time.*
+
+[![Book Security Audit](https://img.shields.io/badge/Book_Security_Audit-Contact_Sales-purple)](https://cal.com/inkog/audit)
+
+---
+
+## Quick Start
+
+### Option 1: Docker (Recommended)
 
 ```bash
-go install github.com/inkog-io/inkog-cli/cmd/cli@latest
+docker run -v $(pwd):/app ghcr.io/inkog-io/inkog:latest /app
 ```
 
-Or build from source:
+### Option 2: Go Install
 
 ```bash
-go build -o inkog ./cmd/cli
+go install github.com/inkog-io/inkog/cmd/cli@latest
+mv $GOPATH/bin/cli $GOPATH/bin/inkog
+inkog .
 ```
 
-## Usage
+### Option 3: GitHub Action
 
-### Basic Scan
+Add to `.github/workflows/security.yml`:
 
-```bash
-inkog /path/to/your/project
+```yaml
+- name: Run Inkog Security Scan
+  uses: inkog-io/inkog@latest
+  with:
+    path: .
 ```
 
-### Scan with Verbose Output
+---
+
+## Why Inkog?
+
+### 🛑 Prevent Doom Loops
+Detects non-deterministic loops in **LangChain**, **CrewAI**, and **AutoGen** agents that burn API credits and crash systems.
+
+### 🔒 Hybrid Privacy
+Your secrets stay local. Only the **redacted code logic** is analyzed in the cloud. API keys, tokens, and credentials never leave your machine.
+
+### ⚖️ Compliance Ready
+Findings map to **EU AI Act (Article 15)** and **NIST AI RMF** for regulatory audits and SOC2 evidence.
+
+---
+
+## Framework Support
+
+Inkog detects vulnerabilities in agents built with:
+
+- **LangChain** - Chain composition risks, infinite agent loops
+- **CrewAI** - Tool misuse, recursive delegation patterns
+- **AutoGen** - State explosion, conversation loops
+
+Plus native support for Python, JavaScript, TypeScript, Go, Java, Rust, and more.
+
+---
+
+## Enterprise: Inkog Cloud
+
+**Inkog is Open Source (AGPLv3).** For Teams:
+
+- ✅ Centralized Security Dashboard
+- ✅ Historical Trends & Risk Tracking
+- ✅ Evidence for SOC2/ISO Audits
+- ✅ Team Collaboration & Reporting
+- ✅ Custom Security Policies
+
+**Early Access:** hello@inkog.io
+
+---
+
+## How It Works
+
+Inkog uses a **hybrid privacy-first architecture**:
+
+```
+1. Local Secret Detection    → Secrets redacted before upload
+2. Secure Upload            → Only redacted code leaves your machine
+3. Server-Side Logic Analysis → AST analysis detects loops, injection risks
+4. Merged Report            → Combined findings with zero secret exposure
+```
+
+**Your secrets never touch our servers.**
+
+---
+
+## Common Commands
 
 ```bash
+# Scan current directory
+inkog .
+
+# Scan with verbose output
 inkog -path ./src -verbose
-```
 
-### JSON Output for CI/CD
-
-```bash
+# Output as JSON (for CI/CD)
 inkog -path . -output json > results.json
+
+# Only show critical findings
+inkog -path . -severity critical
+
+# Use custom Inkog server
+inkog -path . -server https://inkog.company.com
 ```
 
-### Custom Server URL
+For more options, see [CLI Reference](docs/CLI_REFERENCE.md).
 
-```bash
-inkog -path . -server https://your-inkog-server.com
-```
+---
 
-### Filter by Severity
+## Privacy & Security
 
-```bash
-inkog -path . -severity high
-```
+- ✅ **No telemetry.** We don't track your code.
+- ✅ **Offline mode.** Works without a server.
+- ✅ **Open source.** Audit the code yourself (AGPLv3).
+- ✅ **Redaction first.** Secrets detected before upload.
 
-## Configuration
+See [Privacy Model](docs/CLI_REFERENCE.md#privacy-model) for technical details.
 
-### Environment Variables
-
-- `INKOG_SERVER_URL`: Override the default server endpoint (highest priority)
-  ```bash
-  export INKOG_SERVER_URL=https://inkog-enterprise.example.com
-  inkog .
-  ```
-
-- `INKOG_API_KEY`: API key for authentication (optional, for future use)
-
-### Default Server
-
-The CLI defaults to `http://localhost:8080` for development. For production, set:
-
-```bash
-export INKOG_SERVER_URL=https://api.inkog.io
-```
-
-## Command-Line Options
-
-```
-Usage:
-  inkog [OPTIONS] [PATH]
-
-Options:
-  -path string        Source path to scan (default: .)
-  -server string      Inkog server URL (default: https://api.inkog.io)
-  -output string      Output format: json, text, html (default: text)
-  -severity string    Minimum severity level: critical, high, medium, low (default: low)
-  -verbose            Enable verbose output
-  -version            Show version information
-  -help               Show this help message
-
-Examples:
-  # Scan current directory
-  inkog .
-
-  # Scan with verbose output
-  inkog -path ./src -verbose
-
-  # Scan and output as JSON
-  inkog -path . -output json
-
-  # Scan using custom server
-  inkog -path . -server https://inkog-enterprise.example.com
-```
-
-## Privacy Model
-
-### What Stays Local
-
-- Your API keys and credentials
-- Private authentication tokens
-- Database connection strings
-- Any data identified as a "secret"
-
-### What Gets Sent to Server
-
-- Redacted source code (with secrets replaced)
-- File structure and relationships
-- Control flow patterns (for logic analysis)
-- Metadata (line numbers, severity levels)
-
-### How Redaction Works
-
-The CLI uses pattern-based detection to identify secrets:
-- AWS credentials
-- API keys (various providers)
-- Private keys
-- Database passwords
-- OAuth tokens
-- And more...
-
-Identified secrets are replaced with `[REDACTED_<TYPE>]` before sending to the server.
-
-## Output Formats
-
-### Text (Default)
-
-Human-readable report with color-coded severity levels and detailed explanations.
-
-### JSON
-
-Structured output for integration with CI/CD pipelines:
-
-```json
-{
-  "local_secrets": [
-    {
-      "id": "secret_api_key_123_1",
-      "file": "config.py",
-      "line": 123,
-      "severity": "critical",
-      "message": "Hardcoded API key detected"
-    }
-  ],
-  "server_findings": [
-    {
-      "pattern": "Infinite Loop",
-      "severity": "high",
-      "file": "agent.py",
-      "line": 45
-    }
-  ],
-  "all_findings": [...]
-}
-```
-
-### HTML
-
-Interactive HTML report with searchable findings and visualizations.
-
-## Supported Languages
-
-- Python (.py)
-- JavaScript (.js)
-- TypeScript (.ts, .tsx)
-- Go (.go)
-- Java (.java)
-- Ruby (.rb)
-- PHP (.php)
-- C# (.cs)
-- Rust (.rs)
-- C/C++ (.c, .cpp)
-- Shell scripts (.sh)
-- YAML (.yaml, .yml)
-- JSON (.json)
-- XML (.xml)
-- Environment files (.env)
-- Config files (.conf, .cfg)
-
-## Exit Codes
-
-- `0`: Scan completed successfully with no security issues
-- `1`: Scan completed with security findings detected
-
-## Development
-
-### Building
-
-```bash
-go build -o inkog ./cmd/cli
-```
-
-### Testing
-
-```bash
-go test ./...
-```
-
-### Running Against Local Server
-
-```bash
-export INKOG_SERVER_URL=http://localhost:8080
-inkog ./demo_agent
-```
-
-## Architecture
-
-This repository is the **PUBLIC** part of Inkog:
-
-- **Public**: CLI code, CLI contracts, client-side secret detection
-- **Private**: Backend detection logic, AST analysis engine, vulnerability registry
-
-The CLI communicates with the backend server via a well-defined contract (`pkg/contract/contract.go`).
-
-## Related Repositories
-
-- **inkog-backend** (Private): Detection engine, AST analysis, security patterns
-- **inkog-product** (Monolithic): Development and testing repository
+---
 
 ## License
 
-Proprietary - Inkog Inc.
+Inkog is licensed under **GNU AGPLv3**.
 
-## Support
+**Commercial licenses** available for:
+- Closed-source distributions
+- Proprietary embedded use
+- Enterprise deployments
 
-For issues, questions, or security concerns:
-- GitHub Issues: https://github.com/inkog-io/inkog-cli/issues
-- Security: security@inkog.io
+See [LICENSE](LICENSE) or contact hello@inkog.io.
 
-## Version
+---
 
-Current Version: 1.0.0
+## Get Help
+
+- **GitHub Issues:** https://github.com/inkog-io/inkog/issues
+- **Security:** security@inkog.io
+- **Community:** https://inkog.io/slack
+- **Docs:** [CLI Reference](docs/CLI_REFERENCE.md)
+
+---
+
+**Protect your AI agents. Scan today.**
