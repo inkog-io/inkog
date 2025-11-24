@@ -1,8 +1,15 @@
-# Inkog Ecosystem: The Face
+# Inkog Public CLI: `inkog-io/inkog`
+
+## Repository Identity
+
+- **GitHub:** `github.com/inkog-io/inkog` (Public)
+- **Role:** The Official Inkog CLI
+- **Status:** Production (v1.0.0+)
+- **License:** GNU AGPLv3 (Commercial licenses available)
 
 ## Vision
 
-The CLI is the **primary entry point** for developers. It prioritizes three pillars:
+The Inkog CLI is the **primary entry point** for developers securing AI agents. It's a **dumb client** that communicates with the Inkog backend on Fly.io. It prioritizes three pillars:
 
 1. **User Experience:** Beautiful, fast, intuitive output
 2. **Speed:** Instant feedback. Secrets detected in <500ms locally
@@ -34,12 +41,31 @@ The CLI must function as a **standalone dumb client**—it can work without a ba
 - **Distribution:** Binary (curl install), Homebrew, Docker
 - **Dependencies:** Minimal. No tree-sitter, no heavy external libraries
 
+## Architecture: Dumb Client → Fly.io API
+
+```
+User's Machine          Inkog Cloud (Fly.io)
+┌─────────────────┐     ┌──────────────────────┐
+│  Local Scan     │────→│  REST API Server     │
+│  (Secrets)      │     │  (Pure Go, Port 8080)│
+│                 │     │                      │
+│  • Detect       │────→│  Analysis Engine     │
+│  • Redact       │     │  (Worker subprocess) │
+│  • Upload       │     │                      │
+└─────────────────┘     └──────────────────────┘
+                              ↓
+                        Structured Logs (Stderr)
+                        JSON Response (Stdout)
+```
+
+**Key Principle:** The CLI is stateless. It sends redacted code, receives findings, and returns. No persistent state.
+
 ## Project Structure
 
 ```
-inkog-cli/
+inkog/ (inkog-io/inkog on GitHub)
 ├── cmd/
-│   └── cli/              Main CLI entry point
+│   └── cli/              Main CLI entry point (cmd/cli/main.go)
 ├── pkg/
 │   ├── cli/              Core CLI logic
 │   │   ├── scanner.go    Hybrid scanning (local + remote)
@@ -49,6 +75,10 @@ inkog-cli/
 │   │   └── secrets/      **LOCAL ONLY** regex patterns for secrets
 │   │                     (API keys, passwords, tokens, etc.)
 │   └── contract/         Shared request/response types (from backend)
+├── docs/
+│   └── CLI_REFERENCE.md  Complete CLI documentation
+├── README.md             Public-facing documentation
+├── LICENSE               GNU AGPLv3
 ├── go.mod
 └── CLAUDE.md             This file
 ```
@@ -133,36 +163,47 @@ Validate every Finding before displaying. If a field is missing, don't crash—s
 
 ## Development Workflow
 
-### Test Locally
+### Test Locally (No Server)
 ```bash
+# Detects secrets locally, no server upload
 go run cmd/cli/main.go -path ../demo_agent
 ```
 
 ### Build Binary
 ```bash
+# Pure Go, no CGO
 CGO_ENABLED=0 go build -o inkog cmd/cli/main.go
 ```
 
 ### Test Against Local Server
 ```bash
-# Terminal 1: Start backend
+# Terminal 1: Start backend server locally
 cd ../inkog-backend
 go run cmd/server/main.go
 
-# Terminal 2: Run CLI
+# Terminal 2: Run CLI against local server
 ./inkog -path ../demo_agent -server http://localhost:8080
 ```
 
-### Distribution
+### Test Against Fly.io Production
 ```bash
-# Homebrew (tap setup needed)
+# Uses default Fly.io endpoint (https://inkog-api.fly.dev)
+./inkog -path ../demo_agent
+```
+
+### Distribution Channels
+```bash
+# Homebrew (tap setup)
 brew install inkog-io/inkog/inkog
 
-# Docker
-docker run inkog:latest -path /src
+# Docker (from GitHub Container Registry)
+docker run -v $(pwd):/app ghcr.io/inkog-io/inkog:latest /app
 
-# Direct binary
-curl https://releases.inkog.io/inkog-latest-darwin | tar xz
+# Direct binary download
+curl -L https://releases.inkog.io/inkog-latest-darwin | tar xz
+
+# GitHub Releases
+https://github.com/inkog-io/inkog/releases
 ```
 
 ## Secret Patterns (pkg/patterns/secrets)
@@ -206,19 +247,38 @@ func DetectNewPattern(content []byte) []Finding {
 
 Graceful degradation:
 
-- Server unreachable? → Show local secrets only
+- Server unreachable? → Show local secrets only (offline mode)
 - Parse error on file? → Log warning, continue scanning
 - Invalid response from server? → Show partial results
 - Redaction failed? → Block upload (privacy first!)
+- Fly.io API timeout? → Fallback to local findings
+
+All errors logged to stderr. Findings always logged to stdout (JSON or text).
+
+## Public vs. Private: The Dual Codebase
+
+This repository (`inkog-io/inkog`) is **100% open source** (AGPLv3). It contains:
+- ✅ CLI logic (scanning, output, communication)
+- ✅ Client-side secret detection (local regex patterns)
+- ✅ API contract types (request/response schemas)
+
+The **core vulnerability detection logic** lives in the private `inkog-backend` repository:
+- Private: AST analysis engine, vulnerability patterns, machine learning models
+- Private: Compliance mappings, remediation guidance, pattern metadata
+
+**Key:** The CLI is a thin, dumb client. It sends redacted code to the backend API, which returns findings. The CLI never knows _how_ the backend works, only the contract.
 
 ## Contributing
 
-Before adding a feature:
+**Before adding a feature to the CLI:**
 
-1. ✅ Does it depend on tree-sitter? → REJECT
-2. ✅ Does it export secrets? → REJECT
+1. ✅ Does it depend on tree-sitter? → REJECT (client-only)
+2. ✅ Does it export secrets? → REJECT (privacy first)
 3. ✅ Is output "screenshot ready"? → ACCEPT
-4. ✅ Does it align with pkg/contract? → ACCEPT
+4. ✅ Does it align with `pkg/contract`? → ACCEPT
+5. ✅ Can it work offline? → IDEAL (fallback mode)
+
+**For backend features:** These belong in `inkog-backend` (private repo). File a GitHub issue in this repo if you have a feature request.
 
 ## Commands
 
@@ -226,26 +286,60 @@ Before adding a feature:
 # Scan local directory (secrets only, no upload)
 inkog -path /path/to/code
 
-# Full hybrid scan with server
-inkog -path /path/to/code -server https://api.inkog.io
+# Full hybrid scan with Fly.io API (default)
+inkog -path /path/to/code
+# Uses: https://inkog-api.fly.dev
 
-# Custom server (self-hosted)
-inkog -path /path/to/code -server https://my-inkog.company.com
+# Full hybrid scan (explicit)
+inkog -path /path/to/code -server https://inkog-api.fly.dev
 
-# Verbose output
+# Self-hosted server
+inkog -path /path/to/code -server https://inkog.company.internal
+
+# Verbose output (see request/response details)
 inkog -path /path/to/code -verbose
 
-# Output as JSON (for CI/CD)
-inkog -path /path/to/code -format json > results.json
+# Output as JSON (for CI/CD parsing)
+inkog -path /path/to/code -output json > results.json
 
-# Fail if CRITICAL findings exist (for CI/CD gates)
-inkog -path /path/to/code -fail-on critical
+# Filter by severity
+inkog -path /path/to/code -severity critical
+
+# Show version
+inkog -version
 ```
+
+**Note:** This is a **dumb client**. It has no state, no configuration file, no cache. Every invocation is stateless.
+
+## v1.0.0 Release Status
+
+✅ **STABLE** - Ready for production use.
+
+Core features:
+- ✅ Local secret detection
+- ✅ Hybrid scanning (local + Fly.io API)
+- ✅ Multiple output formats (text, JSON, HTML)
+- ✅ Structured logging (stderr)
+- ✅ Offline fallback mode
+- ✅ Auth middleware (ready for monetization)
+- ✅ Docker distribution
 
 ## Future Roadmap
 
-- [ ] **IDE Extensions:** VS Code, JetBrains, Sublime
-- [ ] **CI/CD Integration:** GitHub Actions, GitLab CI, CircleCI
-- [ ] **Report Export:** HTML, PDF, SARIF formats
-- [ ] **Custom Rules:** User-defined pattern definitions
-- [ ] **Python SDK:** `pip install inkog` for programmatic access
+**CLI Features (This Repository):**
+- [ ] **Pre-commit hook** for local-only scanning
+- [ ] **GitHub Action** for automated PR scans
+- [ ] **SARIF output** for GitHub Security tab integration
+- [ ] **Performance:** Parallel file scanning
+- [ ] **UX:** Interactive severity filtering in terminal
+
+**Backend Features (Private Repository):**
+- [ ] Extended language support (Go, Rust, Java)
+- [ ] Taint tracking across function boundaries
+- [ ] LLM-powered remediation suggestions
+- [ ] Custom rule engine
+
+**Ecosystem (Future Products):**
+- [ ] **VS Code Extension:** Real-time scanning
+- [ ] **Python/JavaScript SDK:** Programmatic API
+- [ ] **Inkog Cloud Dashboard:** Team reporting & trends
