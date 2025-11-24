@@ -6,9 +6,9 @@
 [![Slack Community](https://img.shields.io/badge/Slack-Join%20Community-blueviolet)](https://inkog.io/slack)
 [![Docker Automated](https://img.shields.io/badge/Docker-Automated-2496ED)](https://ghcr.io/inkog-io/inkog)
 
-## The Logic Firewall for AI Agents
+## Secure your AI Agent's Logic. Ship with Confidence.
 
-Prevent infinite loops, token bombing, and critical vulnerabilities before deployment.
+The first static analysis engine to prevent Infinite Loops, Token Bombing, and Logic Flaws before deployment.
 
 ---
 
