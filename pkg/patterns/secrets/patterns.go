@@ -158,16 +158,52 @@ var PatternDefinitions = map[string]*SecretPattern{
 		CWE:        "CWE-798",
 		OWASP:      "A02:2021",
 	},
+	"entropy_secret": {
+		Name:        "entropy_secret",
+		Description: "High-Entropy String (Potential Secret)",
+		Patterns:    []*regexp.Regexp{}, // Detected via entropy analysis, not regex
+		Severity:    "MEDIUM",
+		Confidence:  0.75,
+		CWE:         "CWE-798",
+		OWASP:       "A02:2021",
+	},
 }
 
-// DetectSecrets scans content for hardcoded secrets
+// DetectSecrets scans content for hardcoded secrets using both regex and entropy detection
 // Returns a list of secrets found without modifying the content
 func DetectSecrets(filePath string, content []byte) []SecretFinding {
+	// Step 1: Detect secrets using regex patterns
+	regexFindings := detectByRegex(content)
+
+	// Step 2: Detect high-entropy strings that may be secrets
+	entropyFindings := DetectHighEntropyStrings(content)
+
+	// Step 3: Merge findings, avoiding duplicates
+	var allFindings []SecretFinding
+	allFindings = append(allFindings, regexFindings...)
+
+	for _, ef := range entropyFindings {
+		// Skip if already detected by regex
+		if !IsDuplicateOfRegexFinding(ef, regexFindings) {
+			allFindings = append(allFindings, ConvertEntropyToSecretFinding(ef))
+		}
+	}
+
+	return allFindings
+}
+
+// detectByRegex performs regex-based secret detection
+func detectByRegex(content []byte) []SecretFinding {
 	var findings []SecretFinding
 	lines := strings.Split(string(content), "\n")
 
 	for lineNum, line := range lines {
 		for patternName, patternDef := range PatternDefinitions {
+			// Skip entropy_secret pattern (handled separately)
+			if patternName == "entropy_secret" {
+				continue
+			}
+
 			for _, pattern := range patternDef.Patterns {
 				matches := pattern.FindAllStringSubmatchIndex(line, -1)
 				for _, match := range matches {

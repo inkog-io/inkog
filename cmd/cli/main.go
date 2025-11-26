@@ -111,10 +111,13 @@ func main() {
 		serverURL = ServerURL
 	}
 
-	// Create scanner
-	scanner := cli.NewHybridScanner(*pathFlag, serverURL, *verboseFlag)
+	// Determine quiet mode (disable spinners/colors for JSON output or CI environments)
+	isQuietMode := *outputFlag == "json" || os.Getenv("CI") != ""
 
-	if *verboseFlag {
+	// Create scanner with quiet mode
+	scanner := cli.NewHybridScanner(*pathFlag, serverURL, *verboseFlag, isQuietMode)
+
+	if *verboseFlag && !isQuietMode {
 		fmt.Println("🔐 Inkog Hybrid Privacy Scanner")
 		fmt.Printf("📍 Scanning: %s\n", *pathFlag)
 	}
@@ -126,23 +129,27 @@ func main() {
 	}
 
 	// Output results
-	if err := outputResults(result, *outputFlag, *severityFlag, *verboseFlag); err != nil {
+	if err := outputResults(result, *outputFlag, *severityFlag, *verboseFlag, isQuietMode); err != nil {
 		log.Fatalf("❌ Output failed: %v\n", err)
 	}
 
 	// Determine exit code based on findings
 	totalFindings := len(result.AllFindings)
 	if totalFindings > 0 {
-		fmt.Printf("\n⚠️  Scan complete: %d security issues found\n", totalFindings)
+		if !isQuietMode {
+			fmt.Printf("\n⚠️  Scan complete: %d security issues found\n", totalFindings)
+		}
 		os.Exit(1)
 	}
 
-	fmt.Println("\n✅ Scan complete: No security issues found")
+	if !isQuietMode {
+		fmt.Println("\n✅ Scan complete: No security issues found")
+	}
 	os.Exit(0)
 }
 
 // outputResults formats and displays scan results
-func outputResults(result *cli.ScanResult, format, minSeverity string, verbose bool) error {
+func outputResults(result *cli.ScanResult, format, minSeverity string, verbose, quiet bool) error {
 	switch format {
 	case "json":
 		return outputJSON(result)

@@ -114,6 +114,15 @@ type ScanResponse struct {
 	Error            string             `json:"error,omitempty"`
 }
 
+// ErrorResponse represents a structured error from the server API
+// Used for parsing error responses with detailed information
+type ErrorResponse struct {
+	Code       string `json:"code"`                  // Error code: WORKER_TIMEOUT, RATE_LIMIT, etc.
+	RequestID  string `json:"request_id"`            // Unique request ID for support
+	Message    string `json:"message"`               // Human-readable error message
+	RetryAfter int    `json:"retry_after,omitempty"` // Seconds to wait before retry (for rate limits)
+}
+
 // ComplianceReport provides compliance-focused summary
 type ComplianceReport struct {
 	Title          string `json:"title"`

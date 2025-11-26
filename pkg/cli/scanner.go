@@ -4,9 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"mime/multipart"
-	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -27,6 +25,9 @@ type HybridScanner struct {
 	ServerURL  string
 	SourcePath string
 	Verbose    bool
+	Quiet      bool // Disable spinners/colors (for JSON output or CI)
+	progress   *ProgressReporter
+	client     *InkogClient
 }
 
 // ScanResult contains both local and remote findings
@@ -39,54 +40,59 @@ type ScanResult struct {
 }
 
 // NewHybridScanner creates a new scanner instance
-func NewHybridScanner(sourcePath, serverURL string, verbose bool) *HybridScanner {
+// Set quiet=true to disable spinners and colors (for JSON output or CI environments)
+func NewHybridScanner(sourcePath, serverURL string, verbose, quiet bool) *HybridScanner {
 	if serverURL == "" {
 		serverURL = DefaultServerURL
 	}
+
+	progress := NewProgressReporter(quiet)
+	client := NewInkogClient(serverURL, quiet, progress)
+
 	return &HybridScanner{
 		ServerURL:  serverURL,
 		SourcePath: sourcePath,
 		Verbose:    verbose,
+		Quiet:      quiet,
+		progress:   progress,
+		client:     client,
 	}
 }
 
 // Scan performs the complete hybrid scanning workflow
 func (hs *HybridScanner) Scan() (*ScanResult, error) {
-	if hs.Verbose {
-		fmt.Println("🔍 Starting hybrid security scan...")
-		fmt.Printf("   Source: %s\n", hs.SourcePath)
-		fmt.Printf("   Server: %s\n", hs.ServerURL)
+	if hs.Verbose && !hs.Quiet {
+		fmt.Fprintf(os.Stderr, "🔍 Starting hybrid security scan...\n")
+		fmt.Fprintf(os.Stderr, "   Source: %s\n", hs.SourcePath)
+		fmt.Fprintf(os.Stderr, "   Server: %s\n", hs.ServerURL)
 	}
 
 	// STEP 1: Scan for secrets locally and collect all files
+	hs.progress.Start("Scanning local files...")
 	localSecrets, allFiles, err := hs.scanLocalSecretsAndCollectFiles()
 	if err != nil {
+		hs.progress.Fail("Local scan failed")
 		return nil, fmt.Errorf("local secret scan failed: %w", err)
 	}
-
-	if hs.Verbose {
-		fmt.Printf("✓ Found %d local secrets in %d files\n", len(localSecrets), len(allFiles))
-	}
+	hs.progress.Success(fmt.Sprintf("Found %d local secrets in %d files", len(localSecrets), len(allFiles)))
 
 	// STEP 2: Redact secrets from files
+	hs.progress.Start("Redacting sensitive data...")
 	redactedFiles, _, err := hs.redactSecretsFromFiles(allFiles)
 	if err != nil {
+		hs.progress.Fail("Redaction failed")
 		return nil, fmt.Errorf("redaction failed: %w", err)
 	}
-
-	if hs.Verbose {
-		fmt.Printf("✓ Redacted secrets from %d files\n", len(allFiles))
-	}
+	hs.progress.Success(fmt.Sprintf("Redacted secrets from %d files", len(allFiles)))
 
 	// STEP 3: Send to server for logic analysis
+	hs.progress.Start("Uploading to Inkog...")
 	serverResult, err := hs.sendToServer(redactedFiles, len(localSecrets), len(allFiles))
 	if err != nil {
-		return nil, fmt.Errorf("server communication failed: %w", err)
+		hs.progress.Fail("Server communication failed")
+		return nil, err // Error is already formatted by client
 	}
-
-	if hs.Verbose {
-		fmt.Printf("✓ Server found %d logic issues\n", len(serverResult.Findings))
-	}
+	hs.progress.Success(fmt.Sprintf("Server found %d logic issues", len(serverResult.Findings)))
 
 	// STEP 4: Merge results
 	allFindings := hs.mergeFindings(localSecrets, serverResult.Findings)
@@ -114,7 +120,7 @@ func (hs *HybridScanner) scanLocalSecretsAndCollectFiles() ([]contract.Finding, 
 			return nil
 		}
 
-		content, err := ioutil.ReadFile(filePath)
+		content, err := os.ReadFile(filePath)
 		if err != nil {
 			return nil // Skip unreadable files
 		}
@@ -167,8 +173,8 @@ func (hs *HybridScanner) scanLocalSecretsAndCollectFiles() ([]contract.Finding, 
 // redactSecretsFromFiles returns redacted file contents as a map
 // Returns: map[fieldName]content, totalBytes, error
 func (hs *HybridScanner) redactSecretsFromFiles(redactedFiles map[string]bool) (map[string][]byte, int, error) {
-	if hs.Verbose {
-		fmt.Printf("📦 Adding files to upload:\n")
+	if hs.Verbose && !hs.Quiet {
+		fmt.Fprintf(os.Stderr, "📦 Adding files to upload:\n")
 	}
 
 	filesMap := make(map[string][]byte)
@@ -177,7 +183,7 @@ func (hs *HybridScanner) redactSecretsFromFiles(redactedFiles map[string]bool) (
 
 	// For each file, redact secrets and store
 	for filePath := range redactedFiles {
-		content, err := ioutil.ReadFile(filePath)
+		content, err := os.ReadFile(filePath)
 		if err != nil {
 			continue
 		}
@@ -194,22 +200,22 @@ func (hs *HybridScanner) redactSecretsFromFiles(redactedFiles map[string]bool) (
 		filesMap[fieldName] = redactedContent
 		totalBytes += len(redactedContent)
 
-		if hs.Verbose {
-			fmt.Printf("   ✓ %s (%d bytes)\n", relPath, len(redactedContent))
+		if hs.Verbose && !hs.Quiet {
+			fmt.Fprintf(os.Stderr, "   ✓ %s (%d bytes)\n", relPath, len(redactedContent))
 		}
 
 		filesAdded++
 	}
 
-	if hs.Verbose {
-		fmt.Printf("📊 Total files added: %d\n", filesAdded)
-		fmt.Printf("📦 Upload payload size: %d bytes\n", totalBytes)
+	if hs.Verbose && !hs.Quiet {
+		fmt.Fprintf(os.Stderr, "📊 Total files added: %d\n", filesAdded)
+		fmt.Fprintf(os.Stderr, "📦 Upload payload size: %d bytes\n", totalBytes)
 	}
 
 	return filesMap, totalBytes, nil
 }
 
-// sendToServer sends sanitized content to the Inkog server
+// sendToServer sends sanitized content to the Inkog server using the InkogClient
 func (hs *HybridScanner) sendToServer(redactedFiles map[string][]byte, localSecretCount, redactedFileCount int) (*contract.ScanResult, error) {
 	// Create scan request
 	request := contract.ScanRequest{
@@ -237,36 +243,13 @@ func (hs *HybridScanner) sendToServer(redactedFiles map[string][]byte, localSecr
 
 	writer.Close()
 
-	// Send to server
-	resp, err := http.Post(
-		hs.ServerURL+"/api/v1/scan",
-		writer.FormDataContentType(),
-		&buf,
-	)
+	// Update progress to show we're waiting for analysis
+	hs.progress.Update("Analyzing code...")
+
+	// Send to server using the InkogClient (with retry logic)
+	scanResponse, err := hs.client.SendScan(writer.FormDataContentType(), &buf)
 	if err != nil {
 		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := ioutil.ReadAll(resp.Body)
-		// Print error to stderr for visibility
-		fmt.Fprintf(os.Stderr, "❌ Server error %d: %s\n", resp.StatusCode, string(body))
-		return nil, fmt.Errorf("server error %d", resp.StatusCode)
-	}
-
-	// Parse server response
-	var scanResponse contract.ScanResponse
-	if err := json.NewDecoder(resp.Body).Decode(&scanResponse); err != nil {
-		// Print parse error to stderr
-		fmt.Fprintf(os.Stderr, "❌ Failed to parse server response: %v\n", err)
-		return nil, fmt.Errorf("failed to parse server response: %w", err)
-	}
-
-	if !scanResponse.Success {
-		// Print server error to stderr
-		fmt.Fprintf(os.Stderr, "❌ Server returned error: %s\n", scanResponse.Error)
-		return nil, fmt.Errorf("server returned error: %s", scanResponse.Error)
 	}
 
 	return &scanResponse.ScanResult, nil
@@ -291,6 +274,28 @@ func (hs *HybridScanner) mergeFindings(localSecrets []contract.Finding, serverFi
 
 // shouldScanFile determines if a file should be scanned
 func shouldScanFile(path string) bool {
+	// Exclude common directories that should not be scanned
+	excludedDirs := []string{
+		"node_modules",
+		"vendor",
+		".git",
+		".svn",
+		"__pycache__",
+		".venv",
+		"venv",
+		"dist",
+		"build",
+		".next",
+		".nuxt",
+	}
+
+	for _, dir := range excludedDirs {
+		if strings.Contains(path, string(filepath.Separator)+dir+string(filepath.Separator)) ||
+			strings.HasPrefix(path, dir+string(filepath.Separator)) {
+			return false
+		}
+	}
+
 	ext := filepath.Ext(path)
 	scannableExts := map[string]bool{
 		".py":   true,
