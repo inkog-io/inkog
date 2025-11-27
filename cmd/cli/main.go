@@ -38,6 +38,12 @@ const (
 	colorLow      = "\033[32m" // green
 	colorGray     = "\033[90m" // gray for gutter
 
+	// Security grading point values (Snyk-style)
+	PointsCritical = 30
+	PointsHigh     = 10
+	PointsMedium   = 5
+	PointsLow      = 1
+
 	HelpText = `Inkog - Security Scanner with Hybrid Privacy
 
 Usage:
@@ -312,6 +318,109 @@ func filterFindingsBySeverity(findings []contract.Finding, severity string) []co
 		}
 	}
 	return filtered
+}
+
+// calculateSecurityScore computes total points based on findings
+func calculateSecurityScore(findings []contract.Finding) int {
+	score := 0
+	for _, f := range findings {
+		switch f.Severity {
+		case "CRITICAL":
+			score += PointsCritical
+		case "HIGH":
+			score += PointsHigh
+		case "MEDIUM":
+			score += PointsMedium
+		case "LOW":
+			score += PointsLow
+		}
+	}
+	return score
+}
+
+// getSecurityGrade returns letter grade, description, and CSS class
+func getSecurityGrade(score int) (string, string, string) {
+	switch {
+	case score == 0:
+		return "A", "Excellent", "grade-a"
+	case score <= 20:
+		return "B", "Good", "grade-b"
+	case score <= 50:
+		return "C", "Moderate", "grade-c"
+	case score <= 100:
+		return "D", "Needs Work", "grade-d"
+	default:
+		return "F", "Critical", "grade-f"
+	}
+}
+
+// gateStatusClass returns CSS class for security gate
+func gateStatusClass(critical, high int) string {
+	if critical == 0 && high == 0 {
+		return "passed"
+	}
+	return "blocked"
+}
+
+// gateStatusText returns text for security gate
+func gateStatusText(critical, high int) string {
+	if critical == 0 && high == 0 {
+		return "PASSED"
+	}
+	return "BLOCKED"
+}
+
+// gateStatusIcon returns icon for security gate
+func gateStatusIcon(critical, high int) string {
+	if critical == 0 && high == 0 {
+		return "✅"
+	}
+	return "🚫"
+}
+
+// extractAgentName extracts the agent/directory name from file path
+func extractAgentName(filePath string) string {
+	// Handle paths like "/tmp/inkog-scan-xxx/crewai-python/crew.py"
+	parts := strings.Split(filePath, string(os.PathSeparator))
+	for i, part := range parts {
+		if strings.HasPrefix(part, "inkog-scan-") && i+1 < len(parts) {
+			return parts[i+1]
+		}
+	}
+	// Fallback: use first meaningful directory
+	for _, part := range parts {
+		if part != "" && part != "tmp" && !strings.HasPrefix(part, "inkog-scan-") {
+			return part
+		}
+	}
+	return "default"
+}
+
+// groupFindingsByAgent groups findings by their agent directory
+func groupFindingsByAgent(findings []contract.Finding) map[string][]contract.Finding {
+	groups := make(map[string][]contract.Finding)
+	for _, f := range findings {
+		agent := extractAgentName(f.File)
+		groups[agent] = append(groups[agent], f)
+	}
+	return groups
+}
+
+// getAgentNames returns sorted list of agent names
+func getAgentNames(groups map[string][]contract.Finding) []string {
+	names := make([]string, 0, len(groups))
+	for name := range groups {
+		names = append(names, name)
+	}
+	// Simple sort
+	for i := 0; i < len(names); i++ {
+		for j := i + 1; j < len(names); j++ {
+			if names[j] < names[i] {
+				names[i], names[j] = names[j], names[i]
+			}
+		}
+	}
+	return names
 }
 
 // outputJSON provides JSON output for integration with CI/CD
@@ -589,6 +698,206 @@ footer a:hover {
     text-decoration: underline;
 }
 
+/* Security Grade Badge */
+.security-grade {
+    display: flex;
+    gap: 2rem;
+    align-items: flex-start;
+    margin-bottom: 2rem;
+}
+
+.grade-badge {
+    width: 100px;
+    height: 100px;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.grade-badge .letter {
+    font-size: 3rem;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.grade-badge .label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.grade-a { background: #166534; color: white; }
+.grade-b { background: #15803d; color: white; }
+.grade-c { background: #ca8a04; color: white; }
+.grade-d { background: #ea580c; color: white; }
+.grade-f { background: #dc2626; color: white; }
+
+.score-breakdown {
+    flex: 1;
+}
+
+.score-breakdown h3 {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+.score-breakdown ul {
+    list-style: none;
+    padding: 0;
+    margin: 0.5rem 0;
+}
+
+.score-breakdown li {
+    padding: 0.25rem 0;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.score-breakdown .total {
+    font-weight: 600;
+    font-size: 1.125rem;
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border);
+}
+
+.score-breakdown .scale {
+    margin-top: 0.5rem;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+/* Security Gate */
+.security-gate {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.gate-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.gate-status {
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.gate-status.blocked { color: var(--critical); }
+.gate-status.passed { color: var(--low); }
+
+.gate-breakdown {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+}
+
+.gate-item {
+    text-align: center;
+    padding: 1rem;
+    border-radius: 8px;
+    background: var(--bg-card);
+}
+
+.gate-item .count {
+    font-size: 2rem;
+    font-weight: 700;
+    display: block;
+}
+
+.gate-item .label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    display: block;
+    margin: 0.25rem 0;
+}
+
+.gate-item .status {
+    font-size: 0.875rem;
+}
+
+.gate-item.fail .count { color: var(--critical); }
+.gate-item.warn .count { color: var(--medium); }
+.gate-item.pass .count { color: var(--low); }
+
+.gate-policy {
+    margin-top: 1rem;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    text-align: center;
+}
+
+/* Agent Tabs */
+.agent-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+
+.agent-tab {
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.875rem;
+}
+
+.agent-tab:hover {
+    border-color: var(--text-secondary);
+}
+
+.agent-tab.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+}
+
+/* Filter Pills */
+.filter-pills {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.pill {
+    padding: 0.375rem 0.75rem;
+    border-radius: 9999px;
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-size: 0.8125rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.pill:hover {
+    border-color: var(--text-secondary);
+}
+
+.pill.active {
+    background: var(--text-primary);
+    color: var(--bg-primary);
+}
+
+.pill.critical.active { background: var(--critical); border-color: var(--critical); color: white; }
+.pill.high.active { background: var(--high); border-color: var(--high); color: white; }
+.pill.medium.active { background: var(--medium); border-color: var(--medium); color: #171717; }
+.pill.low.active { background: var(--low); border-color: var(--low); color: white; }
+
 /* Print styles for CISO-friendly PDF export */
 @media print {
     /* Reset to light mode for printing */
@@ -682,9 +991,44 @@ footer a:hover {
 `
 
 const htmlReportJS = `
+// Finding toggle
 document.querySelectorAll('.finding-header').forEach(header => {
     header.addEventListener('click', () => {
         header.parentElement.classList.toggle('open');
+    });
+});
+
+// Agent tab switching
+document.querySelectorAll('.agent-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        document.querySelectorAll('.agent-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+
+        const agent = tab.dataset.agent;
+        document.querySelectorAll('.finding').forEach(finding => {
+            if (agent === 'all' || finding.dataset.agent === agent) {
+                finding.style.display = '';
+            } else {
+                finding.style.display = 'none';
+            }
+        });
+    });
+});
+
+// Severity filter pills
+document.querySelectorAll('.pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+        document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+
+        const severity = pill.dataset.severity;
+        document.querySelectorAll('.finding').forEach(finding => {
+            if (severity === 'all' || finding.dataset.severity === severity) {
+                finding.style.display = '';
+            } else {
+                finding.style.display = 'none';
+            }
+        });
     });
 });
 `
@@ -698,19 +1042,24 @@ func outputHTML(result *cli.ScanResult, minSeverity string) error {
 	lowCount := len(filterFindingsBySeverity(result.AllFindings, "LOW"))
 	totalCount := len(result.AllFindings)
 
-	// Calculate risk score (0-10 scale)
-	riskScore := float64(criticalCount)*2.5 + float64(highCount)*1.5 + float64(mediumCount)*0.5 + float64(lowCount)*0.1
-	if riskScore > 10 {
-		riskScore = 10
-	}
+	// Calculate security score and grade (Snyk-style)
+	securityScore := calculateSecurityScore(result.AllFindings)
+	grade, gradeLabel, gradeClass := getSecurityGrade(securityScore)
 
-	// Compliance checks
-	noCritical := criticalCount == 0
-	noHigh := highCount == 0
-	compliant := noCritical && noHigh
+	// Group findings by agent
+	agentGroups := groupFindingsByAgent(result.AllFindings)
+	agentNames := getAgentNames(agentGroups)
 
-	// Generate findings HTML
+	// Generate agent tabs HTML
+	agentTabsHTML := generateAgentTabsHTML(agentGroups, agentNames, totalCount)
+
+	// Generate findings HTML with agent data attributes
 	findingsHTML := generateFindingsHTML(result.AllFindings)
+
+	// Gate status helpers
+	gateClass := gateStatusClass(criticalCount, highCount)
+	gateText := gateStatusText(criticalCount, highCount)
+	gateIcon := gateStatusIcon(criticalCount, highCount)
 
 	// Build the full HTML
 	html := fmt.Sprintf(`<!DOCTYPE html>
@@ -727,49 +1076,70 @@ func outputHTML(result *cli.ScanResult, minSeverity string) error {
         <span class="timestamp">Generated: %s</span>
     </header>
 
-    <div class="cards">
-        <div class="card risk">
-            <span class="value">%.1f</span>
-            <span class="label">Risk Score</span>
+    <!-- Security Grade + Gate Summary -->
+    <section class="security-grade">
+        <div class="grade-badge %s">
+            <span class="letter">%s</span>
+            <span class="label">%s</span>
         </div>
-        <div class="card critical">
-            <span class="value">%d</span>
-            <span class="label">Critical</span>
-        </div>
-        <div class="card high">
-            <span class="value">%d</span>
-            <span class="label">High</span>
-        </div>
-        <div class="card medium">
-            <span class="value">%d</span>
-            <span class="label">Medium</span>
-        </div>
-        <div class="card low">
-            <span class="value">%d</span>
-            <span class="label">Low</span>
-        </div>
-    </div>
-
-    <section>
-        <h2>Compliance Status</h2>
-        <div class="compliance-grid">
-            <div class="compliance-item">
-                <span class="check">No Critical Issues</span>
-                <span class="status %s">%s</span>
-            </div>
-            <div class="compliance-item">
-                <span class="check">No High Issues</span>
-                <span class="status %s">%s</span>
-            </div>
-            <div class="compliance-item">
-                <span class="check">Overall Compliance</span>
-                <span class="status %s">%s</span>
-            </div>
+        <div class="score-breakdown">
+            <h3>Score Breakdown</h3>
+            <ul>
+                <li>%d Critical × %d = <strong>%d</strong></li>
+                <li>%d High × %d = <strong>%d</strong></li>
+                <li>%d Medium × %d = <strong>%d</strong></li>
+                <li>%d Low × %d = <strong>%d</strong></li>
+            </ul>
+            <div class="total">Total: %d points</div>
+            <p class="scale">A (0) | B (1-20) | C (21-50) | D (51-100) | F (100+)</p>
         </div>
     </section>
 
+    <!-- Security Gate -->
+    <section class="security-gate">
+        <div class="gate-header">
+            <span class="gate-status %s">%s Security Gate: %s</span>
+        </div>
+        <div class="gate-breakdown">
+            <div class="gate-item %s">
+                <span class="count">%d</span>
+                <span class="label">Critical</span>
+                <span class="status">%s</span>
+            </div>
+            <div class="gate-item %s">
+                <span class="count">%d</span>
+                <span class="label">High</span>
+                <span class="status">%s</span>
+            </div>
+            <div class="gate-item %s">
+                <span class="count">%d</span>
+                <span class="label">Medium</span>
+                <span class="status">%s</span>
+            </div>
+            <div class="gate-item %s">
+                <span class="count">%d</span>
+                <span class="label">Low</span>
+                <span class="status">%s</span>
+            </div>
+        </div>
+        <p class="gate-policy">Policy: 0 Critical + 0 High required to pass</p>
+    </section>
+
+    <!-- Agent Tabs -->
+    %s
+
+    <!-- Severity Filter Pills -->
+    <div class="filter-pills">
+        <button class="pill active" data-severity="all">All (%d)</button>
+        <button class="pill critical" data-severity="CRITICAL">Critical (%d)</button>
+        <button class="pill high" data-severity="HIGH">High (%d)</button>
+        <button class="pill medium" data-severity="MEDIUM">Medium (%d)</button>
+        <button class="pill low" data-severity="LOW">Low (%d)</button>
+    </div>
+
+    <!-- Findings -->
     <section>
-        <h2>Security Findings (%d)</h2>
+        <h2>Security Findings</h2>
         %s
     </section>
 
@@ -781,22 +1151,26 @@ func outputHTML(result *cli.ScanResult, minSeverity string) error {
 </body>
 </html>`,
 		htmlReportCSS,
-		// Timestamp
 		currentTimestamp(),
-		// Cards
-		riskScore,
-		criticalCount,
-		highCount,
-		mediumCount,
-		lowCount,
-		// Compliance - No Critical
-		statusClass(noCritical), statusText(noCritical),
-		// Compliance - No High
-		statusClass(noHigh), statusText(noHigh),
-		// Compliance - Overall
-		statusClass(compliant), statusText(compliant),
+		// Security Grade
+		gradeClass, grade, gradeLabel,
+		// Score breakdown
+		criticalCount, PointsCritical, criticalCount*PointsCritical,
+		highCount, PointsHigh, highCount*PointsHigh,
+		mediumCount, PointsMedium, mediumCount*PointsMedium,
+		lowCount, PointsLow, lowCount*PointsLow,
+		securityScore,
+		// Security Gate
+		gateClass, gateIcon, gateText,
+		gateItemClass(criticalCount), criticalCount, gateItemStatus(criticalCount),
+		gateItemClass(highCount), highCount, gateItemStatus(highCount),
+		gateItemClassWarn(mediumCount), mediumCount, gateItemStatusWarn(mediumCount),
+		gateItemClassPass(lowCount), lowCount, gateItemStatusPass(lowCount),
+		// Agent Tabs
+		agentTabsHTML,
+		// Filter Pills
+		totalCount, criticalCount, highCount, mediumCount, lowCount,
 		// Findings
-		totalCount,
 		findingsHTML,
 		// Footer
 		AppVersion,
@@ -807,7 +1181,65 @@ func outputHTML(result *cli.ScanResult, minSeverity string) error {
 	return nil
 }
 
-// generateFindingsHTML creates the HTML for all findings
+// generateAgentTabsHTML creates the agent tabs navigation
+func generateAgentTabsHTML(groups map[string][]contract.Finding, names []string, total int) string {
+	if len(names) <= 1 {
+		return "" // No tabs needed for single agent
+	}
+
+	var sb strings.Builder
+	sb.WriteString(`<div class="agent-tabs">`)
+	sb.WriteString(fmt.Sprintf(`<button class="agent-tab active" data-agent="all">All Agents (%d)</button>`, total))
+	for _, name := range names {
+		count := len(groups[name])
+		sb.WriteString(fmt.Sprintf(`<button class="agent-tab" data-agent="%s">%s (%d)</button>`,
+			escapeHTML(name), escapeHTML(name), count))
+	}
+	sb.WriteString(`</div>`)
+	return sb.String()
+}
+
+// Gate item helper functions
+func gateItemClass(count int) string {
+	if count > 0 {
+		return "fail"
+	}
+	return "pass"
+}
+
+func gateItemStatus(count int) string {
+	if count > 0 {
+		return "❌ Found"
+	}
+	return "✓ Clear"
+}
+
+func gateItemClassWarn(count int) string {
+	if count > 0 {
+		return "warn"
+	}
+	return "pass"
+}
+
+func gateItemStatusWarn(count int) string {
+	if count > 0 {
+		return "⚠️ Found"
+	}
+	return "✓ Clear"
+}
+
+func gateItemClassPass(count int) string {
+	return "pass"
+}
+
+func gateItemStatusPass(count int) string {
+	if count > 0 {
+		return fmt.Sprintf("%d found", count)
+	}
+	return "✓ Clear"
+}
+
+// generateFindingsHTML creates the HTML for all findings with data attributes for filtering
 func generateFindingsHTML(findings []contract.Finding) string {
 	if len(findings) == 0 {
 		return `<div class="empty-state">
@@ -827,8 +1259,12 @@ func generateFindingsHTML(findings []contract.Finding) string {
 			code = "(No code snippet available)"
 		}
 
+		// Extract agent name for filtering
+		agent := extractAgentName(f.File)
+
+		// Add data attributes for filtering
 		sb.WriteString(fmt.Sprintf(`
-        <div class="finding">
+        <div class="finding" data-agent="%s" data-severity="%s">
             <div class="finding-header">
                 <div class="finding-title">
                     <span class="icon">▶</span>
@@ -862,6 +1298,7 @@ func generateFindingsHTML(findings []contract.Finding) string {
                 <div class="code-snippet">%s</div>
             </div>
         </div>`,
+			escapeHTML(agent), f.Severity,
 			pattern,
 			file, f.Line,
 			strings.ToLower(f.Severity), f.Severity,

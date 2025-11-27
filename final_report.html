@@ -1,0 +1,1441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inkog Security Report</title>
+    <style>
+:root {
+    --bg-primary: #0a0a0a;
+    --bg-secondary: #171717;
+    --bg-card: #1a1a1a;
+    --text-primary: #fafafa;
+    --text-secondary: #a1a1aa;
+    --border: #27272a;
+    --critical: #ef4444;
+    --high: #f97316;
+    --medium: #eab308;
+    --low: #22c55e;
+    --accent: #3b82f6;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    line-height: 1.6;
+    padding: 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border);
+}
+
+header h1 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+header h1::before {
+    content: '🔒';
+}
+
+.timestamp {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem;
+    text-align: center;
+    transition: border-color 0.2s;
+}
+
+.card:hover {
+    border-color: var(--text-secondary);
+}
+
+.card .value {
+    font-size: 2.5rem;
+    font-weight: 700;
+    display: block;
+    margin-bottom: 0.25rem;
+}
+
+.card .label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.card.risk .value { color: var(--accent); }
+.card.critical .value { color: var(--critical); }
+.card.high .value { color: var(--high); }
+.card.medium .value { color: var(--medium); }
+.card.low .value { color: var(--low); }
+
+section {
+    margin-bottom: 2rem;
+}
+
+section h2 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.compliance-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.compliance-item {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.compliance-item .check {
+    color: var(--text-secondary);
+}
+
+.compliance-item .status {
+    font-weight: 600;
+}
+
+.compliance-item .status.pass { color: var(--low); }
+.compliance-item .status.fail { color: var(--critical); }
+
+.finding {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 0.75rem;
+    overflow: hidden;
+}
+
+.finding-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    cursor: pointer;
+    transition: background 0.2s;
+    gap: 1rem;
+}
+
+.finding-header:hover {
+    background: var(--bg-card);
+}
+
+.finding-title {
+    flex: 1;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.finding-title .icon {
+    opacity: 0.5;
+    transition: transform 0.2s;
+}
+
+.finding.open .finding-title .icon {
+    transform: rotate(90deg);
+}
+
+.finding-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.finding-body {
+    display: none;
+    padding: 1rem;
+    border-top: 1px solid var(--border);
+    background: var(--bg-primary);
+}
+
+.finding.open .finding-body {
+    display: block;
+}
+
+.finding-details {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.finding-details p {
+    margin: 0;
+}
+
+.finding-details strong {
+    color: var(--text-secondary);
+    font-weight: 500;
+    display: block;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.25rem;
+}
+
+.code-snippet {
+    background: #000;
+    padding: 1rem;
+    border-radius: 6px;
+    font-family: 'SF Mono', 'Monaco', 'Consolas', 'Liberation Mono', monospace;
+    font-size: 0.8125rem;
+    overflow-x: auto;
+    white-space: pre;
+    color: #e4e4e7;
+    border: 1px solid var(--border);
+}
+
+.severity-badge {
+    padding: 0.25rem 0.625rem;
+    border-radius: 9999px;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+}
+
+.severity-critical { background: var(--critical); color: white; }
+.severity-high { background: var(--high); color: white; }
+.severity-medium { background: var(--medium); color: #171717; }
+.severity-low { background: var(--low); color: white; }
+
+.empty-state {
+    text-align: center;
+    padding: 3rem;
+    color: var(--text-secondary);
+}
+
+.empty-state .icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+}
+
+footer {
+    margin-top: 3rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+}
+
+footer a {
+    color: var(--accent);
+    text-decoration: none;
+}
+
+footer a:hover {
+    text-decoration: underline;
+}
+
+/* Print styles for CISO-friendly PDF export */
+@media print {
+    /* Reset to light mode for printing */
+    :root {
+        --bg-primary: #ffffff;
+        --bg-secondary: #f5f5f5;
+        --bg-card: #ffffff;
+        --text-primary: #171717;
+        --text-secondary: #525252;
+        --border: #e5e5e5;
+    }
+
+    body {
+        background: white;
+        color: black;
+        padding: 0;
+        max-width: none;
+    }
+
+    /* Hide interactive elements */
+    .filter-buttons,
+    .finding-title .icon,
+    footer a {
+        display: none !important;
+    }
+
+    /* Expand all findings */
+    .finding-body {
+        display: block !important;
+    }
+
+    /* Remove hover effects */
+    .card:hover,
+    .finding-header:hover {
+        border-color: var(--border);
+        background: transparent;
+    }
+
+    /* Ensure cards print in a row */
+    .cards {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .card {
+        flex: 1;
+        min-width: 100px;
+        border: 1px solid #ccc;
+        page-break-inside: avoid;
+    }
+
+    /* Code snippets print-friendly */
+    .code-snippet {
+        background: #f5f5f5;
+        color: #171717;
+        border: 1px solid #ccc;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+    }
+
+    /* Severity badges print-friendly */
+    .severity-badge {
+        border: 1px solid currentColor;
+    }
+
+    .severity-critical { background: #fee2e2; color: #991b1b; }
+    .severity-high { background: #ffedd5; color: #9a3412; }
+    .severity-medium { background: #fef3c7; color: #92400e; }
+    .severity-low { background: #dcfce7; color: #166534; }
+
+    /* Page breaks */
+    .finding {
+        page-break-inside: avoid;
+        margin-bottom: 1rem;
+    }
+
+    section {
+        page-break-before: auto;
+    }
+
+    /* Compliance section should not break */
+    .compliance-grid {
+        page-break-inside: avoid;
+    }
+
+    @page {
+        margin: 2cm;
+    }
+}
+</style>
+</head>
+<body>
+    <header>
+        <h1>Inkog Security Report</h1>
+        <span class="timestamp">Generated: 2025-11-27 21:09:53</span>
+    </header>
+
+    <div class="cards">
+        <div class="card risk">
+            <span class="value">10.0</span>
+            <span class="label">Risk Score</span>
+        </div>
+        <div class="card critical">
+            <span class="value">8</span>
+            <span class="label">Critical</span>
+        </div>
+        <div class="card high">
+            <span class="value">17</span>
+            <span class="label">High</span>
+        </div>
+        <div class="card medium">
+            <span class="value">4</span>
+            <span class="label">Medium</span>
+        </div>
+        <div class="card low">
+            <span class="value">0</span>
+            <span class="label">Low</span>
+        </div>
+    </div>
+
+    <section>
+        <h2>Compliance Status</h2>
+        <div class="compliance-grid">
+            <div class="compliance-item">
+                <span class="check">No Critical Issues</span>
+                <span class="status fail">FAIL</span>
+            </div>
+            <div class="compliance-item">
+                <span class="check">No High Issues</span>
+                <span class="status fail">FAIL</span>
+            </div>
+            <div class="compliance-item">
+                <span class="check">Overall Compliance</span>
+                <span class="status fail">FAIL</span>
+            </div>
+        </div>
+    </section>
+
+    <section>
+        <h2>Security Findings (29)</h2>
+        
+        <div class="finding">
+            <div class="finding-header">
+                <div class="finding-title">
+                    <span class="icon">▶</span>
+                    <span>Unbounded Loop in Agentic System</span>
+                </div>
+                <div class="finding-meta">
+                    <span>n8n-workflow/workflow.json:0</span>
+                    <span class="severity-badge severity-critical">CRITICAL</span>
+                </div>
+            </div>
+            <div class="finding-body">
+                <div class="finding-details">
+                    <p>
+                        <strong>File</strong>
+                        n8n-workflow/workflow.json:0:0
+                    </p>
+                    <p>
+                        <strong>CWE</strong>
+                        CWE-835, CWE-400
+                    </p>
+                    <p>
+                        <strong>OWASP</strong>
+                        LLM10
+                    </p>
+                    <p>
+                        <strong>Confidence</strong>
+                        95%
+                    </p>
+                </div>
+                <p style="margin-bottom: 1rem; color: var(--text-secondary);">Loop lacks termination guards (max_iterations, timeout, break condition). This can lead to infinite execution, token exhaustion, and denial of service. (at $.nodes[?(@.id==&#39;loop-1&#39;)])</p>
+                <div class="code-snippet">(No code snippet available)</div>
+            </div>
+        </div>
+        <div class="finding">
+            <div class="finding-header">
+                <div class="finding-title">
+                    <span class="icon">▶</span>
+                    <span>Token Bombing Attack</span>
+                </div>
+                <div class="finding-meta">
+                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:31</span>
+                    <span class="severity-badge severity-critical">CRITICAL</span>
+                </div>
+            </div>
+            <div class="finding-body">
+                <div class="finding-details">
+                    <p>
+                        <strong>File</strong>
+                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:31:1
+                    </p>
+                    <p>
+                        <strong>CWE</strong>
+                        CWE-770
+                    </p>
+                    <p>
+                        <strong>OWASP</strong>
+                        A01:2021
+                    </p>
+                    <p>
+                        <strong>Confidence</strong>
+                        95%
+                    </p>
+                </div>
+                <p style="margin-bottom: 1rem; color: var(--text-secondary);">LLM API call (OpenAI) without token limits in recursive context</p>
+                <div class="code-snippet">def __init__(self, model: str = &quot;gpt-4&quot;, temperature: float = 0.7):</div>
+            </div>
+        </div>
+        <div class="finding">
+            <div class="finding-header">
+                <div class="finding-title">
+                    <span class="icon">▶</span>
+                    <span>Token Bombing Attack</span>
+                </div>
+                <div class="finding-meta">
+                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:39</span>
+                    <span class="severity-badge severity-critical">CRITICAL</span>
+                </div>
+            </div>
+            <div class="finding-body">
+                <div class="finding-details">
+                    <p>
+                        <strong>File</strong>
+                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:39:1
+                    </p>
+                    <p>
+                        <strong>CWE</strong>
+                        CWE-770
+                    </p>
+                    <p>
+                        <strong>OWASP</strong>
+                        A01:2021
+                    </p>
+                    <p>
+                        <strong>Confidence</strong>
+                        88%
+                    </p>
+                </div>
+                <p style="margin-bottom: 1rem; color: var(--text-secondary);">LLM API call (OpenAI) without token limits in unbounded context</p>
+                <div class="code-snippet">self.client = OpenAI(api_key=os.getenv(&quot;OPENAI_API_KEY&quot;))</div>
+            </div>
+        </div>
+        <div class="finding">
+            <div class="finding-header">
+                <div class="finding-title">
+                    <span class="icon">▶</span>
+                    <span>Token Bombing Attack</span>
+                </div>
+                <div class="finding-meta">
+                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:76</span>
+                    <span class="severity-badge severity-critical">CRITICAL</span>
+                </div>
+            </div>
+            <div class="finding-body">
+                <div class="finding-details">
+                    <p>
+                        <strong>File</strong>
+                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:76:1
+                    </p>
+                    <p>
+                        <strong>CWE</strong>
+                        CWE-770
+                    </p>
+                    <p>
+                        <strong>OWASP</strong>
+                        A01:2021
+                    </p>
+                    <p>
+                        <strong>Confidence</strong>
+                        88%
+                    </p>
+                </div>
+                <p style="margin-bottom: 1rem; color: var(--text-secondary);">LLM API call (OpenAI) without token limits in unbounded context</p>
+                <div class="code-snippet">response = self.client.chat.completions.create(</div>
+            </div>
+        </div>
+        <div class="finding">
+            <div class="finding-header">
+                <div class="finding-title">
+                    <span class="icon">▶</span>
+                    <span>Unbounded Loop in Agentic System</span>
+                </div>
+                <div class="finding-meta">
+                    <span>langgraph-python/agent.py:97</span>
+                    <span class="severity-badge severity-critical">CRITICAL</span>
+                </div>
+            </div>
+            <div class="finding-body">
+                <div class="finding-details">
+                    <p>
+                        <strong>File</strong>
+                        langgraph-python/agent.py:97:8
+                    </p>
+                    <p>
+                        <strong>CWE</strong>
+                        CWE-835, CWE-400
+                    </p>
+                    <p>
+                        <strong>OWASP</strong>
+                        LLM10
+                    </p>
+                    <p>
+                        <strong>Confidence</strong>
+                        98%
+                    </p>
+                </div>
+                <p style="margin-bottom: 1rem; color: var(--text-secondary);">Loop lacks termination guards (max_iterations, timeout, break condition). This can lead to infinite execution, token exhaustion, and denial of service.</p>
+                <div class="code-snippet">        iteration = 0
+        while self._should_continue_solving():
+            iteration += 1
+            logger.info(f&quot;Iteration {iteration}: Requesting refinement...&quot;)</div>
+            </div>
+        </div>
+        <div class="finding">
+            <div class="finding-header">
+                <div class="finding-title">
+                    <span class="icon">▶</span>
+                    <span>Output Validation Failures</span>
+                </div>
+                <div class="finding-meta">
+                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:190</span>
+                    <span class="severity-badge severity-critical">CRITICAL</span>
+                </div>
+            </div>
+            <div class="finding-body">
+                <div class="finding-details">
+                    <p>
+                        <strong>File</strong>
+                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:190:1
+                    </p>
+                    <p>
+                        <strong>CWE</strong>
+                        CWE-94
+                    </p>
+                    <p>
+                        <strong>OWASP</strong>
+                        
+                    </p>
+                    <p>
+                        <strong>Confidence</strong>
+                        95%
+                    </p>
+                </div>
+                <p style="margin-bottom: 1rem; color: var(--text-secondary);">eval() used on untrusted input - allows arbitrary code execution</p>
+                <div class="code-snippet">result = eval(user_input)</div>
+            </div>
+        </div>
+        <div class="finding">
+            <div class="finding-header">
+                <div class="finding-title">
+                    <span class="icon">▶</span>
+                    <span>Unvalidated Code Execution (eval/exec)</span>
+                </div>
+                <div class="finding-meta">
+                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:249</span>
+                    <span class="severity-badge severity-critical">CRITICAL</span>
+                </div>
+            </div>
+            <div class="finding-body">
+                <div class="finding-details">
+                    <p>
+                        <strong>File</strong>
+                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:249:9
+                    </p>
+                    <p>
+                        <strong>CWE</strong>
+                        CWE-95
+                    </p>
+                    <p>
+                        <strong>OWASP</strong>
+                        A03:2021
+                    </p>
+                    <p>
+                        <strong>Confidence</strong>
+                        92%
+                    </p>
+                </div>
+                <p style="margin-bottom: 1rem; color: var(--text-secondary);">Unvalidated eval() with user input or LLM output - RCE vulnerability</p>
+                <div class="code-snippet">        return eval(command)</div>
+            </div>
+        </div>
+        <div class="finding">
+            <div class="finding-header">
+                <div class="finding-title">
+                    <span class="icon">▶</span>
+                    <span>Unbounded Loop in Agentic System</span>
+                </div>
+                <div class="finding-meta">
+                    <span>langgraph-python/agent.py:296</span>
+                    <span class="severity-badge severity-critical">CRITICAL</span>
+                </div>
+            </div>
+            <div class="finding-body">
+                <div class="finding-details">
+                    <p>
+                        <strong>File</strong>
+                        langgraph-python/agent.py:296:8
+                    </p>
+                    <p>
+                        <strong>CWE</strong>
+                        CWE-835, CWE-400
+                    </p>
+                    <p>
+                        <strong>OWASP</strong>
+                        LLM10
+                    </p>
+                    <p>
+                        <strong>Confidence</strong>
+                        95%
+                    </p>
+                </div>
+                <p style="margin-bottom: 1rem; color: var(--text-secondary);">Loop lacks termination guards (max_iterations, timeout, break condition). This can lead to infinite execution, token exhaustion, and denial of service.</p>
+                <div class="code-snippet">
+        while True:
+            user_input = input(&quot;You: &quot;).strip()
+
+            if user_input.lower() == &#39;exit&#39;:</div>
+            </div>
+        </div>
+        <div class="finding">
+            <div class="finding-header">
+                <div class="finding-title">
+                    <span class="icon">▶</span>
+                    <span>Recursive Tool Calling</span>
+                </div>
+                <div class="finding-meta">
+                    <span>/tmp/inkog-scan-813804616/crewai-python/crew.py:39</span>
+                    <span class="severity-badge severity-high">HIGH</span>
+                </div>
+            </div>
+            <div class="finding-body">
+                <div class="finding-details">
+                    <p>
+                        <strong>File</strong>
+                        /tmp/inkog-scan-813804616/crewai-python/crew.py:39:1
+                    </p>
+                    <p>
+                        <strong>CWE</strong>
+                        CWE-835
+                    </p>
+                    <p>
+                        <strong>OWASP</strong>
+                        A05:2021
+                    </p>
+                    <p>
+                        <strong>Confidence</strong>
+                        85%
+                    </p>
+                </div>
+                <p style="margin-bottom: 1rem; color: var(--text-secondary);">Multiple agents with delegation enabled (5 agents) - potential agent delegation loop</p>
+                <div class="code-snippet">allow_delegation=True,  # VULNERABILITY: Enables recursive delegation</div>
+            </div>
+        </div>
+        <div class="finding">
+            <div class="finding-header">
+                <div class="finding-title">
+                    <span class="icon">▶</span>
+                    <span>Missing Rate Limits</span>
+                </div>
+                <div class="finding-meta">
+                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:65</span>
+                    <span class="severity-badge severity-high">HIGH</span>
+                </div>
+            </div>
+            <div class="finding-body">
+                <div class="finding-details">
+                    <p>
+                        <strong>File</strong>
+                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:65:9
+                    </p>
+                    <p>
+                        <strong>CWE</strong>
+                        CWE-400
+                    </p>
+                    <p>
+                        <strong>OWASP</strong>
+                        API4
+                    </p>
+                    <p>
+                        <strong>Confidence</strong>
+                        60%
+                    </p>
+                </div>
+                <p style="margin-bottom: 1rem; color: var(--text-secondary);">Unbounded loop with external API calls - risk of runaway costs and DoS</p>
+                <div class="code-snippet">        logger.info(f&quot;Starting task resolution for: {task_description}&quot;)</div>
+            </div>
+        </div>
+        <div class="finding">
+            <div class="finding-header">
+                <div class="finding-title">
+                    <span class="icon">▶</span>
+                    <span>Context Window Exhaustion</span>
+                </div>
+                <div class="finding-meta">
+                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:73</span>
+                    <span class="severity-badge severity-high">HIGH</span>
+                </div>
+            </div>
+            <div class="finding-body">
+                <div class="finding-details">
+                    <p>
+                        <strong>File</strong>
+                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:73:0
+                    </p>
+                    <p>
+                        <strong>CWE</strong>
+                        CWE-400
+                    </p>
+                    <p>
+                        <strong>OWASP</strong>
+                        
+                    </p>
+                    <p>
+                        <strong>Confidence</strong>
+                        80%
+                    </p>
+                </div>
+                <p style="margin-bottom: 1rem; color: var(--text-secondary);">Unbounded conversation history accumulation: Appending to conversation/history without bounding logic will cause memory exhaustion. Add max size checks or use summarization.</p>
+                <div class="code-snippet">(No code snippet available)</div>
+            </div>
+        </div>
+        <div class="finding">
+            <div class="finding-header">
+                <div class="finding-title">
+                    <span class="icon">▶</span>
+                    <span>Context Window Exhaustion</span>
+                </div>
+                <div class="finding-meta">
+                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:88</span>
+                    <span class="severity-badge severity-high">HIGH</span>
+                </div>
+            </div>
+            <div class="finding-body">
+                <div class="finding-details">
+                    <p>
+                        <strong>File</strong>
+                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:88:0
+                    </p>
+                    <p>
+                        <strong>CWE</strong>
+                        CWE-400
+                    </p>
+                    <p>
+                        <strong>OWASP</strong>
+                        
+                    </p>
+                    <p>
+                        <strong>Confidence</strong>
+                        80%
+                    </p>
+                </div>
+                <p style="margin-bottom: 1rem; color: var(--text-secondary);">Unbounded conversation history accumulation: Appending to conversation/history without bounding logic will cause memory exhaustion. Add max size checks or use summarization.</p>
+                <div class="code-snippet">(No code snippet available)</div>
+            </div>
+        </div>
+        <div class="finding">
+            <div class="finding-header">
+                <div class="finding-title">
+                    <span class="icon">▶</span>
+                    <span>Context Window Exhaustion</span>
+                </div>
+                <div class="finding-meta">
+                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:105</span>
+                    <span class="severity-badge severity-high">HIGH</span>
+                </div>
+            </div>
+            <div class="finding-body">
+                <div class="finding-details">
+                    <p>
+                        <strong>File</strong>
+                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:105:0
+                    </p>
+                    <p>
+                        <strong>CWE</strong>
+                        CWE-400
+                    </p>
+                    <p>
+                        <strong>OWASP</strong>
+                        
+                    </p>
+                    <p>
+                        <strong>Confidence</strong>
+                        80%
+                    </p>
+                </div>
+                <p style="margin-bottom: 1rem; color: var(--text-secondary);">Unbounded conversation history accumulation: Appending to conversation/history without bounding logic will cause memory exhaustion. Add max size checks or use summarization.</p>
+                <div class="code-snippet">(No code snippet available)</div>
+            </div>
+        </div>
+        <div class="finding">
+            <div class="finding-header">
+                <div class="finding-title">
+                    <span class="icon">▶</span>
+                    <span>Context Window Exhaustion</span>
+                </div>
+                <div class="finding-meta">
+                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:120</span>
+                    <span class="severity-badge severity-high">HIGH</span>
+                </div>
+            </div>
+            <div class="finding-body">
+                <div class="finding-details">
+                    <p>
+                        <strong>File</strong>
+                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:120:0
+                    </p>
+                    <p>
+                        <strong>CWE</strong>
+                        CWE-400
+                    </p>
+                    <p>
+                        <strong>OWASP</strong>
+                        
+                    </p>
+                    <p>
+                        <strong>Confidence</strong>
+                        80%
+                    </p>
+                </div>
+                <p style="margin-bottom: 1rem; color: var(--text-secondary);">Unbounded conversation history accumulation: Appending to conversation/history without bounding logic will cause memory exhaustion. Add max size checks or use summarization.</p>
+                <div class="code-snippet">(No code snippet available)</div>
+            </div>
+        </div>
+        <div class="finding">
+            <div class="finding-header">
+                <div class="finding-title">
+                    <span class="icon">▶</span>
+                    <span>Missing Rate Limits</span>
+                </div>
+                <div class="finding-meta">
+                    <span>/tmp/inkog-scan-813804616/crewai-python/crew.py:210</span>
+                    <span class="severity-badge severity-high">HIGH</span>
+                </div>
+            </div>
+            <div class="finding-body">
+                <div class="finding-details">
+                    <p>
+                        <strong>File</strong>
+                        /tmp/inkog-scan-813804616/crewai-python/crew.py:210:5
+                    </p>
+                    <p>
+                        <strong>CWE</strong>
+                        CWE-400
+                    </p>
+                    <p>
+                        <strong>OWASP</strong>
+                        API4
+                    </p>
+                    <p>
+                        <strong>Confidence</strong>
+                        75%
+                    </p>
+                </div>
+                <p style="margin-bottom: 1rem; color: var(--text-secondary);">Recursive call without depth limit - can cause runaway loops and massive API costs</p>
+                <div class="code-snippet">    return result</div>
+            </div>
+        </div>
+        <div class="finding">
+            <div class="finding-header">
+                <div class="finding-title">
+                    <span class="icon">▶</span>
+                    <span>Prompt Injection</span>
+                </div>
+                <div class="finding-meta">
+                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:213</span>
+                    <span class="severity-badge severity-high">HIGH</span>
+                </div>
+            </div>
+            <div class="finding-body">
+                <div class="finding-details">
+                    <p>
+                        <strong>File</strong>
+                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:213:9
+                    </p>
+                    <p>
+                        <strong>CWE</strong>
+                        CWE-74
+                    </p>
+                    <p>
+                        <strong>OWASP</strong>
+                        LLM01
+                    </p>
+                    <p>
+                        <strong>Confidence</strong>
+                        90%
+                    </p>
+                </div>
+                <p style="margin-bottom: 1rem; color: var(--text-secondary);">Unvalidated user input directly interpolated into LLM prompt - enables prompt injection attacks</p>
+                <div class="code-snippet">        logger.debug(f&quot;Formatted prompt: {template}&quot;)</div>
+            </div>
+        </div>
+        <div class="finding">
+            <div class="finding-header">
+                <div class="finding-title">
+                    <span class="icon">▶</span>
+                    <span>Missing Rate Limits</span>
+                </div>
+                <div class="finding-meta">
+                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:214</span>
+                    <span class="severity-badge severity-high">HIGH</span>
+                </div>
+            </div>
+            <div class="finding-body">
+                <div class="finding-details">
+                    <p>
+                        <strong>File</strong>
+                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:214:9
+                    </p>
+                    <p>
+                        <strong>CWE</strong>
+                        CWE-400
+                    </p>
+                    <p>
+                        <strong>OWASP</strong>
+                        API4
+                    </p>
+                    <p>
+                        <strong>Confidence</strong>
+                        75%
+                    </p>
+                </div>
+                <p style="margin-bottom: 1rem; color: var(--text-secondary);">Recursive call without depth limit - can cause runaway loops and massive API costs</p>
+                <div class="code-snippet">        return template</div>
+            </div>
+        </div>
+        <div class="finding">
+            <div class="finding-header">
+                <div class="finding-title">
+                    <span class="icon">▶</span>
+                    <span>Missing Rate Limits</span>
+                </div>
+                <div class="finding-meta">
+                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:232</span>
+                    <span class="severity-badge severity-high">HIGH</span>
+                </div>
+            </div>
+            <div class="finding-body">
+                <div class="finding-details">
+                    <p>
+                        <strong>File</strong>
+                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:232:9
+                    </p>
+                    <p>
+                        <strong>CWE</strong>
+                        CWE-400
+                    </p>
+                    <p>
+                        <strong>OWASP</strong>
+                        API4
+                    </p>
+                    <p>
+                        <strong>Confidence</strong>
+                        75%
+                    </p>
+                </div>
+                <p style="margin-bottom: 1rem; color: var(--text-secondary);">Recursive call without depth limit - can cause runaway loops and massive API costs</p>
+                <div class="code-snippet">        return self._run_command(command)</div>
+            </div>
+        </div>
+        <div class="finding">
+            <div class="finding-header">
+                <div class="finding-title">
+                    <span class="icon">▶</span>
+                    <span>Recursive Tool Calling</span>
+                </div>
+                <div class="finding-meta">
+                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:340</span>
+                    <span class="severity-badge severity-high">HIGH</span>
+                </div>
+            </div>
+            <div class="finding-body">
+                <div class="finding-details">
+                    <p>
+                        <strong>File</strong>
+                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:340:1
+                    </p>
+                    <p>
+                        <strong>CWE</strong>
+                        CWE-674
+                    </p>
+                    <p>
+                        <strong>OWASP</strong>
+                        A05:2021
+                    </p>
+                    <p>
+                        <strong>Confidence</strong>
+                        85%
+                    </p>
+                </div>
+                <p style="margin-bottom: 1rem; color: var(--text-secondary);">Cycle detected in call graph: main-&gt;main - potential infinite loop</p>
+                <div class="code-snippet">def main():</div>
+            </div>
+        </div>
+        <div class="finding">
+            <div class="finding-header">
+                <div class="finding-title">
+                    <span class="icon">▶</span>
+                    <span>Token Bombing Attack</span>
+                </div>
+                <div class="finding-meta">
+                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:351</span>
+                    <span class="severity-badge severity-high">HIGH</span>
+                </div>
+            </div>
+            <div class="finding-body">
+                <div class="finding-details">
+                    <p>
+                        <strong>File</strong>
+                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:351:1
+                    </p>
+                    <p>
+                        <strong>CWE</strong>
+                        CWE-770
+                    </p>
+                    <p>
+                        <strong>OWASP</strong>
+                        A01:2021
+                    </p>
+                    <p>
+                        <strong>Confidence</strong>
+                        88%
+                    </p>
+                </div>
+                <p style="margin-bottom: 1rem; color: var(--text-secondary);">LLM API call (OpenAI) without token limits in recursive context</p>
+                <div class="code-snippet">if not os.getenv(&quot;OPENAI_API_KEY&quot;):</div>
+            </div>
+        </div>
+        <div class="finding">
+            <div class="finding-header">
+                <div class="finding-title">
+                    <span class="icon">▶</span>
+                    <span>Token Bombing Attack</span>
+                </div>
+                <div class="finding-meta">
+                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:352</span>
+                    <span class="severity-badge severity-high">HIGH</span>
+                </div>
+            </div>
+            <div class="finding-body">
+                <div class="finding-details">
+                    <p>
+                        <strong>File</strong>
+                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:352:1
+                    </p>
+                    <p>
+                        <strong>CWE</strong>
+                        CWE-770
+                    </p>
+                    <p>
+                        <strong>OWASP</strong>
+                        A01:2021
+                    </p>
+                    <p>
+                        <strong>Confidence</strong>
+                        88%
+                    </p>
+                </div>
+                <p style="margin-bottom: 1rem; color: var(--text-secondary);">LLM API call (OpenAI) without token limits in recursive context</p>
+                <div class="code-snippet">logger.error(&quot;❌ OPENAI_API_KEY environment variable not set&quot;)</div>
+            </div>
+        </div>
+        <div class="finding">
+            <div class="finding-header">
+                <div class="finding-title">
+                    <span class="icon">▶</span>
+                    <span>Token Bombing Attack</span>
+                </div>
+                <div class="finding-meta">
+                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:353</span>
+                    <span class="severity-badge severity-high">HIGH</span>
+                </div>
+            </div>
+            <div class="finding-body">
+                <div class="finding-details">
+                    <p>
+                        <strong>File</strong>
+                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:353:1
+                    </p>
+                    <p>
+                        <strong>CWE</strong>
+                        CWE-770
+                    </p>
+                    <p>
+                        <strong>OWASP</strong>
+                        A01:2021
+                    </p>
+                    <p>
+                        <strong>Confidence</strong>
+                        88%
+                    </p>
+                </div>
+                <p style="margin-bottom: 1rem; color: var(--text-secondary);">LLM API call (OpenAI) without token limits in recursive context</p>
+                <div class="code-snippet">print(&quot;Error: Please set OPENAI_API_KEY environment variable&quot;)</div>
+            </div>
+        </div>
+        <div class="finding">
+            <div class="finding-header">
+                <div class="finding-title">
+                    <span class="icon">▶</span>
+                    <span>Missing Rate Limits</span>
+                </div>
+                <div class="finding-meta">
+                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:354</span>
+                    <span class="severity-badge severity-high">HIGH</span>
+                </div>
+            </div>
+            <div class="finding-body">
+                <div class="finding-details">
+                    <p>
+                        <strong>File</strong>
+                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:354:9
+                    </p>
+                    <p>
+                        <strong>CWE</strong>
+                        CWE-400
+                    </p>
+                    <p>
+                        <strong>OWASP</strong>
+                        API4
+                    </p>
+                    <p>
+                        <strong>Confidence</strong>
+                        75%
+                    </p>
+                </div>
+                <p style="margin-bottom: 1rem; color: var(--text-secondary);">Recursive call without depth limit - can cause runaway loops and massive API costs</p>
+                <div class="code-snippet">        return 1</div>
+            </div>
+        </div>
+        <div class="finding">
+            <div class="finding-header">
+                <div class="finding-title">
+                    <span class="icon">▶</span>
+                    <span>Token Bombing Attack</span>
+                </div>
+                <div class="finding-meta">
+                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:357</span>
+                    <span class="severity-badge severity-high">HIGH</span>
+                </div>
+            </div>
+            <div class="finding-body">
+                <div class="finding-details">
+                    <p>
+                        <strong>File</strong>
+                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:357:1
+                    </p>
+                    <p>
+                        <strong>CWE</strong>
+                        CWE-770
+                    </p>
+                    <p>
+                        <strong>OWASP</strong>
+                        A01:2021
+                    </p>
+                    <p>
+                        <strong>Confidence</strong>
+                        88%
+                    </p>
+                </div>
+                <p style="margin-bottom: 1rem; color: var(--text-secondary);">LLM API call (OpenAI) without token limits in recursive context</p>
+                <div class="code-snippet">agent = TaskAgent(model=&quot;gpt-4&quot;, temperature=0.7)</div>
+            </div>
+        </div>
+        <div class="finding">
+            <div class="finding-header">
+                <div class="finding-title">
+                    <span class="icon">▶</span>
+                    <span>Missing Rate Limits</span>
+                </div>
+                <div class="finding-meta">
+                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:362</span>
+                    <span class="severity-badge severity-high">HIGH</span>
+                </div>
+            </div>
+            <div class="finding-body">
+                <div class="finding-details">
+                    <p>
+                        <strong>File</strong>
+                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:362:5
+                    </p>
+                    <p>
+                        <strong>CWE</strong>
+                        CWE-400
+                    </p>
+                    <p>
+                        <strong>OWASP</strong>
+                        API4
+                    </p>
+                    <p>
+                        <strong>Confidence</strong>
+                        75%
+                    </p>
+                </div>
+                <p style="margin-bottom: 1rem; color: var(--text-secondary);">Recursive call without depth limit - can cause runaway loops and massive API costs</p>
+                <div class="code-snippet">    return 0</div>
+            </div>
+        </div>
+        <div class="finding">
+            <div class="finding-header">
+                <div class="finding-title">
+                    <span class="icon">▶</span>
+                    <span>Missing Rate Limits on LLM Calls</span>
+                </div>
+                <div class="finding-meta">
+                    <span>crewai-python/crew.py:19</span>
+                    <span class="severity-badge severity-medium">MEDIUM</span>
+                </div>
+            </div>
+            <div class="finding-body">
+                <div class="finding-details">
+                    <p>
+                        <strong>File</strong>
+                        crewai-python/crew.py:19:6
+                    </p>
+                    <p>
+                        <strong>CWE</strong>
+                        CWE-770, CWE-799
+                    </p>
+                    <p>
+                        <strong>OWASP</strong>
+                        LLM10
+                    </p>
+                    <p>
+                        <strong>Confidence</strong>
+                        50%
+                    </p>
+                </div>
+                <p style="margin-bottom: 1rem; color: var(--text-secondary);">LLM API calls lack rate limiting, allowing runaway costs or denial of service. Without throttling, a single user or attack can exhaust API budgets.</p>
+                <div class="code-snippet"># Initialize LLM
+llm = ChatOpenAI(
+    model=&quot;gpt-4&quot;,
+    temperature=0.7,
+    api_key=os.getenv(&quot;OPENAI_API_KEY&quot;)</div>
+            </div>
+        </div>
+        <div class="finding">
+            <div class="finding-header">
+                <div class="finding-title">
+                    <span class="icon">▶</span>
+                    <span>Missing Rate Limits on LLM Calls</span>
+                </div>
+                <div class="finding-meta">
+                    <span>langgraph-python/agent.py:77</span>
+                    <span class="severity-badge severity-medium">MEDIUM</span>
+                </div>
+            </div>
+            <div class="finding-body">
+                <div class="finding-details">
+                    <p>
+                        <strong>File</strong>
+                        langgraph-python/agent.py:77:19
+                    </p>
+                    <p>
+                        <strong>CWE</strong>
+                        CWE-770, CWE-799
+                    </p>
+                    <p>
+                        <strong>OWASP</strong>
+                        LLM10
+                    </p>
+                    <p>
+                        <strong>Confidence</strong>
+                        70%
+                    </p>
+                </div>
+                <p style="margin-bottom: 1rem; color: var(--text-secondary);">LLM API calls lack rate limiting, allowing runaway costs or denial of service. Without throttling, a single user or attack can exhaust API budgets.</p>
+                <div class="code-snippet">        # Get initial response from LLM
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=self.conversation_history,
+            temperature=self.temperature,</div>
+            </div>
+        </div>
+        <div class="finding">
+            <div class="finding-header">
+                <div class="finding-title">
+                    <span class="icon">▶</span>
+                    <span>Missing Rate Limits on LLM Calls</span>
+                </div>
+                <div class="finding-meta">
+                    <span>langgraph-python/agent.py:109</span>
+                    <span class="severity-badge severity-medium">MEDIUM</span>
+                </div>
+            </div>
+            <div class="finding-body">
+                <div class="finding-details">
+                    <p>
+                        <strong>File</strong>
+                        langgraph-python/agent.py:109:23
+                    </p>
+                    <p>
+                        <strong>CWE</strong>
+                        CWE-770, CWE-799
+                    </p>
+                    <p>
+                        <strong>OWASP</strong>
+                        LLM10
+                    </p>
+                    <p>
+                        <strong>Confidence</strong>
+                        70%
+                    </p>
+                </div>
+                <p style="margin-bottom: 1rem; color: var(--text-secondary);">LLM API calls lack rate limiting, allowing runaway costs or denial of service. Without throttling, a single user or attack can exhaust API budgets.</p>
+                <div class="code-snippet">            # Get refinement from LLM
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=self.conversation_history,
+                temperature=self.temperature,</div>
+            </div>
+        </div>
+        <div class="finding">
+            <div class="finding-header">
+                <div class="finding-title">
+                    <span class="icon">▶</span>
+                    <span>Missing Rate Limits on LLM Calls</span>
+                </div>
+                <div class="finding-meta">
+                    <span>langgraph-python/agent.py:153</span>
+                    <span class="severity-badge severity-medium">MEDIUM</span>
+                </div>
+            </div>
+            <div class="finding-body">
+                <div class="finding-details">
+                    <p>
+                        <strong>File</strong>
+                        langgraph-python/agent.py:153:19
+                    </p>
+                    <p>
+                        <strong>CWE</strong>
+                        CWE-770, CWE-799
+                    </p>
+                    <p>
+                        <strong>OWASP</strong>
+                        LLM10
+                    </p>
+                    <p>
+                        <strong>Confidence</strong>
+                        70%
+                    </p>
+                </div>
+                <p style="margin-bottom: 1rem; color: var(--text-secondary);">LLM API calls lack rate limiting, allowing runaway costs or denial of service. Without throttling, a single user or attack can exhaust API budgets.</p>
+                <div class="code-snippet">
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=temp_history,
+            temperature=self.temperature,</div>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <p>Report generated by <a href="https://inkog.io" target="_blank">Inkog</a> Security Scanner v1.0.0</p>
+    </footer>
+
+    <script>
+document.querySelectorAll('.finding-header').forEach(header => {
+    header.addEventListener('click', () => {
+        header.parentElement.classList.toggle('open');
+    });
+});
+</script>
+</body>
+</html>
+
+⚠️  Scan complete: 29 security issues found
