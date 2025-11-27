@@ -5,11 +5,11 @@
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL%203.0-blue)](LICENSE)
 [![Build: Passing](https://img.shields.io/badge/Build-Passing-brightgreen)]()
 [![Docker: Automated](https://img.shields.io/badge/Docker-Automated-2496ED)](https://ghcr.io/inkog-io/inkog)
-[![Slack: Community](https://img.shields.io/badge/Slack-Community-blueviolet)](https://inkog.io/slack)
+[![Slack: Community](https://img.shields.io/badge/Slack-Community-blueviolet)](https://join.slack.com/t/inkog-io/shared_invite/zt-3jrzztm28-cXyokCXO8KjKC6nBI0l4Gw)
 
 # Secure your Agent's Logic. Ship with Confidence.
 
-## The Logic Firewall for AI Agents. Prevent Infinite Loops, Token Bombing, and Privacy Leaks across Code and No-Code workflows.
+## The Logic Firewall for AI Agents. Prevent Infinite Loops, Token Bombing, Privacy Leaks and more for your agents across any Code/No-Code agentic framework.
 
 ---
 
@@ -17,7 +17,7 @@
 
 *Inkog scanning a LangGraph agent and detecting a token bombing vulnerability.*
 
-[![Book Security Audit](https://img.shields.io/badge/Book_Security_Audit-Contact_Sales-purple?style=for-the-badge)](https://cal.com/inkog/audit)
+[![Book a Demo](https://img.shields.io/badge/Book_a_Demo-Schedule_Now-purple?style=for-the-badge)](https://cal.com/inkog/demo)
 
 ---
 
@@ -49,17 +49,24 @@ inkog .
 
 ## Why Inkog?
 
-### Universal IR Engine
-Abstracts 15+ agent frameworks into a single intermediate representation. Scans Python ASTs (LangChain, CrewAI) and JSON configs (n8n, Flowise) with identical detection rules.
+### Universal Framework Support
+One scanner for 15+ agent frameworks. Analyzes Python code (LangChain, CrewAI) and JSON workflows (n8n, Flowise) with the same detection rules. No framework-specific setup required.
 
-### Inter-procedural DFG
-Implements Backward Slicing to track tainted user input across function boundaries. Detects prompt injection vectors that span multiple files and tool calls.
+### Cross-File Analysis
+Tracks user input as it flows through your codebase—across functions, files, and tool calls. Detects prompt injection vectors that span your entire agent architecture.
 
 ### Logic Security
-Identifies non-deterministic loops ("Doom Loops") and Token Bombing risks. Catches runaway agent behavior that static linters and type checkers miss.
+Detects runtime vulnerabilities that linters miss:
+- **Infinite Loops** — Agents stuck in cycles with no exit condition
+- **Token Bombing** — Unbounded context growth that drains your API budget
+- **Recursive Tool Calls** — Tools calling themselves without depth limits
+- **Missing Rate Limits** — Unthrottled API calls that can spiral out of control
 
 ### Hybrid Privacy
 Source code is redacted **locally** before transmission. Only the sanitized logic graph is analyzed remotely. Secrets, API keys, and credentials never leave your machine.
+
+### Extensible Rules
+Pluggable YAML-based rule engine. Add custom detection patterns for your organization's specific security policies.
 
 ---
 
@@ -124,4 +131,4 @@ See [CLI Reference](docs/CLI_REFERENCE.md) for full documentation.
 
 - **Issues:** [github.com/inkog-io/inkog/issues](https://github.com/inkog-io/inkog/issues)
 - **Security:** security@inkog.io
-- **Community:** [inkog.io/slack](https://inkog.io/slack)
+- **Community:** [Join our Slack](https://join.slack.com/t/inkog-io/shared_invite/zt-3jrzztm28-cXyokCXO8KjKC6nBI0l4Gw)
