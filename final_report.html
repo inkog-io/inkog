@@ -271,6 +271,206 @@ footer a:hover {
     text-decoration: underline;
 }
 
+/* Security Grade Badge */
+.security-grade {
+    display: flex;
+    gap: 2rem;
+    align-items: flex-start;
+    margin-bottom: 2rem;
+}
+
+.grade-badge {
+    width: 100px;
+    height: 100px;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.grade-badge .letter {
+    font-size: 3rem;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.grade-badge .label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.grade-a { background: #166534; color: white; }
+.grade-b { background: #15803d; color: white; }
+.grade-c { background: #ca8a04; color: white; }
+.grade-d { background: #ea580c; color: white; }
+.grade-f { background: #dc2626; color: white; }
+
+.score-breakdown {
+    flex: 1;
+}
+
+.score-breakdown h3 {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+.score-breakdown ul {
+    list-style: none;
+    padding: 0;
+    margin: 0.5rem 0;
+}
+
+.score-breakdown li {
+    padding: 0.25rem 0;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.score-breakdown .total {
+    font-weight: 600;
+    font-size: 1.125rem;
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border);
+}
+
+.score-breakdown .scale {
+    margin-top: 0.5rem;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+/* Security Gate */
+.security-gate {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.gate-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.gate-status {
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.gate-status.blocked { color: var(--critical); }
+.gate-status.passed { color: var(--low); }
+
+.gate-breakdown {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+}
+
+.gate-item {
+    text-align: center;
+    padding: 1rem;
+    border-radius: 8px;
+    background: var(--bg-card);
+}
+
+.gate-item .count {
+    font-size: 2rem;
+    font-weight: 700;
+    display: block;
+}
+
+.gate-item .label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    display: block;
+    margin: 0.25rem 0;
+}
+
+.gate-item .status {
+    font-size: 0.875rem;
+}
+
+.gate-item.fail .count { color: var(--critical); }
+.gate-item.warn .count { color: var(--medium); }
+.gate-item.pass .count { color: var(--low); }
+
+.gate-policy {
+    margin-top: 1rem;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    text-align: center;
+}
+
+/* Agent Tabs */
+.agent-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+
+.agent-tab {
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.875rem;
+}
+
+.agent-tab:hover {
+    border-color: var(--text-secondary);
+}
+
+.agent-tab.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+}
+
+/* Filter Pills */
+.filter-pills {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.pill {
+    padding: 0.375rem 0.75rem;
+    border-radius: 9999px;
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-size: 0.8125rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.pill:hover {
+    border-color: var(--text-secondary);
+}
+
+.pill.active {
+    background: var(--text-primary);
+    color: var(--bg-primary);
+}
+
+.pill.critical.active { background: var(--critical); border-color: var(--critical); color: white; }
+.pill.high.active { background: var(--high); border-color: var(--high); color: white; }
+.pill.medium.active { background: var(--medium); border-color: var(--medium); color: #171717; }
+.pill.low.active { background: var(--low); border-color: var(--low); color: white; }
+
 /* Print styles for CISO-friendly PDF export */
 @media print {
     /* Reset to light mode for printing */
@@ -366,54 +566,75 @@ footer a:hover {
 <body>
     <header>
         <h1>Inkog Security Report</h1>
-        <span class="timestamp">Generated: 2025-11-27 21:09:53</span>
+        <span class="timestamp">Generated: 2025-11-27 21:37:02</span>
     </header>
 
-    <div class="cards">
-        <div class="card risk">
-            <span class="value">10.0</span>
-            <span class="label">Risk Score</span>
-        </div>
-        <div class="card critical">
-            <span class="value">8</span>
+    <!-- Security Grade + Gate Summary -->
+    <section class="security-grade">
+        <div class="grade-badge grade-f">
+            <span class="letter">F</span>
             <span class="label">Critical</span>
         </div>
-        <div class="card high">
-            <span class="value">17</span>
-            <span class="label">High</span>
-        </div>
-        <div class="card medium">
-            <span class="value">4</span>
-            <span class="label">Medium</span>
-        </div>
-        <div class="card low">
-            <span class="value">0</span>
-            <span class="label">Low</span>
-        </div>
-    </div>
-
-    <section>
-        <h2>Compliance Status</h2>
-        <div class="compliance-grid">
-            <div class="compliance-item">
-                <span class="check">No Critical Issues</span>
-                <span class="status fail">FAIL</span>
-            </div>
-            <div class="compliance-item">
-                <span class="check">No High Issues</span>
-                <span class="status fail">FAIL</span>
-            </div>
-            <div class="compliance-item">
-                <span class="check">Overall Compliance</span>
-                <span class="status fail">FAIL</span>
-            </div>
+        <div class="score-breakdown">
+            <h3>Score Breakdown</h3>
+            <ul>
+                <li>8 Critical × 30 = <strong>240</strong></li>
+                <li>17 High × 10 = <strong>170</strong></li>
+                <li>4 Medium × 5 = <strong>20</strong></li>
+                <li>0 Low × 1 = <strong>0</strong></li>
+            </ul>
+            <div class="total">Total: 430 points</div>
+            <p class="scale">A (0) | B (1-20) | C (21-50) | D (51-100) | F (100+)</p>
         </div>
     </section>
 
+    <!-- Security Gate -->
+    <section class="security-gate">
+        <div class="gate-header">
+            <span class="gate-status blocked">🚫 Security Gate: BLOCKED</span>
+        </div>
+        <div class="gate-breakdown">
+            <div class="gate-item fail">
+                <span class="count">8</span>
+                <span class="label">Critical</span>
+                <span class="status">❌ Found</span>
+            </div>
+            <div class="gate-item fail">
+                <span class="count">17</span>
+                <span class="label">High</span>
+                <span class="status">❌ Found</span>
+            </div>
+            <div class="gate-item warn">
+                <span class="count">4</span>
+                <span class="label">Medium</span>
+                <span class="status">⚠️ Found</span>
+            </div>
+            <div class="gate-item pass">
+                <span class="count">0</span>
+                <span class="label">Low</span>
+                <span class="status">✓ Clear</span>
+            </div>
+        </div>
+        <p class="gate-policy">Policy: 0 Critical + 0 High required to pass</p>
+    </section>
+
+    <!-- Agent Tabs -->
+    <div class="agent-tabs"><button class="agent-tab active" data-agent="all">All Agents (29)</button><button class="agent-tab" data-agent="crewai-python">crewai-python (3)</button><button class="agent-tab" data-agent="langgraph-python">langgraph-python (25)</button><button class="agent-tab" data-agent="n8n-workflow">n8n-workflow (1)</button></div>
+
+    <!-- Severity Filter Pills -->
+    <div class="filter-pills">
+        <button class="pill active" data-severity="all">All (29)</button>
+        <button class="pill critical" data-severity="CRITICAL">Critical (8)</button>
+        <button class="pill high" data-severity="HIGH">High (17)</button>
+        <button class="pill medium" data-severity="MEDIUM">Medium (4)</button>
+        <button class="pill low" data-severity="LOW">Low (0)</button>
+    </div>
+
+    <!-- Findings -->
     <section>
-        <h2>Security Findings (29)</h2>
+        <h2>Security Findings</h2>
         
-        <div class="finding">
+        <div class="finding" data-agent="n8n-workflow" data-severity="CRITICAL">
             <div class="finding-header">
                 <div class="finding-title">
                     <span class="icon">▶</span>
@@ -447,14 +668,14 @@ footer a:hover {
                 <div class="code-snippet">(No code snippet available)</div>
             </div>
         </div>
-        <div class="finding">
+        <div class="finding" data-agent="langgraph-python" data-severity="CRITICAL">
             <div class="finding-header">
                 <div class="finding-title">
                     <span class="icon">▶</span>
                     <span>Token Bombing Attack</span>
                 </div>
                 <div class="finding-meta">
-                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:31</span>
+                    <span>/tmp/inkog-scan-284092581/langgraph-python/agent.py:31</span>
                     <span class="severity-badge severity-critical">CRITICAL</span>
                 </div>
             </div>
@@ -462,7 +683,7 @@ footer a:hover {
                 <div class="finding-details">
                     <p>
                         <strong>File</strong>
-                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:31:1
+                        /tmp/inkog-scan-284092581/langgraph-python/agent.py:31:1
                     </p>
                     <p>
                         <strong>CWE</strong>
@@ -481,14 +702,14 @@ footer a:hover {
                 <div class="code-snippet">def __init__(self, model: str = &quot;gpt-4&quot;, temperature: float = 0.7):</div>
             </div>
         </div>
-        <div class="finding">
+        <div class="finding" data-agent="langgraph-python" data-severity="CRITICAL">
             <div class="finding-header">
                 <div class="finding-title">
                     <span class="icon">▶</span>
                     <span>Token Bombing Attack</span>
                 </div>
                 <div class="finding-meta">
-                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:39</span>
+                    <span>/tmp/inkog-scan-284092581/langgraph-python/agent.py:39</span>
                     <span class="severity-badge severity-critical">CRITICAL</span>
                 </div>
             </div>
@@ -496,7 +717,7 @@ footer a:hover {
                 <div class="finding-details">
                     <p>
                         <strong>File</strong>
-                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:39:1
+                        /tmp/inkog-scan-284092581/langgraph-python/agent.py:39:1
                     </p>
                     <p>
                         <strong>CWE</strong>
@@ -515,14 +736,14 @@ footer a:hover {
                 <div class="code-snippet">self.client = OpenAI(api_key=os.getenv(&quot;OPENAI_API_KEY&quot;))</div>
             </div>
         </div>
-        <div class="finding">
+        <div class="finding" data-agent="langgraph-python" data-severity="CRITICAL">
             <div class="finding-header">
                 <div class="finding-title">
                     <span class="icon">▶</span>
                     <span>Token Bombing Attack</span>
                 </div>
                 <div class="finding-meta">
-                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:76</span>
+                    <span>/tmp/inkog-scan-284092581/langgraph-python/agent.py:76</span>
                     <span class="severity-badge severity-critical">CRITICAL</span>
                 </div>
             </div>
@@ -530,7 +751,7 @@ footer a:hover {
                 <div class="finding-details">
                     <p>
                         <strong>File</strong>
-                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:76:1
+                        /tmp/inkog-scan-284092581/langgraph-python/agent.py:76:1
                     </p>
                     <p>
                         <strong>CWE</strong>
@@ -549,7 +770,7 @@ footer a:hover {
                 <div class="code-snippet">response = self.client.chat.completions.create(</div>
             </div>
         </div>
-        <div class="finding">
+        <div class="finding" data-agent="langgraph-python" data-severity="CRITICAL">
             <div class="finding-header">
                 <div class="finding-title">
                     <span class="icon">▶</span>
@@ -586,14 +807,14 @@ footer a:hover {
             logger.info(f&quot;Iteration {iteration}: Requesting refinement...&quot;)</div>
             </div>
         </div>
-        <div class="finding">
+        <div class="finding" data-agent="langgraph-python" data-severity="CRITICAL">
             <div class="finding-header">
                 <div class="finding-title">
                     <span class="icon">▶</span>
                     <span>Output Validation Failures</span>
                 </div>
                 <div class="finding-meta">
-                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:190</span>
+                    <span>/tmp/inkog-scan-284092581/langgraph-python/agent.py:190</span>
                     <span class="severity-badge severity-critical">CRITICAL</span>
                 </div>
             </div>
@@ -601,7 +822,7 @@ footer a:hover {
                 <div class="finding-details">
                     <p>
                         <strong>File</strong>
-                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:190:1
+                        /tmp/inkog-scan-284092581/langgraph-python/agent.py:190:1
                     </p>
                     <p>
                         <strong>CWE</strong>
@@ -620,14 +841,14 @@ footer a:hover {
                 <div class="code-snippet">result = eval(user_input)</div>
             </div>
         </div>
-        <div class="finding">
+        <div class="finding" data-agent="langgraph-python" data-severity="CRITICAL">
             <div class="finding-header">
                 <div class="finding-title">
                     <span class="icon">▶</span>
                     <span>Unvalidated Code Execution (eval/exec)</span>
                 </div>
                 <div class="finding-meta">
-                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:249</span>
+                    <span>/tmp/inkog-scan-284092581/langgraph-python/agent.py:249</span>
                     <span class="severity-badge severity-critical">CRITICAL</span>
                 </div>
             </div>
@@ -635,7 +856,7 @@ footer a:hover {
                 <div class="finding-details">
                     <p>
                         <strong>File</strong>
-                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:249:9
+                        /tmp/inkog-scan-284092581/langgraph-python/agent.py:249:9
                     </p>
                     <p>
                         <strong>CWE</strong>
@@ -654,7 +875,7 @@ footer a:hover {
                 <div class="code-snippet">        return eval(command)</div>
             </div>
         </div>
-        <div class="finding">
+        <div class="finding" data-agent="langgraph-python" data-severity="CRITICAL">
             <div class="finding-header">
                 <div class="finding-title">
                     <span class="icon">▶</span>
@@ -692,14 +913,14 @@ footer a:hover {
             if user_input.lower() == &#39;exit&#39;:</div>
             </div>
         </div>
-        <div class="finding">
+        <div class="finding" data-agent="crewai-python" data-severity="HIGH">
             <div class="finding-header">
                 <div class="finding-title">
                     <span class="icon">▶</span>
                     <span>Recursive Tool Calling</span>
                 </div>
                 <div class="finding-meta">
-                    <span>/tmp/inkog-scan-813804616/crewai-python/crew.py:39</span>
+                    <span>/tmp/inkog-scan-284092581/crewai-python/crew.py:39</span>
                     <span class="severity-badge severity-high">HIGH</span>
                 </div>
             </div>
@@ -707,7 +928,7 @@ footer a:hover {
                 <div class="finding-details">
                     <p>
                         <strong>File</strong>
-                        /tmp/inkog-scan-813804616/crewai-python/crew.py:39:1
+                        /tmp/inkog-scan-284092581/crewai-python/crew.py:39:1
                     </p>
                     <p>
                         <strong>CWE</strong>
@@ -726,14 +947,14 @@ footer a:hover {
                 <div class="code-snippet">allow_delegation=True,  # VULNERABILITY: Enables recursive delegation</div>
             </div>
         </div>
-        <div class="finding">
+        <div class="finding" data-agent="langgraph-python" data-severity="HIGH">
             <div class="finding-header">
                 <div class="finding-title">
                     <span class="icon">▶</span>
                     <span>Missing Rate Limits</span>
                 </div>
                 <div class="finding-meta">
-                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:65</span>
+                    <span>/tmp/inkog-scan-284092581/langgraph-python/agent.py:65</span>
                     <span class="severity-badge severity-high">HIGH</span>
                 </div>
             </div>
@@ -741,7 +962,7 @@ footer a:hover {
                 <div class="finding-details">
                     <p>
                         <strong>File</strong>
-                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:65:9
+                        /tmp/inkog-scan-284092581/langgraph-python/agent.py:65:9
                     </p>
                     <p>
                         <strong>CWE</strong>
@@ -760,14 +981,14 @@ footer a:hover {
                 <div class="code-snippet">        logger.info(f&quot;Starting task resolution for: {task_description}&quot;)</div>
             </div>
         </div>
-        <div class="finding">
+        <div class="finding" data-agent="langgraph-python" data-severity="HIGH">
             <div class="finding-header">
                 <div class="finding-title">
                     <span class="icon">▶</span>
                     <span>Context Window Exhaustion</span>
                 </div>
                 <div class="finding-meta">
-                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:73</span>
+                    <span>/tmp/inkog-scan-284092581/langgraph-python/agent.py:73</span>
                     <span class="severity-badge severity-high">HIGH</span>
                 </div>
             </div>
@@ -775,7 +996,7 @@ footer a:hover {
                 <div class="finding-details">
                     <p>
                         <strong>File</strong>
-                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:73:0
+                        /tmp/inkog-scan-284092581/langgraph-python/agent.py:73:0
                     </p>
                     <p>
                         <strong>CWE</strong>
@@ -794,14 +1015,14 @@ footer a:hover {
                 <div class="code-snippet">(No code snippet available)</div>
             </div>
         </div>
-        <div class="finding">
+        <div class="finding" data-agent="langgraph-python" data-severity="HIGH">
             <div class="finding-header">
                 <div class="finding-title">
                     <span class="icon">▶</span>
                     <span>Context Window Exhaustion</span>
                 </div>
                 <div class="finding-meta">
-                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:88</span>
+                    <span>/tmp/inkog-scan-284092581/langgraph-python/agent.py:88</span>
                     <span class="severity-badge severity-high">HIGH</span>
                 </div>
             </div>
@@ -809,7 +1030,7 @@ footer a:hover {
                 <div class="finding-details">
                     <p>
                         <strong>File</strong>
-                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:88:0
+                        /tmp/inkog-scan-284092581/langgraph-python/agent.py:88:0
                     </p>
                     <p>
                         <strong>CWE</strong>
@@ -828,14 +1049,14 @@ footer a:hover {
                 <div class="code-snippet">(No code snippet available)</div>
             </div>
         </div>
-        <div class="finding">
+        <div class="finding" data-agent="langgraph-python" data-severity="HIGH">
             <div class="finding-header">
                 <div class="finding-title">
                     <span class="icon">▶</span>
                     <span>Context Window Exhaustion</span>
                 </div>
                 <div class="finding-meta">
-                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:105</span>
+                    <span>/tmp/inkog-scan-284092581/langgraph-python/agent.py:105</span>
                     <span class="severity-badge severity-high">HIGH</span>
                 </div>
             </div>
@@ -843,7 +1064,7 @@ footer a:hover {
                 <div class="finding-details">
                     <p>
                         <strong>File</strong>
-                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:105:0
+                        /tmp/inkog-scan-284092581/langgraph-python/agent.py:105:0
                     </p>
                     <p>
                         <strong>CWE</strong>
@@ -862,14 +1083,14 @@ footer a:hover {
                 <div class="code-snippet">(No code snippet available)</div>
             </div>
         </div>
-        <div class="finding">
+        <div class="finding" data-agent="langgraph-python" data-severity="HIGH">
             <div class="finding-header">
                 <div class="finding-title">
                     <span class="icon">▶</span>
                     <span>Context Window Exhaustion</span>
                 </div>
                 <div class="finding-meta">
-                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:120</span>
+                    <span>/tmp/inkog-scan-284092581/langgraph-python/agent.py:120</span>
                     <span class="severity-badge severity-high">HIGH</span>
                 </div>
             </div>
@@ -877,7 +1098,7 @@ footer a:hover {
                 <div class="finding-details">
                     <p>
                         <strong>File</strong>
-                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:120:0
+                        /tmp/inkog-scan-284092581/langgraph-python/agent.py:120:0
                     </p>
                     <p>
                         <strong>CWE</strong>
@@ -896,14 +1117,14 @@ footer a:hover {
                 <div class="code-snippet">(No code snippet available)</div>
             </div>
         </div>
-        <div class="finding">
+        <div class="finding" data-agent="crewai-python" data-severity="HIGH">
             <div class="finding-header">
                 <div class="finding-title">
                     <span class="icon">▶</span>
                     <span>Missing Rate Limits</span>
                 </div>
                 <div class="finding-meta">
-                    <span>/tmp/inkog-scan-813804616/crewai-python/crew.py:210</span>
+                    <span>/tmp/inkog-scan-284092581/crewai-python/crew.py:210</span>
                     <span class="severity-badge severity-high">HIGH</span>
                 </div>
             </div>
@@ -911,7 +1132,7 @@ footer a:hover {
                 <div class="finding-details">
                     <p>
                         <strong>File</strong>
-                        /tmp/inkog-scan-813804616/crewai-python/crew.py:210:5
+                        /tmp/inkog-scan-284092581/crewai-python/crew.py:210:5
                     </p>
                     <p>
                         <strong>CWE</strong>
@@ -930,14 +1151,14 @@ footer a:hover {
                 <div class="code-snippet">    return result</div>
             </div>
         </div>
-        <div class="finding">
+        <div class="finding" data-agent="langgraph-python" data-severity="HIGH">
             <div class="finding-header">
                 <div class="finding-title">
                     <span class="icon">▶</span>
                     <span>Prompt Injection</span>
                 </div>
                 <div class="finding-meta">
-                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:213</span>
+                    <span>/tmp/inkog-scan-284092581/langgraph-python/agent.py:213</span>
                     <span class="severity-badge severity-high">HIGH</span>
                 </div>
             </div>
@@ -945,7 +1166,7 @@ footer a:hover {
                 <div class="finding-details">
                     <p>
                         <strong>File</strong>
-                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:213:9
+                        /tmp/inkog-scan-284092581/langgraph-python/agent.py:213:9
                     </p>
                     <p>
                         <strong>CWE</strong>
@@ -964,14 +1185,14 @@ footer a:hover {
                 <div class="code-snippet">        logger.debug(f&quot;Formatted prompt: {template}&quot;)</div>
             </div>
         </div>
-        <div class="finding">
+        <div class="finding" data-agent="langgraph-python" data-severity="HIGH">
             <div class="finding-header">
                 <div class="finding-title">
                     <span class="icon">▶</span>
                     <span>Missing Rate Limits</span>
                 </div>
                 <div class="finding-meta">
-                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:214</span>
+                    <span>/tmp/inkog-scan-284092581/langgraph-python/agent.py:214</span>
                     <span class="severity-badge severity-high">HIGH</span>
                 </div>
             </div>
@@ -979,7 +1200,7 @@ footer a:hover {
                 <div class="finding-details">
                     <p>
                         <strong>File</strong>
-                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:214:9
+                        /tmp/inkog-scan-284092581/langgraph-python/agent.py:214:9
                     </p>
                     <p>
                         <strong>CWE</strong>
@@ -998,14 +1219,14 @@ footer a:hover {
                 <div class="code-snippet">        return template</div>
             </div>
         </div>
-        <div class="finding">
+        <div class="finding" data-agent="langgraph-python" data-severity="HIGH">
             <div class="finding-header">
                 <div class="finding-title">
                     <span class="icon">▶</span>
                     <span>Missing Rate Limits</span>
                 </div>
                 <div class="finding-meta">
-                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:232</span>
+                    <span>/tmp/inkog-scan-284092581/langgraph-python/agent.py:232</span>
                     <span class="severity-badge severity-high">HIGH</span>
                 </div>
             </div>
@@ -1013,7 +1234,7 @@ footer a:hover {
                 <div class="finding-details">
                     <p>
                         <strong>File</strong>
-                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:232:9
+                        /tmp/inkog-scan-284092581/langgraph-python/agent.py:232:9
                     </p>
                     <p>
                         <strong>CWE</strong>
@@ -1032,14 +1253,14 @@ footer a:hover {
                 <div class="code-snippet">        return self._run_command(command)</div>
             </div>
         </div>
-        <div class="finding">
+        <div class="finding" data-agent="langgraph-python" data-severity="HIGH">
             <div class="finding-header">
                 <div class="finding-title">
                     <span class="icon">▶</span>
                     <span>Recursive Tool Calling</span>
                 </div>
                 <div class="finding-meta">
-                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:340</span>
+                    <span>/tmp/inkog-scan-284092581/langgraph-python/agent.py:340</span>
                     <span class="severity-badge severity-high">HIGH</span>
                 </div>
             </div>
@@ -1047,7 +1268,7 @@ footer a:hover {
                 <div class="finding-details">
                     <p>
                         <strong>File</strong>
-                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:340:1
+                        /tmp/inkog-scan-284092581/langgraph-python/agent.py:340:1
                     </p>
                     <p>
                         <strong>CWE</strong>
@@ -1066,14 +1287,14 @@ footer a:hover {
                 <div class="code-snippet">def main():</div>
             </div>
         </div>
-        <div class="finding">
+        <div class="finding" data-agent="langgraph-python" data-severity="HIGH">
             <div class="finding-header">
                 <div class="finding-title">
                     <span class="icon">▶</span>
                     <span>Token Bombing Attack</span>
                 </div>
                 <div class="finding-meta">
-                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:351</span>
+                    <span>/tmp/inkog-scan-284092581/langgraph-python/agent.py:351</span>
                     <span class="severity-badge severity-high">HIGH</span>
                 </div>
             </div>
@@ -1081,7 +1302,7 @@ footer a:hover {
                 <div class="finding-details">
                     <p>
                         <strong>File</strong>
-                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:351:1
+                        /tmp/inkog-scan-284092581/langgraph-python/agent.py:351:1
                     </p>
                     <p>
                         <strong>CWE</strong>
@@ -1100,14 +1321,14 @@ footer a:hover {
                 <div class="code-snippet">if not os.getenv(&quot;OPENAI_API_KEY&quot;):</div>
             </div>
         </div>
-        <div class="finding">
+        <div class="finding" data-agent="langgraph-python" data-severity="HIGH">
             <div class="finding-header">
                 <div class="finding-title">
                     <span class="icon">▶</span>
                     <span>Token Bombing Attack</span>
                 </div>
                 <div class="finding-meta">
-                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:352</span>
+                    <span>/tmp/inkog-scan-284092581/langgraph-python/agent.py:352</span>
                     <span class="severity-badge severity-high">HIGH</span>
                 </div>
             </div>
@@ -1115,7 +1336,7 @@ footer a:hover {
                 <div class="finding-details">
                     <p>
                         <strong>File</strong>
-                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:352:1
+                        /tmp/inkog-scan-284092581/langgraph-python/agent.py:352:1
                     </p>
                     <p>
                         <strong>CWE</strong>
@@ -1134,14 +1355,14 @@ footer a:hover {
                 <div class="code-snippet">logger.error(&quot;❌ OPENAI_API_KEY environment variable not set&quot;)</div>
             </div>
         </div>
-        <div class="finding">
+        <div class="finding" data-agent="langgraph-python" data-severity="HIGH">
             <div class="finding-header">
                 <div class="finding-title">
                     <span class="icon">▶</span>
                     <span>Token Bombing Attack</span>
                 </div>
                 <div class="finding-meta">
-                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:353</span>
+                    <span>/tmp/inkog-scan-284092581/langgraph-python/agent.py:353</span>
                     <span class="severity-badge severity-high">HIGH</span>
                 </div>
             </div>
@@ -1149,7 +1370,7 @@ footer a:hover {
                 <div class="finding-details">
                     <p>
                         <strong>File</strong>
-                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:353:1
+                        /tmp/inkog-scan-284092581/langgraph-python/agent.py:353:1
                     </p>
                     <p>
                         <strong>CWE</strong>
@@ -1168,14 +1389,14 @@ footer a:hover {
                 <div class="code-snippet">print(&quot;Error: Please set OPENAI_API_KEY environment variable&quot;)</div>
             </div>
         </div>
-        <div class="finding">
+        <div class="finding" data-agent="langgraph-python" data-severity="HIGH">
             <div class="finding-header">
                 <div class="finding-title">
                     <span class="icon">▶</span>
                     <span>Missing Rate Limits</span>
                 </div>
                 <div class="finding-meta">
-                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:354</span>
+                    <span>/tmp/inkog-scan-284092581/langgraph-python/agent.py:354</span>
                     <span class="severity-badge severity-high">HIGH</span>
                 </div>
             </div>
@@ -1183,7 +1404,7 @@ footer a:hover {
                 <div class="finding-details">
                     <p>
                         <strong>File</strong>
-                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:354:9
+                        /tmp/inkog-scan-284092581/langgraph-python/agent.py:354:9
                     </p>
                     <p>
                         <strong>CWE</strong>
@@ -1202,14 +1423,14 @@ footer a:hover {
                 <div class="code-snippet">        return 1</div>
             </div>
         </div>
-        <div class="finding">
+        <div class="finding" data-agent="langgraph-python" data-severity="HIGH">
             <div class="finding-header">
                 <div class="finding-title">
                     <span class="icon">▶</span>
                     <span>Token Bombing Attack</span>
                 </div>
                 <div class="finding-meta">
-                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:357</span>
+                    <span>/tmp/inkog-scan-284092581/langgraph-python/agent.py:357</span>
                     <span class="severity-badge severity-high">HIGH</span>
                 </div>
             </div>
@@ -1217,7 +1438,7 @@ footer a:hover {
                 <div class="finding-details">
                     <p>
                         <strong>File</strong>
-                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:357:1
+                        /tmp/inkog-scan-284092581/langgraph-python/agent.py:357:1
                     </p>
                     <p>
                         <strong>CWE</strong>
@@ -1236,14 +1457,14 @@ footer a:hover {
                 <div class="code-snippet">agent = TaskAgent(model=&quot;gpt-4&quot;, temperature=0.7)</div>
             </div>
         </div>
-        <div class="finding">
+        <div class="finding" data-agent="langgraph-python" data-severity="HIGH">
             <div class="finding-header">
                 <div class="finding-title">
                     <span class="icon">▶</span>
                     <span>Missing Rate Limits</span>
                 </div>
                 <div class="finding-meta">
-                    <span>/tmp/inkog-scan-813804616/langgraph-python/agent.py:362</span>
+                    <span>/tmp/inkog-scan-284092581/langgraph-python/agent.py:362</span>
                     <span class="severity-badge severity-high">HIGH</span>
                 </div>
             </div>
@@ -1251,7 +1472,7 @@ footer a:hover {
                 <div class="finding-details">
                     <p>
                         <strong>File</strong>
-                        /tmp/inkog-scan-813804616/langgraph-python/agent.py:362:5
+                        /tmp/inkog-scan-284092581/langgraph-python/agent.py:362:5
                     </p>
                     <p>
                         <strong>CWE</strong>
@@ -1270,7 +1491,7 @@ footer a:hover {
                 <div class="code-snippet">    return 0</div>
             </div>
         </div>
-        <div class="finding">
+        <div class="finding" data-agent="crewai-python" data-severity="MEDIUM">
             <div class="finding-header">
                 <div class="finding-title">
                     <span class="icon">▶</span>
@@ -1308,7 +1529,7 @@ llm = ChatOpenAI(
     api_key=os.getenv(&quot;OPENAI_API_KEY&quot;)</div>
             </div>
         </div>
-        <div class="finding">
+        <div class="finding" data-agent="langgraph-python" data-severity="MEDIUM">
             <div class="finding-header">
                 <div class="finding-title">
                     <span class="icon">▶</span>
@@ -1346,7 +1567,7 @@ llm = ChatOpenAI(
             temperature=self.temperature,</div>
             </div>
         </div>
-        <div class="finding">
+        <div class="finding" data-agent="langgraph-python" data-severity="MEDIUM">
             <div class="finding-header">
                 <div class="finding-title">
                     <span class="icon">▶</span>
@@ -1384,7 +1605,7 @@ llm = ChatOpenAI(
                 temperature=self.temperature,</div>
             </div>
         </div>
-        <div class="finding">
+        <div class="finding" data-agent="langgraph-python" data-severity="MEDIUM">
             <div class="finding-header">
                 <div class="finding-title">
                     <span class="icon">▶</span>
@@ -1429,9 +1650,44 @@ llm = ChatOpenAI(
     </footer>
 
     <script>
+// Finding toggle
 document.querySelectorAll('.finding-header').forEach(header => {
     header.addEventListener('click', () => {
         header.parentElement.classList.toggle('open');
+    });
+});
+
+// Agent tab switching
+document.querySelectorAll('.agent-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        document.querySelectorAll('.agent-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+
+        const agent = tab.dataset.agent;
+        document.querySelectorAll('.finding').forEach(finding => {
+            if (agent === 'all' || finding.dataset.agent === agent) {
+                finding.style.display = '';
+            } else {
+                finding.style.display = 'none';
+            }
+        });
+    });
+});
+
+// Severity filter pills
+document.querySelectorAll('.pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+        document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+
+        const severity = pill.dataset.severity;
+        document.querySelectorAll('.finding').forEach(finding => {
+            if (severity === 'all' || finding.dataset.severity === severity) {
+                finding.style.display = '';
+            } else {
+                finding.style.display = 'none';
+            }
+        });
     });
 });
 </script>

@@ -3,42 +3,40 @@
 </div>
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL%203.0-blue)](LICENSE)
-[![Slack Community](https://img.shields.io/badge/Slack-Join%20Community-blueviolet)](https://inkog.io/slack)
-[![Docker Automated](https://img.shields.io/badge/Docker-Automated-2496ED)](https://ghcr.io/inkog-io/inkog)
+[![Build: Passing](https://img.shields.io/badge/Build-Passing-brightgreen)]()
+[![Docker: Automated](https://img.shields.io/badge/Docker-Automated-2496ED)](https://ghcr.io/inkog-io/inkog)
+[![Slack: Community](https://img.shields.io/badge/Slack-Community-blueviolet)](https://inkog.io/slack)
 
-## Secure your AI Agent's Logic. Ship with Confidence.
+# Secure your Agent's Logic. Ship with Confidence.
 
-The first static analysis engine to prevent Infinite Loops, Token Bombing, and Logic Flaws before deployment.
+## The Logic Firewall for AI Agents. Prevent Infinite Loops, Token Bombing, and Privacy Leaks across Code and No-Code workflows.
 
 ---
 
 ![Inkog detecting a Token Bomb in a LangGraph agent](https://placeholder.inkog.io/demo.gif)
 
-*Inkog scanning a LangGraph agent and detecting a token bombing vulnerability in real-time.*
+*Inkog scanning a LangGraph agent and detecting a token bombing vulnerability.*
 
-[![Book Security Audit](https://img.shields.io/badge/Book_Security_Audit-Contact_Sales-purple)](https://cal.com/inkog/audit)
+[![Book Security Audit](https://img.shields.io/badge/Book_Security_Audit-Contact_Sales-purple?style=for-the-badge)](https://cal.com/inkog/audit)
 
 ---
 
 ## Quick Start
 
-### Option 1: Docker (Recommended)
+### Docker (Recommended)
 
 ```bash
 docker run -v $(pwd):/app ghcr.io/inkog-io/inkog:latest /app
 ```
 
-### Option 2: Go Install
+### Go Install
 
 ```bash
 go install github.com/inkog-io/inkog/cmd/cli@latest
-mv $GOPATH/bin/cli $GOPATH/bin/inkog
 inkog .
 ```
 
-### Option 3: GitHub Action
-
-Add to `.github/workflows/security.yml`:
+### GitHub Action
 
 ```yaml
 - name: Run Inkog Security Scan
@@ -51,51 +49,41 @@ Add to `.github/workflows/security.yml`:
 
 ## Why Inkog?
 
-### 🛑 Prevent Doom Loops
-Detects non-deterministic loops in **LangChain**, **CrewAI**, and **AutoGen** agents that burn API credits and crash systems.
+### Universal IR Engine
+Abstracts 15+ agent frameworks into a single intermediate representation. Scans Python ASTs (LangChain, CrewAI) and JSON configs (n8n, Flowise) with identical detection rules.
 
-### 🔒 Hybrid Privacy
-Your secrets stay local. Only the **redacted code logic** is analyzed in the cloud. API keys, tokens, and credentials never leave your machine.
+### Inter-procedural DFG
+Implements Backward Slicing to track tainted user input across function boundaries. Detects prompt injection vectors that span multiple files and tool calls.
 
-### ⚖️ Compliance Ready
-Findings map to **EU AI Act (Article 15)** and **NIST AI RMF** for regulatory audits and SOC2 evidence.
+### Logic Security
+Identifies non-deterministic loops ("Doom Loops") and Token Bombing risks. Catches runaway agent behavior that static linters and type checkers miss.
 
----
-
-## Framework Support
-
-Inkog detects vulnerabilities in agents built with:
-
-- **LangChain** - Chain composition risks, infinite agent loops
-- **CrewAI** - Tool misuse, recursive delegation patterns
-- **AutoGen** - State explosion, conversation loops
-- ...and more coming soon
-
-Plus native support for Python, JavaScript, TypeScript, Go, Java, Rust, and more.
+### Hybrid Privacy
+Source code is redacted **locally** before transmission. Only the sanitized logic graph is analyzed remotely. Secrets, API keys, and credentials never leave your machine.
 
 ---
 
-## For Teams
+## Supported Frameworks
 
-Inkog Open Source is free and ready to use. For enterprise deployments:
+**Code-First**
+LangChain | LangGraph | CrewAI | Phidata | Smolagents
 
-- Centralized dashboard & reporting
-- Historical trends & risk tracking
-- SOC2/ISO audit evidence
-- Team collaboration
-- Custom security policies
+**SDKs**
+OpenAI Agents | LlamaIndex | Semantic Kernel | Haystack
 
-**Early Access:** hello@inkog.io
+**No-Code / Low-Code**
+n8n | Flowise | Langflow | Dify
+
+**Enterprise**
+Microsoft AutoGen (AG2) | Vellum
 
 ---
 
-## How It Works
+## Compliance & Reporting
 
-```
-Local Detection  →  Redact Secrets  →  Secure Upload  →  Remote Analysis  →  Report
-```
-
-Your secrets stay on your machine. Only redacted code is analyzed.
+- Automated mapping to **EU AI Act (Articles 12-15)** and **NIST AI RMF**
+- Generates SARIF outputs for GitHub Security tab integration
+- Export HTML reports for SOC2 and ISO audits
 
 ---
 
@@ -105,49 +93,35 @@ Your secrets stay on your machine. Only redacted code is analyzed.
 # Scan current directory
 inkog .
 
-# Scan with verbose output
+# Verbose output
 inkog -path ./src -verbose
 
-# Output as JSON (for CI/CD)
+# JSON output for CI/CD
 inkog -path . -output json > results.json
 
-# Only show critical findings
-inkog -path . -severity critical
+# HTML report
+inkog -path . -output html > report.html
 
-# Use custom Inkog server
-inkog -path . -server https://inkog.company.com
+# Filter by severity
+inkog -path . -severity critical
 ```
 
-For more options, see [CLI Reference](docs/CLI_REFERENCE.md).
+See [CLI Reference](docs/CLI_REFERENCE.md) for full documentation.
 
 ---
 
-## Privacy First
+## License & Enterprise
 
-- No telemetry. No tracking. No data collection.
-- Works offline. Detects secrets locally without a server.
-- Open source. Audit everything (AGPLv3).
-- Secrets redacted before upload.
+**License:** GNU AGPLv3. [View LICENSE](LICENSE)
 
-See [Privacy Model](docs/CLI_REFERENCE.md#privacy-model) for technical details.
+**Inkog Cloud:** Centralized dashboards, historical trends, and team policy management.
 
----
-
-## License
-
-GNU AGPLv3. [View LICENSE](LICENSE)
-
-Commercial licenses available. Contact hello@inkog.io.
+**Contact:** hello@inkog.io
 
 ---
 
 ## Get Help
 
-- **GitHub Issues:** https://github.com/inkog-io/inkog/issues
+- **Issues:** [github.com/inkog-io/inkog/issues](https://github.com/inkog-io/inkog/issues)
 - **Security:** security@inkog.io
-- **Community:** https://inkog.io/slack
-- **Docs:** [CLI Reference](docs/CLI_REFERENCE.md)
-
----
-
-**Protect your AI agents. Scan today.**
+- **Community:** [inkog.io/slack](https://inkog.io/slack)
