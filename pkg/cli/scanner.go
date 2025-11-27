@@ -131,6 +131,15 @@ func (hs *HybridScanner) scanLocalSecretsAndCollectFiles() ([]contract.Finding, 
 		// Detect secrets locally
 		secretFindings := secrets.DetectSecrets(filePath, content)
 		if len(secretFindings) > 0 {
+			// Print privacy proof messages (verbose mode)
+			if hs.Verbose && !hs.Quiet {
+				relPath, _ := filepath.Rel(hs.SourcePath, filePath)
+				for _, sf := range secretFindings {
+					fmt.Fprintf(os.Stderr, "[PRIVACY] ✓ Redacted potential %s in %s at line %d\n",
+						sf.Type, relPath, sf.Line)
+				}
+			}
+
 			// Convert secret findings to contract findings
 			for _, sf := range secretFindings {
 				// Get CWE and OWASP from pattern definition
@@ -180,6 +189,7 @@ func (hs *HybridScanner) redactSecretsFromFiles(redactedFiles map[string]bool) (
 	filesMap := make(map[string][]byte)
 	totalBytes := 0
 	filesAdded := 0
+	totalRedactions := 0
 
 	// For each file, redact secrets and store
 	for filePath := range redactedFiles {
@@ -191,6 +201,7 @@ func (hs *HybridScanner) redactSecretsFromFiles(redactedFiles map[string]bool) (
 		// Detect and redact secrets
 		secretFindings := secrets.DetectSecrets(filePath, content)
 		redactedContent := secrets.RedactSecrets(content, secretFindings)
+		totalRedactions += len(secretFindings)
 
 		// Create field name for multipart form using URL encoding
 		relPath, _ := filepath.Rel(hs.SourcePath, filePath)
@@ -210,6 +221,9 @@ func (hs *HybridScanner) redactSecretsFromFiles(redactedFiles map[string]bool) (
 	if hs.Verbose && !hs.Quiet {
 		fmt.Fprintf(os.Stderr, "📊 Total files added: %d\n", filesAdded)
 		fmt.Fprintf(os.Stderr, "📦 Upload payload size: %d bytes\n", totalBytes)
+		if totalRedactions > 0 {
+			fmt.Fprintf(os.Stderr, "🔒 Privacy Summary: %d secrets redacted before upload\n", totalRedactions)
+		}
 	}
 
 	return filesMap, totalBytes, nil
@@ -294,6 +308,52 @@ func shouldScanFile(path string) bool {
 			strings.HasPrefix(path, dir+string(filepath.Separator)) {
 			return false
 		}
+	}
+
+	// Block system/build JSON/YAML files (not workflow configs)
+	blockedFiles := map[string]bool{
+		"package.json":       true,
+		"package-lock.json":  true,
+		"tsconfig.json":      true,
+		"jsconfig.json":      true,
+		"yarn.lock":          true,
+		"pnpm-lock.yaml":     true,
+		"composer.json":      true,
+		"composer.lock":      true,
+		"Cargo.toml":         true,
+		"Cargo.lock":         true,
+		"go.sum":             true,
+		"go.mod":             true,
+		"Gemfile":            true,
+		"Gemfile.lock":       true,
+		"poetry.lock":        true,
+		"Pipfile.lock":       true,
+		".eslintrc.json":     true,
+		".eslintrc.yaml":     true,
+		".prettierrc.json":   true,
+		".prettierrc.yaml":   true,
+		"babel.config.json":  true,
+		"nest-cli.json":      true,
+		"angular.json":       true,
+		"turbo.json":         true,
+		"vercel.json":        true,
+		"now.json":           true,
+		"renovate.json":      true,
+		"lerna.json":         true,
+		".babelrc":           true,
+		"webpack.config.js":  true,
+		"rollup.config.js":   true,
+		"vite.config.js":     true,
+		"vite.config.ts":     true,
+		"jest.config.js":     true,
+		"jest.config.json":   true,
+		"tsconfig.build.json": true,
+		"tsconfig.spec.json":  true,
+	}
+
+	filename := filepath.Base(path)
+	if blockedFiles[filename] {
+		return false
 	}
 
 	ext := filepath.Ext(path)
