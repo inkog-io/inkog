@@ -7,9 +7,9 @@
 [![Docker: Automated](https://img.shields.io/badge/Docker-Automated-2496ED)](https://ghcr.io/inkog-io/inkog)
 [![Slack: Community](https://img.shields.io/badge/Slack-Community-blueviolet)](https://join.slack.com/t/inkog-io/shared_invite/zt-3jrzztm28-cXyokCXO8KjKC6nBI0l4Gw)
 
-# Secure your Agent's Logic. Ship with Confidence.
+# Inkog Verify: Secure Agentic Logic.
 
-## The Logic Firewall for AI Agents. Prevent Infinite Loops, Token Bombing, Privacy Leaks and more for your agents across any Code/No-Code agentic framework.
+## The Static Analysis Engine for AI Agents. Part of the Inkog Platform.
 
 ---
 
@@ -55,8 +55,8 @@ One scanner for 15+ agent frameworks. Analyzes Python code (LangChain, CrewAI) a
 ### Cross-File Analysis
 Tracks user input as it flows through your codebase—across functions, files, and tool calls. Detects prompt injection vectors that span your entire agent architecture.
 
-### Logic Security
-Detects runtime vulnerabilities that linters miss:
+### Static Logic Analysis
+Inkog Verify parses your Code (Python) and Configs (n8n) to find structural flaws *before* you deploy:
 - **Infinite Loops** — Agents stuck in cycles with no exit condition
 - **Token Bombing** — Unbounded context growth that drains your API budget
 - **Recursive Tool Calls** — Tools calling themselves without depth limits
@@ -67,6 +67,15 @@ Source code is redacted **locally** before transmission. Only the sanitized logi
 
 ### Extensible Rules
 Pluggable YAML-based rule engine. Add custom detection patterns for your organization's specific security policies.
+
+---
+
+## The Inkog Platform
+
+| Product | Status | Type | Capabilities |
+|---------|--------|------|--------------|
+| **Inkog Verify** | ✅ Live | Static Analysis (SAST) | AST parsing, taint tracking, secret detection, loop detection |
+| **Inkog Runtime** | 🚧 Coming Soon | Dynamic Analysis (DAST) | Real-time behavior monitoring, active attack blocking |
 
 ---
 
@@ -113,7 +122,7 @@ inkog -path . -output html > report.html
 inkog -path . -severity critical
 ```
 
-See [CLI Reference](docs/CLI_REFERENCE.md) for full documentation.
+See [Documentation](https://docs.inkog.io) for CLI Reference and API docs.
 
 ---
 
@@ -121,7 +130,7 @@ See [CLI Reference](docs/CLI_REFERENCE.md) for full documentation.
 
 **License:** GNU AGPLv3. [View LICENSE](LICENSE)
 
-**Inkog Cloud:** Centralized dashboards, historical trends, and team policy management.
+**Inkog Cloud:** Centralized dashboards, historical trends, and team policy management. [Learn more →](https://inkog.io)
 
 **Contact:** hello@inkog.io
 
@@ -129,6 +138,8 @@ See [CLI Reference](docs/CLI_REFERENCE.md) for full documentation.
 
 ## Get Help
 
+- **Website:** [inkog.io](https://inkog.io)
+- **Documentation:** [docs.inkog.io](https://docs.inkog.io)
 - **Issues:** [github.com/inkog-io/inkog/issues](https://github.com/inkog-io/inkog/issues)
 - **Security:** security@inkog.io
 - **Community:** [Join our Slack](https://join.slack.com/t/inkog-io/shared_invite/zt-3jrzztm28-cXyokCXO8KjKC6nBI0l4Gw)
