@@ -126,6 +126,22 @@ See [Documentation](https://docs.inkog.io) for CLI Reference and API docs.
 
 ---
 
+## Contribute to Agent Security
+
+Inkog's CLI and detection rules are open source (AGPLv3). The pattern library is community-driven — every rule you contribute helps secure the entire agent ecosystem.
+
+**Ways to Contribute:**
+- **Write a Detection Rule:** Found a new attack vector? Submit a YAML pattern. [Read the Guide](CONTRIBUTING.md).
+- **Report False Positives:** Help us improve accuracy. [Open an Issue](https://github.com/inkog-io/inkog/issues).
+- **Join the Discussion:** Connect with security engineers in our [Slack Community](https://join.slack.com/t/inkog-io/shared_invite/zt-3jrzztm28-cXyokCXO8KjKC6nBI0l4Gw).
+
+**Recognition:**
+Top contributors receive "Inkog Researcher" swag and permanent attribution in the Rule Registry.
+
+[![Contributing Guide](https://img.shields.io/badge/Contributing_Guide-Read_Now-blue?style=for-the-badge)](CONTRIBUTING.md)
+
+---
+
 ## License & Enterprise
 
 **License:** GNU AGPLv3. [View LICENSE](LICENSE)
