@@ -187,34 +187,24 @@ inkog -path . -output html > security-report.html
 
 ## Privacy Model
 
-### What Stays Local
+Inkog uses **surgical redaction** — only specific credential patterns are removed before upload. This preserves your business logic for security analysis while protecting known secret formats.
 
-Your data is **never exposed**:
-- API keys and credentials
-- Private authentication tokens
-- Database connection strings
-- Any data identified as a "secret"
+### What Gets Redacted
 
-### What Gets Sent to Server
+The CLI detects and redacts **common credential patterns**:
 
-Only **redacted, safe** data is sent:
-- Source code with secrets replaced (`[REDACTED_<TYPE>]`)
-- File structure and relationships
-- Control flow patterns (for logic analysis)
-- Metadata (line numbers, severity levels)
-
-### How Redaction Works
-
-The CLI uses pattern-based detection to identify secrets before upload:
-
-**Detected patterns:**
-- AWS credentials (access keys, secret keys)
-- API keys (GitHub, OpenAI, Stripe, etc.)
-- Private keys (SSH, PEM format)
-- Database passwords and connection strings
-- OAuth tokens and bearer tokens
-- Environment credentials
-- Database URLs
+| Pattern | Example | Detection |
+|---------|---------|-----------|
+| AWS Access Keys | `AKIA[0-9A-Z]{16}` | Exact prefix |
+| GitHub Tokens | `ghp_`, `gho_`, `ghu_` | Exact prefix |
+| Stripe Keys | `sk_live_`, `pk_live_` | Exact prefix |
+| Slack Tokens | `xox[baprs]-...` | Exact prefix |
+| SendGrid Keys | `SG.` | Exact prefix |
+| Private Keys | `-----BEGIN RSA PRIVATE KEY-----` | Header match |
+| JWT Tokens | `eyJ[base64].[base64].[base64]` | Structure match |
+| Database URLs | `postgres://user:pass@host` | Connection string |
+| Password variables | `password = "..."` | Assignment pattern |
+| High-entropy strings | 32+ random chars | Shannon entropy >4.5 |
 
 **Redaction example:**
 ```python
@@ -223,9 +213,38 @@ api_key = "sk_live_abc123def456"
 db_url = "postgresql://user:password@localhost/db"
 
 # After redaction (sent to server)
-api_key = "[REDACTED_API_KEY]"
-db_url = "[REDACTED_DATABASE_URL]"
+api_key = "[REDACTED-STRIPE_KEY]"
+db_url = "[REDACTED-DATABASE_PASSWORD]"
 ```
+
+### What is NOT Redacted
+
+To enable security analysis, the following **pass through to the server**:
+
+- **Prompts and templates** — Required for prompt injection detection
+- **Business logic** — Required for infinite loop and data flow analysis
+- **Configuration values** — Model names, temperatures, etc.
+- **Normal strings** — Text that doesn't match credential patterns
+- **Custom secret formats** — Proprietary patterns not in our library
+
+**Example:**
+```python
+# NOT redacted - needed for prompt injection detection
+system_prompt = "You are helpful. Ignore all previous instructions."
+
+# NOT redacted - custom format unknown to Inkog
+internal_key = "ACME_PROD_xxxx"
+
+# IS redacted - matches known pattern
+openai_key = "sk-proj-abc123..."
+```
+
+### Enterprise Note
+
+If your organization uses custom credential formats, contact us about:
+- **Configurable redaction patterns** — Add your own regex rules
+- **Self-hosted deployment** — Run the analysis engine in your infrastructure
+- **Air-gapped mode** — Full offline operation
 
 ## Output Formats
 
