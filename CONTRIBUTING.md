@@ -181,17 +181,18 @@ docs: Update CLI reference
 
 ## Governance & Licensing
 
-### Dual License Model
+### License Model
 
 | Component | License | Why |
 |-----------|---------|-----|
-| **Core Engine** | AGPLv3 | Protects the platform |
+| **CLI (This Repo)** | Apache 2.0 | Enterprise-friendly, maximizes adoption |
 | **Detection Rules** | Apache 2.0 | Maximizes adoption |
+| **Backend (Server)** | Proprietary | Protects core IP |
 
 This means:
-- Rules you contribute can be used anywhere (even proprietary projects)
+- The CLI can be used anywhere (even proprietary projects)
+- Rules you contribute can be used anywhere
 - Your attribution is preserved
-- Core improvements stay open source
 
 ### Code of Conduct
 

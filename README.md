@@ -2,7 +2,7 @@
   <img src="logo.png" width="150" alt="Inkog Logo">
 </div>
 
-[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL%203.0-blue)](LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue)](LICENSE)
 [![Build: Passing](https://img.shields.io/badge/Build-Passing-brightgreen)]()
 [![Docker: Automated](https://img.shields.io/badge/Docker-Automated-2496ED)](https://ghcr.io/inkog-io/inkog)
 [![Slack: Community](https://img.shields.io/badge/Slack-Community-blueviolet)](https://join.slack.com/t/inkog-io/shared_invite/zt-3jrzztm28-cXyokCXO8KjKC6nBI0l4Gw)
@@ -128,7 +128,7 @@ See [Documentation](https://docs.inkog.io) for CLI Reference and API docs.
 
 ## Contribute to Agent Security
 
-Inkog's CLI and detection rules are open source (AGPLv3). The pattern library is community-driven — every rule you contribute helps secure the entire agent ecosystem.
+Inkog's CLI and detection rules are open source (Apache 2.0). The pattern library is community-driven — every rule you contribute helps secure the entire agent ecosystem.
 
 **Ways to Contribute:**
 - **Write a Detection Rule:** Found a new attack vector? Submit a YAML pattern. [Read the Guide](CONTRIBUTING.md).
@@ -144,7 +144,7 @@ Top contributors receive "Inkog Researcher" swag and permanent attribution in th
 
 ## License & Enterprise
 
-**License:** GNU AGPLv3. [View LICENSE](LICENSE)
+**License:** Apache 2.0. [View LICENSE](LICENSE)
 
 **Inkog Cloud:** Centralized dashboards, historical trends, and team policy management. [Learn more →](https://inkog.io)
 

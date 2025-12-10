@@ -5,7 +5,7 @@
 - **GitHub:** `github.com/inkog-io/inkog` (Public)
 - **Role:** The Official Inkog CLI
 - **Status:** Production (v1.0.0+)
-- **License:** GNU AGPLv3 (Commercial licenses available)
+- **License:** Apache 2.0
 
 ## Vision
 
@@ -78,7 +78,7 @@ inkog/ (inkog-io/inkog on GitHub)
 ├── docs/
 │   └── CLI_REFERENCE.md  Complete CLI documentation
 ├── README.md             Public-facing documentation
-├── LICENSE               GNU AGPLv3
+├── LICENSE               Apache 2.0
 ├── go.mod
 └── CLAUDE.md             This file
 ```
@@ -257,7 +257,7 @@ All errors logged to stderr. Findings always logged to stdout (JSON or text).
 
 ## Public vs. Private: The Dual Codebase
 
-This repository (`inkog-io/inkog`) is **100% open source** (AGPLv3). It contains:
+This repository (`inkog-io/inkog`) is **100% open source** (Apache 2.0). It contains:
 - ✅ CLI logic (scanning, output, communication)
 - ✅ Client-side secret detection (local regex patterns)
 - ✅ API contract types (request/response schemas)
