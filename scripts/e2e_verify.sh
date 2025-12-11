@@ -76,6 +76,45 @@ JSONEOF
 fi
 echo -e "${GREEN}      Done${NC}"
 
+# Inject known vulnerable artifact for deterministic testing
+echo "      Injecting test artifact (vulnerable_flow.n8n.json)..."
+cat > "$DEMO_DIR/vulnerable_flow.n8n.json" << 'N8NEOF'
+{
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.loop",
+      "id": "loop-1",
+      "name": "Infinite Loop",
+      "typeVersion": 1,
+      "position": [100, 100]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4"
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "id": "agent-1",
+      "name": "AI Agent",
+      "typeVersion": 1,
+      "position": [300, 100]
+    }
+  ],
+  "connections": {
+    "Infinite Loop": {
+      "main": [
+        [{"node": "AI Agent", "type": "main", "index": 0}]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [{"node": "Infinite Loop", "type": "main", "index": 0}]
+      ]
+    }
+  }
+}
+N8NEOF
+
 # Step 2: Build CLI
 echo -e "${YELLOW}[2/5]${NC} Building CLI..."
 go build -o "$CLI_BINARY" cmd/cli/main.go
@@ -104,18 +143,51 @@ fi
 # Step 4: Parse results
 echo -e "${YELLOW}[4/5]${NC} Parsing results..."
 
+# Helper function to parse JSON (uses jq if available, falls back to python3)
+json_query() {
+    local query="$1"
+    if command -v jq &> /dev/null; then
+        echo "$RESULT" | jq -r "$query" 2>/dev/null
+    else
+        # Python fallback for environments without jq
+        echo "$RESULT" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+findings = data.get('all_findings') or data.get('findings') or []
+query = '$query'
+if '.py' in query:
+    print(len([f for f in findings if f.get('file', '').endswith('.py')]))
+elif '.json' in query:
+    print(len([f for f in findings if f.get('file', '').endswith('.json')]))
+elif 'length' in query:
+    print(len(findings))
+else:
+    print(0)
+" 2>/dev/null
+    fi
+}
+
 # Check if we have valid JSON
-if ! echo "$RESULT" | jq . > /dev/null 2>&1; then
-    echo -e "${RED}      ERROR: Invalid JSON response${NC}"
-    echo "      Raw output:"
-    echo "$RESULT" | head -20
-    exit 2
+if command -v jq &> /dev/null; then
+    if ! echo "$RESULT" | jq . > /dev/null 2>&1; then
+        echo -e "${RED}      ERROR: Invalid JSON response${NC}"
+        echo "      Raw output:"
+        echo "$RESULT" | head -20
+        exit 2
+    fi
+else
+    if ! echo "$RESULT" | python3 -c "import json, sys; json.load(sys.stdin)" 2>/dev/null; then
+        echo -e "${RED}      ERROR: Invalid JSON response${NC}"
+        echo "      Raw output:"
+        echo "$RESULT" | head -20
+        exit 2
+    fi
 fi
 
 # Count findings by file type
-PYTHON_FINDINGS=$(echo "$RESULT" | jq '[.all_findings // .findings // [] | .[] | select(.file | endswith(".py"))] | length' 2>/dev/null || echo "0")
-JSON_FINDINGS=$(echo "$RESULT" | jq '[.all_findings // .findings // [] | .[] | select(.file | endswith(".json"))] | length' 2>/dev/null || echo "0")
-TOTAL_FINDINGS=$(echo "$RESULT" | jq '[.all_findings // .findings // []] | length' 2>/dev/null || echo "0")
+PYTHON_FINDINGS=$(json_query '.py')
+JSON_FINDINGS=$(json_query '.json')
+TOTAL_FINDINGS=$(json_query 'length')
 
 echo -e "${GREEN}      Parsed successfully${NC}"
 
@@ -166,7 +238,17 @@ else
 
     # Show a sample of findings for debugging
     echo "Sample findings (first 3):"
-    echo "$RESULT" | jq '.all_findings // .findings // [] | .[0:3]' 2>/dev/null || echo "(none)"
+    if command -v jq &> /dev/null; then
+        echo "$RESULT" | jq '.all_findings // .findings // [] | .[0:3]' 2>/dev/null || echo "(none)"
+    else
+        echo "$RESULT" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+findings = data.get('all_findings') or data.get('findings') or []
+for f in findings[:3]:
+    print(json.dumps(f, indent=2))
+" 2>/dev/null || echo "(none)"
+    fi
     echo ""
     exit 1
 fi

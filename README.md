@@ -85,7 +85,7 @@ Pluggable YAML-based rule engine. Add custom detection patterns for your organiz
 LangChain | LangGraph | CrewAI | Phidata | Smolagents
 
 **SDKs**
-OpenAI Agents | LlamaIndex | Semantic Kernel | Haystack
+OpenAI Agents | LlamaIndex | Semantic Kernel | Haystack | DSPy
 
 **No-Code / Low-Code**
 n8n | Flowise | Langflow | Dify

@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -26,10 +29,13 @@ func init() {
 	}
 }
 
-const (
-	AppName    = "inkog"
-	AppVersion = "1.0.0"
+const AppName = "inkog"
 
+// AppVersion can be set at build time via:
+// go build -ldflags "-X main.AppVersion=1.2.3"
+var AppVersion = "1.0.0-dev"
+
+const (
 	// ANSI color codes for terminal output
 	colorReset    = "\033[0m"
 	colorCritical = "\033[91m" // bright red
@@ -52,7 +58,7 @@ Usage:
 Options:
   -path string        Source path to scan (default: .)
   -server string      Inkog server URL (default: https://inkog-api.fly.dev)
-  -output string      Output format: json, text, html (default: text)
+  -output string      Output format: json, text, html, sarif (default: text)
   -severity string    Minimum severity level: critical, high, medium, low (default: low)
   -verbose            Enable verbose output
   -version            Show version information
@@ -85,6 +91,72 @@ Privacy Notice:
 `
 )
 
+// Finding type constants for categorizing findings in the HTML report
+const (
+	FindingTypeCode   = "code"   // Traditional code analysis (Python, JS, Go)
+	FindingTypeConfig = "config" // Configuration/workflow files (JSON, YAML, n8n)
+	FindingTypeSecret = "secret" // Redacted secrets (no code shown intentionally)
+)
+
+// getFindingType determines the finding category based on source and file type
+func getFindingType(f contract.Finding) string {
+	// Local secrets are always "secret" type
+	if f.Source == contract.SourceLocalCLI || f.RedactedAt != nil {
+		return FindingTypeSecret
+	}
+
+	// Check file extension for config types
+	ext := strings.ToLower(filepath.Ext(f.File))
+	configExts := map[string]bool{
+		".json": true,
+		".yaml": true,
+		".yml":  true,
+		".toml": true,
+	}
+	if configExts[ext] {
+		return FindingTypeConfig
+	}
+
+	return FindingTypeCode
+}
+
+// getCodeSnippetDisplay returns the code snippet and an optional empty-state message
+// For findings without code, it provides context-aware explanations
+// Uses minimal emoji approach: only lock icon for secrets (security symbol)
+func getCodeSnippetDisplay(f contract.Finding) (code string, emptyMessage string, icon string) {
+	if f.Code != "" {
+		return f.Code, "", ""
+	}
+
+	findingType := getFindingType(f)
+
+	switch findingType {
+	case FindingTypeSecret:
+		// Keep lock icon for secrets - meaningful security symbol
+		return "", "Credentials detected and redacted for security", "🔒"
+	case FindingTypeConfig:
+		// No emoji for config - enterprise minimalist style
+		jsonPath := extractJSONPath(f.Message)
+		if jsonPath != "" {
+			return "", "Configuration finding at " + jsonPath, ""
+		}
+		return "", "Configuration-based finding - see file for context", ""
+	default:
+		// No emoji for code - enterprise minimalist style
+		return "", "Code context not available", ""
+	}
+}
+
+// extractJSONPath extracts JSON path from message like "(at $.nodes[?(@.id=='agent-1')])"
+func extractJSONPath(message string) string {
+	// Look for pattern: (at $...)
+	re := regexp.MustCompile(`\(at (\$[^)]+)\)`)
+	if match := re.FindStringSubmatch(message); len(match) > 1 {
+		return match[1]
+	}
+	return ""
+}
+
 func main() {
 	// Command-line flags
 	pathFlag := flag.String("path", ".", "Source path to scan")
@@ -105,7 +177,7 @@ func main() {
 
 	// Handle help flag
 	if *helpFlag {
-		fmt.Println(HelpText)
+		fmt.Print(HelpText)
 		os.Exit(0)
 	}
 
@@ -173,6 +245,8 @@ func outputResults(result *cli.ScanResult, format, minSeverity string, verbose, 
 		return outputText(result, minSeverity, verbose)
 	case "html":
 		return outputHTML(result, minSeverity)
+	case "sarif":
+		return outputSARIF(result)
 	default:
 		return fmt.Errorf("unknown output format: %s", format)
 	}
@@ -272,16 +346,13 @@ func displayCodeFrame(f contract.Finding) {
 
 // sortFindingsByLocation sorts findings by file path, then by line number
 func sortFindingsByLocation(findings []contract.Finding) {
-	// Simple bubble sort for stability (in production, use sort.Slice)
-	for i := 0; i < len(findings); i++ {
-		for j := i + 1; j < len(findings); j++ {
-			// Compare by file first, then by line
-			if findings[j].File < findings[i].File ||
-				(findings[j].File == findings[i].File && findings[j].Line < findings[i].Line) {
-				findings[i], findings[j] = findings[j], findings[i]
-			}
+	sort.Slice(findings, func(i, j int) bool {
+		// Compare by file first, then by line
+		if findings[i].File != findings[j].File {
+			return findings[i].File < findings[j].File
 		}
-	}
+		return findings[i].Line < findings[j].Line
+	})
 }
 
 // displayCompactSummary shows a single-line summary of findings
@@ -378,20 +449,46 @@ func gateStatusIcon(critical, high int) string {
 	return "🚫"
 }
 
-// extractAgentName extracts the agent/directory name from file path
+// extractAgentName extracts the DEEPEST directory as the agent name
+// For: /tmp/inkog-scan-xxx/examples/crewai-python/crew.py → "crewai-python"
+// For: /tmp/inkog_e2e_demo/examples/langgraph-python/agent.py → "langgraph-python"
 func extractAgentName(filePath string) string {
-	// Handle paths like "/tmp/inkog-scan-xxx/crewai-python/crew.py"
 	parts := strings.Split(filePath, string(os.PathSeparator))
+
+	// Find scan directory markers (inkog-scan-* or inkog_e2e_*)
+	scanDirIndex := -1
 	for i, part := range parts {
-		if strings.HasPrefix(part, "inkog-scan-") && i+1 < len(parts) {
-			return parts[i+1]
+		if strings.HasPrefix(part, "inkog-scan-") || strings.HasPrefix(part, "inkog_e2e_") {
+			scanDirIndex = i
+			break
 		}
 	}
-	// Fallback: use first meaningful directory
-	for _, part := range parts {
-		if part != "" && part != "tmp" && !strings.HasPrefix(part, "inkog-scan-") {
-			return part
+
+	if scanDirIndex != -1 && scanDirIndex+1 < len(parts) {
+		// Get all parts after the scan directory
+		afterScan := parts[scanDirIndex+1:]
+
+		// Remove the file name (last element if it contains a dot)
+		if len(afterScan) > 0 && strings.Contains(afterScan[len(afterScan)-1], ".") {
+			afterScan = afterScan[:len(afterScan)-1]
 		}
+
+		// Return the DEEPEST directory (the actual agent name)
+		if len(afterScan) > 0 {
+			return afterScan[len(afterScan)-1]
+		}
+	}
+
+	// Fallback: find the deepest non-file directory
+	var lastDir string
+	for _, part := range parts {
+		if part != "" && !strings.Contains(part, ".") &&
+			part != "tmp" && !strings.HasPrefix(part, "inkog-") {
+			lastDir = part
+		}
+	}
+	if lastDir != "" {
+		return lastDir
 	}
 	return "default"
 }
@@ -412,15 +509,520 @@ func getAgentNames(groups map[string][]contract.Finding) []string {
 	for name := range groups {
 		names = append(names, name)
 	}
-	// Simple sort
-	for i := 0; i < len(names); i++ {
-		for j := i + 1; j < len(names); j++ {
-			if names[j] < names[i] {
-				names[i], names[j] = names[j], names[i]
+	sort.Strings(names)
+	return names
+}
+
+// AgentReport contains per-agent security analysis
+type AgentReport struct {
+	Name          string
+	Directory     string
+	Framework     string
+	Findings      []contract.Finding
+	CriticalCount int
+	HighCount     int
+	MediumCount   int
+	LowCount      int
+	TotalCount    int
+	Score         int
+	Grade         string
+	GradeClass    string
+	TopIssues     []string
+}
+
+// detectFramework infers the AI framework from file patterns and code
+func detectFramework(findings []contract.Finding) string {
+	// Directory name patterns (most reliable - check file path)
+	dirPatterns := map[string]string{
+		"crewai":         "CrewAI",
+		"langchain":      "LangChain",
+		"langgraph":      "LangGraph",
+		"autogen":        "AutoGen",
+		"smolagents":     "Smolagents",
+		"phidata":        "Phidata",
+		"haystack":       "Haystack",
+		"dspy":           "DSPy",
+		"semantickernel": "Semantic Kernel",
+		"openai-sdk":     "OpenAI SDK",
+		"llamaindex":     "LlamaIndex",
+		"agentops":       "AgentOps",
+		"langflow":       "Langflow",
+		"flowise":        "Flowise",
+	}
+
+	// Code import patterns
+	codePatterns := map[string]string{
+		"from crewai":          "CrewAI",
+		"import crewai":        "CrewAI",
+		"from langchain":       "LangChain",
+		"from langgraph":       "LangGraph",
+		"from autogen":         "AutoGen",
+		"from smolagents":      "Smolagents",
+		"from phidata":         "Phidata",
+		"from haystack":        "Haystack",
+		"import dspy":          "DSPy",
+		"from semantic_kernel": "Semantic Kernel",
+		"from openai":          "OpenAI SDK",
+		"import openai":        "OpenAI SDK",
+		"from llama_index":     "LlamaIndex",
+		"from llamaindex":      "LlamaIndex",
+	}
+
+	for _, f := range findings {
+		file := strings.ToLower(f.File)
+		code := strings.ToLower(f.Code)
+
+		// Check directory name patterns first (most reliable)
+		for pattern, name := range dirPatterns {
+			if strings.Contains(file, pattern) {
+				return name
+			}
+		}
+
+		// Check code import patterns
+		for pattern, name := range codePatterns {
+			if strings.Contains(code, pattern) {
+				return name
+			}
+		}
+
+		// Check for n8n JSON patterns
+		if strings.HasSuffix(file, ".n8n.json") || strings.Contains(code, "n8n-nodes") {
+			return "n8n"
+		}
+
+		// Check for Flowise/Langflow JSON patterns
+		if strings.HasSuffix(file, ".flowise.json") || strings.Contains(code, "flowise") {
+			return "Flowise"
+		}
+		if strings.HasSuffix(file, ".langflow.json") || strings.Contains(code, "langflow") {
+			return "Langflow"
+		}
+
+		// Check for Dify patterns
+		if strings.HasSuffix(file, ".dify.json") || strings.Contains(code, "\"mode\":\"workflow\"") {
+			return "Dify"
+		}
+	}
+
+	// Provide language-aware fallback based on file extensions
+	for _, f := range findings {
+		file := strings.ToLower(f.File)
+		if strings.HasSuffix(file, ".py") {
+			return "Python Agent"
+		}
+		if strings.HasSuffix(file, ".js") || strings.HasSuffix(file, ".ts") {
+			return "JavaScript Agent"
+		}
+		if strings.HasSuffix(file, ".json") {
+			return "JSON Workflow"
+		}
+	}
+
+	return "AI Agent"
+}
+
+// extractTopIssues returns the top N most severe issue titles
+func extractTopIssues(findings []contract.Finding, n int) []string {
+	if len(findings) == 0 {
+		return nil
+	}
+
+	// Sort by severity (Critical > High > Medium > Low)
+	sorted := make([]contract.Finding, len(findings))
+	copy(sorted, findings)
+	sort.Slice(sorted, func(i, j int) bool {
+		return contract.SeverityLevels[sorted[i].Severity] > contract.SeverityLevels[sorted[j].Severity]
+	})
+
+	// Extract top N titles
+	var issues []string
+	for i := 0; i < n && i < len(sorted); i++ {
+		// Truncate long pattern names
+		title := sorted[i].Pattern
+		if len(title) > 40 {
+			title = title[:37] + "..."
+		}
+		issues = append(issues, title)
+	}
+	return issues
+}
+
+// buildAgentReports creates AgentReport structs for each agent group
+func buildAgentReports(groups map[string][]contract.Finding) []AgentReport {
+	var reports []AgentReport
+
+	// Find base scan path from any absolute path in findings
+	scanBasePath := findScanBasePath(groups)
+
+	for name, findings := range groups {
+		report := AgentReport{
+			Name:      extractAgentUseCaseName(findings, name, scanBasePath),
+			Directory: name,
+			Findings:  findings,
+			Framework: detectFramework(findings),
+		}
+
+		// Count by severity
+		for _, f := range findings {
+			switch f.Severity {
+			case "CRITICAL":
+				report.CriticalCount++
+			case "HIGH":
+				report.HighCount++
+			case "MEDIUM":
+				report.MediumCount++
+			case "LOW":
+				report.LowCount++
+			}
+		}
+		report.TotalCount = len(findings)
+
+		// Calculate per-agent score and grade
+		report.Score = calculateSecurityScore(findings)
+		report.Grade, _, report.GradeClass = getSecurityGrade(report.Score)
+
+		// Extract top 3 issues
+		report.TopIssues = extractTopIssues(findings, 3)
+
+		reports = append(reports, report)
+	}
+
+	// Sort by score (worst first - highest score)
+	sort.Slice(reports, func(i, j int) bool {
+		return reports[i].Score > reports[j].Score
+	})
+
+	return reports
+}
+
+// formatAgentDisplayName formats directory name for display
+func formatAgentDisplayName(name string) string {
+	// Replace dashes/underscores with spaces, capitalize words
+	name = strings.ReplaceAll(name, "-", " ")
+	name = strings.ReplaceAll(name, "_", " ")
+	words := strings.Fields(name)
+	for i, w := range words {
+		if len(w) > 0 {
+			words[i] = strings.ToUpper(w[:1]) + strings.ToLower(w[1:])
+		}
+	}
+	return strings.Join(words, " ")
+}
+
+// ============================================================================
+// Enterprise Agent Naming System
+// Extracts meaningful use case names from agent code files
+// ============================================================================
+
+// Regex patterns for extracting agent names from code
+var (
+	// Python: class EnterpriseDevelopmentAgent: or class MyAgent(Base):
+	pythonClassPattern = regexp.MustCompile(`class\s+(\w+(?:Agent|Crew|Assistant|Bot|Worker|Pipeline|Flow))\s*[\(:]`)
+
+	// Python module docstring: """Finance Agent for processing..."""
+	pythonDocstringPattern = regexp.MustCompile(`(?s)^(?:#!/.*?\n)?(?:#.*?\n)*\s*"""([\s\S]*?)"""`)
+
+	// CrewAI role field: role="Senior Research Analyst"
+	crewaiRolePattern = regexp.MustCompile(`role\s*=\s*["']([^"']+)["']`)
+
+	// CrewAI crew name: @crew decorator or Crew() call
+	crewaiCrewPattern = regexp.MustCompile(`(?:@crew|Crew\s*\(.*?name\s*=\s*["'])(\w+)`)
+
+	// n8n workflow name: "name": "AI Agent"
+	n8nNamePattern = regexp.MustCompile(`"name"\s*:\s*"([^"]+)"`)
+
+	// Langchain/LangGraph agent name from variable assignment
+	langchainAgentPattern = regexp.MustCompile(`(\w+)_agent\s*=|agent\s*=\s*(?:Agent|create_\w+_agent)\s*\(`)
+
+	// Generic agent_name= or assistant_name= patterns (avoid generic name= which catches model names)
+	genericNamePattern = regexp.MustCompile(`(?:agent_name|assistant_name|workflow_name)\s*=\s*["']([^"']+)["']`)
+
+	// Phidata agent: Agent(name="Finance Agent")
+	phidataAgentPattern = regexp.MustCompile(`Agent\s*\([^)]*name\s*=\s*["']([^"']+)["']`)
+
+	// AutoGen agent: AssistantAgent(name="analyst")
+	autogenAgentPattern = regexp.MustCompile(`(?:Assistant|User)Agent\s*\([^)]*name\s*=\s*["']([^"']+)["']`)
+
+	// CamelCase word boundary pattern
+	camelCaseSplit = regexp.MustCompile(`([a-z])([A-Z])|([A-Z]+)([A-Z][a-z])`)
+)
+
+// findScanBasePath extracts the base scan path from any absolute path in findings
+func findScanBasePath(groups map[string][]contract.Finding) string {
+	for _, findings := range groups {
+		for _, f := range findings {
+			if filepath.IsAbs(f.File) {
+				// Find the "examples" or similar common parent directory
+				dir := filepath.Dir(f.File)
+				for dir != "/" && dir != "." {
+					parent := filepath.Dir(dir)
+					// Check if parent contains "examples" or common scan markers
+					if _, err := os.Stat(filepath.Join(parent, "examples")); err == nil {
+						return parent
+					}
+					// Check for inkog scan temp dir markers
+					base := filepath.Base(parent)
+					if strings.HasPrefix(base, "inkog-scan-") || strings.HasPrefix(base, "inkog_e2e_") {
+						return parent
+					}
+					dir = parent
+				}
+				// Fallback: return grandparent of file (assumes examples/agent/file.py)
+				dir = filepath.Dir(f.File)
+				return filepath.Dir(filepath.Dir(dir))
 			}
 		}
 	}
-	return names
+	return ""
+}
+
+// extractAgentUseCaseName extracts a meaningful use case name from agent files
+// Priority: 1) Class name 2) Docstring 3) Role field 4) Name field 5) n8n JSON 6) Directory fallback
+func extractAgentUseCaseName(findings []contract.Finding, directory string, scanBasePath string) string {
+	// Collect unique file paths in this agent's directory
+	fileSet := make(map[string]bool)
+
+	// If we have a scan base path, construct absolute path for this directory
+	var agentDirPath string
+	if scanBasePath != "" {
+		// Try common structures: basePath/examples/directory or basePath/directory
+		possiblePaths := []string{
+			filepath.Join(scanBasePath, "examples", directory),
+			filepath.Join(scanBasePath, directory),
+		}
+		for _, p := range possiblePaths {
+			if info, err := os.Stat(p); err == nil && info.IsDir() {
+				agentDirPath = p
+				break
+			}
+		}
+
+		// For "default" directory (root-level files), use scan base path directly
+		if directory == "default" && agentDirPath == "" {
+			agentDirPath = scanBasePath
+		}
+	}
+
+	// Collect files from findings (may have absolute or relative paths)
+	for _, f := range findings {
+		// For "default" directory, include all root-level files
+		matchesDir := strings.Contains(f.File, directory)
+		if directory == "default" && !matchesDir {
+			// Root-level file if no path separator or not under examples/
+			matchesDir = !strings.Contains(f.File, "/") ||
+				(!strings.HasPrefix(f.File, "examples/") && filepath.Dir(f.File) == ".")
+		}
+
+		if matchesDir {
+			if filepath.IsAbs(f.File) {
+				fileSet[f.File] = true
+			} else if scanBasePath != "" {
+				// Try to make relative path absolute
+				absPath := filepath.Join(scanBasePath, f.File)
+				if _, err := os.Stat(absPath); err == nil {
+					fileSet[absPath] = true
+				}
+			}
+		}
+	}
+
+	// Glob for additional files in the agent directory
+	if agentDirPath != "" {
+		patterns := []string{"*.py", "*.json", "*.ts", "*.js"}
+		for _, pattern := range patterns {
+			matches, err := filepath.Glob(filepath.Join(agentDirPath, pattern))
+			if err == nil {
+				for _, m := range matches {
+					fileSet[m] = true
+				}
+			}
+		}
+	}
+
+	// Try each file to extract a meaningful name
+	var bestName string
+	var bestPriority int = 999
+
+	for filePath := range fileSet {
+		content, err := os.ReadFile(filePath)
+		if err != nil {
+			continue
+		}
+		contentStr := string(content)
+
+		// Priority 1: Python class names with Agent/Crew suffix
+		if strings.HasSuffix(filePath, ".py") {
+			if matches := pythonClassPattern.FindStringSubmatch(contentStr); len(matches) > 1 {
+				name := formatClassName(matches[1])
+				if name != "" && bestPriority > 1 {
+					bestName = name
+					bestPriority = 1
+				}
+			}
+
+			// Priority 2: Module docstring (first line)
+			if bestPriority > 2 {
+				if matches := pythonDocstringPattern.FindStringSubmatch(contentStr); len(matches) > 1 {
+					docLine := strings.Split(strings.TrimSpace(matches[1]), "\n")[0]
+					docLine = strings.TrimSpace(docLine)
+					if len(docLine) > 5 && len(docLine) < 60 {
+						bestName = docLine
+						bestPriority = 2
+					}
+				}
+			}
+
+			// Priority 3: Phidata Agent(name=...) pattern
+			if bestPriority > 3 {
+				if matches := phidataAgentPattern.FindStringSubmatch(contentStr); len(matches) > 1 {
+					bestName = matches[1]
+					bestPriority = 3
+				}
+			}
+
+			// Priority 4: AutoGen agent pattern
+			if bestPriority > 4 {
+				if matches := autogenAgentPattern.FindStringSubmatch(contentStr); len(matches) > 1 {
+					bestName = formatClassName(matches[1])
+					bestPriority = 4
+				}
+			}
+
+			// Priority 5: CrewAI role field
+			if bestPriority > 5 {
+				if matches := crewaiRolePattern.FindStringSubmatch(contentStr); len(matches) > 1 {
+					bestName = matches[1]
+					bestPriority = 5
+				}
+			}
+
+			// Priority 6: Generic name= pattern
+			if bestPriority > 6 {
+				if matches := genericNamePattern.FindStringSubmatch(contentStr); len(matches) > 1 {
+					bestName = matches[1]
+					bestPriority = 6
+				}
+			}
+		}
+
+		// Priority 7: n8n JSON workflow name - prefer "agent" in name
+		if strings.HasSuffix(filePath, ".json") && bestPriority > 7 {
+			if matches := n8nNamePattern.FindAllStringSubmatch(contentStr, -1); len(matches) > 0 {
+				// First pass: find names containing "agent"
+				for _, m := range matches {
+					if len(m) > 1 {
+						name := m[1]
+						lowerName := strings.ToLower(name)
+						if strings.Contains(lowerName, "agent") {
+							bestName = name
+							bestPriority = 7
+							break
+						}
+					}
+				}
+				// Second pass: find any meaningful non-generic name
+				if bestPriority > 7 {
+					for _, m := range matches {
+						if len(m) > 1 {
+							name := m[1]
+							lowerName := strings.ToLower(name)
+							// Skip generic/infrastructure names
+							if lowerName != "default" && lowerName != "start" &&
+								lowerName != "end" && lowerName != "main" &&
+								!strings.Contains(lowerName, "loop") &&
+								!strings.Contains(lowerName, "trigger") &&
+								len(name) > 2 {
+								bestName = name
+								bestPriority = 7
+								break
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Truncate long names (max ~40 chars for display)
+	if len(bestName) > 40 {
+		words := strings.Fields(bestName)
+		truncated := ""
+		for _, w := range words {
+			if len(truncated)+len(w)+1 <= 40 {
+				if truncated != "" {
+					truncated += " "
+				}
+				truncated += w
+			} else {
+				break
+			}
+		}
+		if truncated != "" {
+			bestName = truncated
+		}
+	}
+
+	// Fallback to formatted directory name
+	if bestName == "" {
+		return formatAgentDisplayName(directory)
+	}
+
+	return bestName
+}
+
+// formatClassName converts CamelCase class names to readable format
+// EnterpriseDevelopmentAgent → Development Agent
+// ContentResearchCrew → Content Research Crew
+// FinanceAgent → Finance Agent
+func formatClassName(className string) string {
+	// Remove common prefixes
+	name := className
+	prefixes := []string{"Enterprise", "Custom", "My", "The"}
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(name, prefix) && len(name) > len(prefix) {
+			name = name[len(prefix):]
+		}
+	}
+
+	// Remove common suffixes but keep them in mind
+	suffixes := []string{"Agent", "Crew", "Assistant", "Bot", "Worker", "Pipeline", "Flow"}
+	var suffix string
+	for _, s := range suffixes {
+		if strings.HasSuffix(name, s) && len(name) > len(s) {
+			suffix = s
+			name = name[:len(name)-len(s)]
+			break
+		}
+	}
+
+	// Split CamelCase into words
+	// First pass: insert spaces before capitals
+	name = camelCaseSplit.ReplaceAllString(name, "${1}${3} ${2}${4}")
+	name = strings.TrimSpace(name)
+
+	// If we have a meaningful name, optionally append the suffix type
+	if name != "" {
+		// Only append suffix if name is very short (like "Finance" → "Finance Agent")
+		if suffix != "" && len(strings.Fields(name)) <= 1 {
+			return name + " " + suffix
+		}
+		return name
+	}
+
+	// Fallback: return original with spaces
+	return className
+}
+
+// getGlobalStatus returns the global system status based on findings
+func getGlobalStatus(criticalCount, highCount int) (string, string, string) {
+	if criticalCount > 0 {
+		return "System Critical", "critical", "var(--critical)"
+	}
+	if highCount > 0 {
+		return "Needs Attention", "warning", "var(--high)"
+	}
+	return "System Healthy", "healthy", "var(--low)"
 }
 
 // outputJSON provides JSON output for integration with CI/CD
@@ -430,145 +1032,679 @@ func outputJSON(result *cli.ScanResult) error {
 	return encoder.Encode(result)
 }
 
-// Enterprise HTML Report - Dark Mode / Vercel-style
+// outputSARIF provides SARIF v2.1.0 output for GitHub Security integration
+func outputSARIF(result *cli.ScanResult) error {
+	sarif := buildSARIFReport(result)
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(sarif)
+}
+
+// SARIF v2.1.0 Schema Types
+// Reference: https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html
+
+type sarifReport struct {
+	Schema  string     `json:"$schema"`
+	Version string     `json:"version"`
+	Runs    []sarifRun `json:"runs"`
+}
+
+type sarifRun struct {
+	Tool    sarifTool     `json:"tool"`
+	Results []sarifResult `json:"results"`
+}
+
+type sarifTool struct {
+	Driver sarifDriver `json:"driver"`
+}
+
+type sarifDriver struct {
+	Name            string            `json:"name"`
+	Version         string            `json:"version"`
+	InformationURI  string            `json:"informationUri"`
+	SemanticVersion string            `json:"semanticVersion"`
+	Rules           []sarifRule       `json:"rules"`
+}
+
+type sarifRule struct {
+	ID               string                 `json:"id"`
+	Name             string                 `json:"name"`
+	ShortDescription sarifMessage           `json:"shortDescription"`
+	FullDescription  sarifMessage           `json:"fullDescription,omitempty"`
+	HelpURI          string                 `json:"helpUri,omitempty"`
+	DefaultConfiguration sarifConfiguration `json:"defaultConfiguration"`
+	Properties       sarifRuleProperties    `json:"properties,omitempty"`
+}
+
+type sarifConfiguration struct {
+	Level string `json:"level"`
+}
+
+type sarifRuleProperties struct {
+	Tags         []string `json:"tags,omitempty"`
+	SecuritySeverity string `json:"security-severity,omitempty"`
+}
+
+type sarifMessage struct {
+	Text string `json:"text"`
+}
+
+type sarifResult struct {
+	RuleID    string            `json:"ruleId"`
+	Level     string            `json:"level"`
+	Message   sarifMessage      `json:"message"`
+	Locations []sarifLocation   `json:"locations"`
+}
+
+type sarifLocation struct {
+	PhysicalLocation sarifPhysicalLocation `json:"physicalLocation"`
+}
+
+type sarifPhysicalLocation struct {
+	ArtifactLocation sarifArtifact `json:"artifactLocation"`
+	Region           sarifRegion   `json:"region"`
+}
+
+type sarifArtifact struct {
+	URI string `json:"uri"`
+}
+
+type sarifRegion struct {
+	StartLine   int `json:"startLine"`
+	StartColumn int `json:"startColumn,omitempty"`
+}
+
+func buildSARIFReport(result *cli.ScanResult) *sarifReport {
+	// Build unique rules from findings
+	rulesMap := make(map[string]sarifRule)
+	var results []sarifResult
+
+	for _, f := range result.AllFindings {
+		// Generate rule ID from pattern
+		ruleID := f.PatternID
+		if ruleID == "" {
+			ruleID = strings.ReplaceAll(strings.ToLower(f.Pattern), " ", "-")
+		}
+		if ruleID == "" {
+			ruleID = "inkog-unknown"
+		}
+
+		// Add rule if not already present
+		if _, exists := rulesMap[ruleID]; !exists {
+			rulesMap[ruleID] = sarifRule{
+				ID:   ruleID,
+				Name: f.Pattern,
+				ShortDescription: sarifMessage{
+					Text: f.Pattern,
+				},
+				FullDescription: sarifMessage{
+					Text: f.Message,
+				},
+				HelpURI: buildHelpURI(f.CWE),
+				DefaultConfiguration: sarifConfiguration{
+					Level: severityToSARIFLevel(f.Severity),
+				},
+				Properties: sarifRuleProperties{
+					Tags:             buildTags(f),
+					SecuritySeverity: severityToScore(f.Severity),
+				},
+			}
+		}
+
+		// Create result
+		results = append(results, sarifResult{
+			RuleID: ruleID,
+			Level:  severityToSARIFLevel(f.Severity),
+			Message: sarifMessage{
+				Text: f.Message,
+			},
+			Locations: []sarifLocation{
+				{
+					PhysicalLocation: sarifPhysicalLocation{
+						ArtifactLocation: sarifArtifact{
+							URI: f.File,
+						},
+						Region: sarifRegion{
+							StartLine:   f.Line,
+							StartColumn: f.Column,
+						},
+					},
+				},
+			},
+		})
+	}
+
+	// Convert rules map to slice
+	rules := make([]sarifRule, 0, len(rulesMap))
+	for _, rule := range rulesMap {
+		rules = append(rules, rule)
+	}
+
+	return &sarifReport{
+		Schema:  "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+		Version: "2.1.0",
+		Runs: []sarifRun{
+			{
+				Tool: sarifTool{
+					Driver: sarifDriver{
+						Name:            "Inkog",
+						Version:         AppVersion,
+						InformationURI:  "https://inkog.io",
+						SemanticVersion: AppVersion,
+						Rules:           rules,
+					},
+				},
+				Results: results,
+			},
+		},
+	}
+}
+
+func severityToSARIFLevel(severity string) string {
+	switch severity {
+	case "CRITICAL", "HIGH":
+		return "error"
+	case "MEDIUM":
+		return "warning"
+	case "LOW":
+		return "note"
+	default:
+		return "warning"
+	}
+}
+
+func severityToScore(severity string) string {
+	switch severity {
+	case "CRITICAL":
+		return "9.0"
+	case "HIGH":
+		return "7.0"
+	case "MEDIUM":
+		return "5.0"
+	case "LOW":
+		return "3.0"
+	default:
+		return "5.0"
+	}
+}
+
+func buildHelpURI(cwe string) string {
+	if cwe == "" {
+		return "https://inkog.io/docs/patterns"
+	}
+	// Extract CWE number for MITRE link
+	cweNum := strings.TrimPrefix(cwe, "CWE-")
+	return fmt.Sprintf("https://cwe.mitre.org/data/definitions/%s.html", cweNum)
+}
+
+func buildTags(f contract.Finding) []string {
+	tags := []string{"security"}
+	if f.CWE != "" {
+		tags = append(tags, f.CWE)
+	}
+	if f.OWASP != "" {
+		tags = append(tags, "OWASP:"+f.OWASP)
+	}
+	return tags
+}
+
+// Enterprise HTML Report - Inkog Design System
 const htmlReportCSS = `
 :root {
-    --bg-primary: #0a0a0a;
-    --bg-secondary: #171717;
-    --bg-card: #1a1a1a;
-    --text-primary: #fafafa;
+    /* Backgrounds - Inkog Dark Mode */
+    --bg-primary: #0A0A0A;
+    --bg-secondary: #121212;
+    --bg-card: rgba(24, 24, 27, 0.5);
+    --bg-elevated: #18181b;
+
+    /* Text - Zinc Scale */
+    --text-primary: #e4e4e7;
+    --text-heading: #f4f4f5;
     --text-secondary: #a1a1aa;
-    --border: #27272a;
+    --text-muted: #71717a;
+
+    /* Borders - Semi-transparent */
+    --border: rgba(255, 255, 255, 0.1);
+    --border-subtle: #27272a;
+
+    /* Severity Colors */
     --critical: #ef4444;
+    --critical-bg: rgba(239, 68, 68, 0.1);
     --high: #f97316;
+    --high-bg: rgba(249, 115, 22, 0.1);
     --medium: #eab308;
+    --medium-bg: rgba(234, 179, 8, 0.1);
     --low: #22c55e;
-    --accent: #3b82f6;
+    --low-bg: rgba(34, 197, 94, 0.1);
+
+    /* Primary Accent - Inkog Violet */
+    --primary: #8b5cf6;
+    --primary-hover: #7c3aed;
+    --primary-light: #a78bfa;
+    --primary-bg: rgba(139, 92, 246, 0.1);
+    --primary-glow: rgba(139, 92, 246, 0.5);
+
+    /* Layout */
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --radius-xl: 20px;
+
+    /* Shadows - Violet Glow (Inkog Signature) */
+    --shadow-sm: 0 0 20px -5px rgba(139, 92, 246, 0.2);
+    --shadow-md: 0 0 30px -8px rgba(139, 92, 246, 0.3);
+    --shadow-lg: 0 0 40px -10px rgba(139, 92, 246, 0.4);
+
+    /* Transitions */
+    --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Light Mode Support */
+@media (prefers-color-scheme: light) {
+    :root {
+        /* Backgrounds - Light Mode */
+        --bg-primary: #fafafa;
+        --bg-secondary: #f4f4f5;
+        --bg-card: rgba(255, 255, 255, 0.9);
+        --bg-elevated: #ffffff;
+
+        /* Text - Dark for Light Mode */
+        --text-primary: #18181b;
+        --text-heading: #09090b;
+        --text-secondary: #52525b;
+        --text-muted: #71717a;
+
+        /* Borders - Darker for Light Mode */
+        --border: rgba(0, 0, 0, 0.1);
+        --border-subtle: #e4e4e7;
+
+        /* Severity Colors - Slightly darker for light mode contrast */
+        --critical: #dc2626;
+        --critical-bg: rgba(220, 38, 38, 0.1);
+        --high: #ea580c;
+        --high-bg: rgba(234, 88, 12, 0.1);
+        --medium: #ca8a04;
+        --medium-bg: rgba(202, 138, 4, 0.1);
+        --low: #16a34a;
+        --low-bg: rgba(22, 163, 74, 0.1);
+
+        /* Primary Accent - Inkog Violet (darker for light mode) */
+        --primary: #7c3aed;
+        --primary-hover: #6d28d9;
+        --primary-light: #8b5cf6;
+        --primary-bg: rgba(124, 58, 237, 0.1);
+        --primary-glow: rgba(124, 58, 237, 0.3);
+
+        /* Shadows - Softer for Light Mode */
+        --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
+        --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+        --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+    }
+
+    /* Code blocks need inverted styling in light mode */
+    .code-frame pre {
+        background: #1e1e1e !important;
+        color: #d4d4d4 !important;
+    }
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
     background: var(--bg-primary);
     color: var(--text-primary);
     line-height: 1.6;
     padding: 2rem;
-    max-width: 1200px;
+    max-width: 1400px;
     margin: 0 auto;
+    -webkit-font-smoothing: antialiased;
 }
 
+/* Header */
 header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 2rem;
-    padding-bottom: 1rem;
+    padding-bottom: 1.5rem;
     border-bottom: 1px solid var(--border);
 }
 
-header h1 {
-    font-size: 1.5rem;
-    font-weight: 600;
+.logo {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.75rem;
 }
 
-header h1::before {
-    content: '🔒';
+.logo svg {
+    width: 32px;
+    height: 32px;
+}
+
+.logo span {
+    font-size: 1.25rem;
+    font-weight: 600;
+    letter-spacing: -0.025em;
+    color: var(--text-heading);
 }
 
 .timestamp {
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+}
+
+/* Global Status Bar */
+.global-status {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1rem 1.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    position: relative;
+    overflow: hidden;
+}
+
+.global-status::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+}
+
+.global-status.critical::before { background: var(--critical); }
+.global-status.warning::before { background: var(--high); }
+.global-status.healthy::before { background: var(--low); }
+
+.status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.pulse {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.global-status.critical .pulse { background: var(--critical); }
+.global-status.warning .pulse { background: var(--high); }
+.global-status.healthy .pulse { background: var(--low); }
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(1.3); }
+}
+
+.status-text {
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.global-status.critical .status-text { color: var(--critical); }
+.global-status.warning .status-text { color: var(--high); }
+.global-status.healthy .status-text { color: var(--low); }
+
+.status-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
     color: var(--text-secondary);
     font-size: 0.875rem;
 }
 
-.cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: 1rem;
-    margin-bottom: 2rem;
+.status-meta .divider {
+    color: var(--text-muted);
 }
 
-.card {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 1.25rem;
-    text-align: center;
-    transition: border-color 0.2s;
-}
-
-.card:hover {
-    border-color: var(--text-secondary);
-}
-
-.card .value {
-    font-size: 2.5rem;
-    font-weight: 700;
-    display: block;
-    margin-bottom: 0.25rem;
-}
-
-.card .label {
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.card.risk .value { color: var(--accent); }
-.card.critical .value { color: var(--critical); }
-.card.high .value { color: var(--high); }
-.card.medium .value { color: var(--medium); }
-.card.low .value { color: var(--low); }
-
+/* Section Headers */
 section {
-    margin-bottom: 2rem;
+    margin-bottom: 2.5rem;
 }
 
 section h2 {
-    font-size: 1rem;
+    font-size: 0.8125rem;
     font-weight: 600;
     margin-bottom: 1rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+/* Agent Cards Grid */
+.agent-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 1.25rem;
+}
+
+.agent-card {
+    background: var(--bg-card);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+    transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast);
+}
+
+.agent-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+    border-color: rgba(139, 92, 246, 0.3);
+}
+
+.agent-card.selected {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px var(--primary-bg), var(--shadow-lg);
+    transform: translateY(-2px);
+}
+
+.global-status {
+    cursor: pointer;
+    transition: background var(--transition-fast);
+}
+
+.global-status:hover {
+    background: var(--bg-elevated);
+}
+
+.agent-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+}
+
+.agent-card.grade-f::before { background: linear-gradient(90deg, var(--critical), #b91c1c); }
+.agent-card.grade-d::before { background: linear-gradient(90deg, var(--high), #c2410c); }
+.agent-card.grade-c::before { background: linear-gradient(90deg, var(--medium), #a16207); }
+.agent-card.grade-b::before { background: linear-gradient(90deg, var(--primary), #6d28d9); }
+.agent-card.grade-a::before { background: linear-gradient(90deg, var(--low), #15803d); }
+
+.agent-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+}
+
+.agent-info {
+    flex: 1;
+}
+
+.agent-name {
+    font-size: 1.125rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+    letter-spacing: -0.01em;
+}
+
+.agent-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.framework-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.1875rem 0.5rem;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 0.6875rem;
     color: var(--text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.05em;
+    font-weight: 500;
 }
 
-.compliance-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 1rem;
+.issue-count {
+    font-size: 0.8125rem;
+    color: var(--text-muted);
 }
 
-.compliance-item {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 1rem;
+.agent-grade {
+    width: 52px;
+    height: 52px;
+    border-radius: var(--radius-md);
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    justify-content: center;
+    font-size: 1.75rem;
+    font-weight: 800;
+    flex-shrink: 0;
+    letter-spacing: -0.025em;
 }
 
-.compliance-item .check {
-    color: var(--text-secondary);
+.agent-grade.grade-f { background: var(--critical-bg); color: var(--critical); }
+.agent-grade.grade-d { background: var(--high-bg); color: var(--high); }
+.agent-grade.grade-c { background: var(--medium-bg); color: var(--medium); }
+.agent-grade.grade-b { background: var(--primary-bg); color: var(--primary); }
+.agent-grade.grade-a { background: var(--low-bg); color: var(--low); }
+
+.severity-pills {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
 }
 
-.compliance-item .status {
+.mini-pill {
+    padding: 0.25rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 0.6875rem;
     font-weight: 600;
 }
 
-.compliance-item .status.pass { color: var(--low); }
-.compliance-item .status.fail { color: var(--critical); }
+.mini-pill.critical { background: var(--critical-bg); color: var(--critical); }
+.mini-pill.high { background: var(--high-bg); color: var(--high); }
+.mini-pill.medium { background: var(--medium-bg); color: var(--medium); }
+.mini-pill.low { background: var(--low-bg); color: var(--low); }
 
-.finding {
-    background: var(--bg-secondary);
+.top-issues {
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+}
+
+.top-issue {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.375rem 0;
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+}
+
+.top-issue::before {
+    content: '';
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    flex-shrink: 0;
+}
+
+/* Accordion */
+.accordion {
+    background: var(--bg-card);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     margin-bottom: 0.75rem;
+    overflow: hidden;
+}
+
+.accordion-header {
+    display: flex;
+    align-items: center;
+    padding: 1rem 1.25rem;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+    gap: 1rem;
+}
+
+.accordion-header:hover {
+    background: var(--bg-elevated);
+}
+
+.accordion-icon {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    transition: transform var(--transition-fast);
+    flex-shrink: 0;
+}
+
+.accordion.open .accordion-icon {
+    transform: rotate(90deg);
+}
+
+.accordion-title {
+    flex: 1;
+    font-weight: 500;
+    font-size: 0.9375rem;
+}
+
+.accordion-count {
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+}
+
+.accordion-badges {
+    display: flex;
+    gap: 0.375rem;
+}
+
+.accordion-body {
+    display: none;
+    padding: 0 1.25rem 1.25rem;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border);
+}
+
+.accordion.open .accordion-body {
+    display: block;
+}
+
+/* Findings */
+.finding {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    margin-top: 0.75rem;
     overflow: hidden;
 }
 
@@ -576,27 +1712,29 @@ section h2 {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 1rem;
+    padding: 0.875rem 1rem;
     cursor: pointer;
-    transition: background 0.2s;
+    transition: background var(--transition-fast);
     gap: 1rem;
 }
 
 .finding-header:hover {
-    background: var(--bg-card);
+    background: var(--bg-elevated);
 }
 
 .finding-title {
     flex: 1;
     font-weight: 500;
+    font-size: 0.875rem;
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0.5rem;
 }
 
 .finding-title .icon {
-    opacity: 0.5;
-    transition: transform 0.2s;
+    color: var(--text-muted);
+    font-size: 0.625rem;
+    transition: transform var(--transition-fast);
 }
 
 .finding.open .finding-title .icon {
@@ -606,16 +1744,16 @@ section h2 {
 .finding-meta {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    color: var(--text-secondary);
-    font-size: 0.875rem;
+    gap: 0.625rem;
+    color: var(--text-muted);
+    font-size: 0.8125rem;
 }
 
 .finding-body {
     display: none;
     padding: 1rem;
     border-top: 1px solid var(--border);
-    background: var(--bg-primary);
+    background: var(--bg-secondary);
 }
 
 .finding.open .finding-body {
@@ -624,7 +1762,7 @@ section h2 {
 
 .finding-details {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
     gap: 1rem;
     margin-bottom: 1rem;
 }
@@ -634,25 +1772,33 @@ section h2 {
 }
 
 .finding-details strong {
-    color: var(--text-secondary);
+    color: var(--text-muted);
     font-weight: 500;
     display: block;
-    font-size: 0.75rem;
+    font-size: 0.6875rem;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.075em;
     margin-bottom: 0.25rem;
+}
+
+.finding-message {
+    margin-bottom: 1rem;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    line-height: 1.5;
 }
 
 .code-snippet {
     background: #000;
     padding: 1rem;
-    border-radius: 6px;
-    font-family: 'SF Mono', 'Monaco', 'Consolas', 'Liberation Mono', monospace;
+    border-radius: var(--radius-md);
+    font-family: 'SF Mono', 'Fira Code', 'Monaco', monospace;
     font-size: 0.8125rem;
     overflow-x: auto;
     white-space: pre;
     color: #e4e4e7;
     border: 1px solid var(--border);
+    line-height: 1.5;
 }
 
 .severity-badge {
@@ -669,228 +1815,85 @@ section h2 {
 .severity-medium { background: var(--medium); color: #171717; }
 .severity-low { background: var(--low); color: white; }
 
-.empty-state {
-    text-align: center;
-    padding: 3rem;
-    color: var(--text-secondary);
-}
-
-.empty-state .icon {
-    font-size: 3rem;
-    margin-bottom: 1rem;
-}
-
-footer {
-    margin-top: 3rem;
-    padding-top: 1rem;
-    border-top: 1px solid var(--border);
-    text-align: center;
-    color: var(--text-secondary);
-    font-size: 0.75rem;
-}
-
-footer a {
-    color: var(--accent);
-    text-decoration: none;
-}
-
-footer a:hover {
-    text-decoration: underline;
-}
-
-/* Security Grade Badge */
-.security-grade {
-    display: flex;
-    gap: 2rem;
-    align-items: flex-start;
-    margin-bottom: 2rem;
-}
-
-.grade-badge {
-    width: 100px;
-    height: 100px;
-    border-radius: 12px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-}
-
-.grade-badge .letter {
-    font-size: 3rem;
-    font-weight: 800;
-    line-height: 1;
-}
-
-.grade-badge .label {
-    font-size: 0.75rem;
+/* Finding Type Badges */
+.finding-type-badge {
+    padding: 0.125rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.625rem;
+    font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
+    margin-right: 0.5rem;
+}
+.finding-type-badge.code {
+    background: var(--primary-bg);
+    color: var(--primary-light);
+    border: 1px solid rgba(139, 92, 246, 0.3);
+}
+.finding-type-badge.config {
+    background: var(--medium-bg);
+    color: var(--medium);
+    border: 1px solid rgba(234, 179, 8, 0.3);
+}
+.finding-type-badge.secret {
+    background: var(--critical-bg);
+    color: var(--critical);
+    border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
-.grade-a { background: #166534; color: white; }
-.grade-b { background: #15803d; color: white; }
-.grade-c { background: #ca8a04; color: white; }
-.grade-d { background: #ea580c; color: white; }
-.grade-f { background: #dc2626; color: white; }
-
-.score-breakdown {
-    flex: 1;
-}
-
-.score-breakdown h3 {
-    font-size: 0.875rem;
-    color: var(--text-secondary);
-    margin-bottom: 0.5rem;
-}
-
-.score-breakdown ul {
-    list-style: none;
-    padding: 0;
-    margin: 0.5rem 0;
-}
-
-.score-breakdown li {
-    padding: 0.25rem 0;
-    color: var(--text-secondary);
-    font-size: 0.875rem;
-}
-
-.score-breakdown .total {
-    font-weight: 600;
-    font-size: 1.125rem;
-    margin-top: 0.5rem;
-    padding-top: 0.5rem;
-    border-top: 1px solid var(--border);
-}
-
-.score-breakdown .scale {
-    margin-top: 0.5rem;
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-}
-
-/* Security Gate */
-.security-gate {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 1.5rem;
-    margin-bottom: 2rem;
-}
-
-.gate-header {
+/* Empty Code Snippet State */
+.code-snippet.empty {
+    background: var(--bg-elevated);
+    border: 1px dashed var(--border);
+    padding: 1.25rem;
+    text-align: center;
+    color: var(--text-muted);
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    margin-bottom: 1rem;
-}
-
-.gate-status {
-    font-size: 1.25rem;
-    font-weight: 600;
-}
-
-.gate-status.blocked { color: var(--critical); }
-.gate-status.passed { color: var(--low); }
-
-.gate-breakdown {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 1rem;
-}
-
-.gate-item {
-    text-align: center;
-    padding: 1rem;
-    border-radius: 8px;
-    background: var(--bg-card);
-}
-
-.gate-item .count {
-    font-size: 2rem;
-    font-weight: 700;
-    display: block;
-}
-
-.gate-item .label {
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-    display: block;
-    margin: 0.25rem 0;
-}
-
-.gate-item .status {
-    font-size: 0.875rem;
-}
-
-.gate-item.fail .count { color: var(--critical); }
-.gate-item.warn .count { color: var(--medium); }
-.gate-item.pass .count { color: var(--low); }
-
-.gate-policy {
-    margin-top: 1rem;
-    color: var(--text-secondary);
-    font-size: 0.875rem;
-    text-align: center;
-}
-
-/* Agent Tabs */
-.agent-tabs {
-    display: flex;
+    justify-content: center;
     gap: 0.5rem;
-    margin-bottom: 1rem;
-    flex-wrap: wrap;
-}
-
-.agent-tab {
-    padding: 0.5rem 1rem;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    background: var(--bg-secondary);
-    color: var(--text-secondary);
-    cursor: pointer;
-    transition: all 0.2s;
+    font-family: var(--font-sans);
     font-size: 0.875rem;
 }
-
-.agent-tab:hover {
-    border-color: var(--text-secondary);
-}
-
-.agent-tab.active {
-    background: var(--accent);
-    color: white;
-    border-color: var(--accent);
+.code-snippet.empty .empty-icon {
+    font-size: 1rem;
 }
 
 /* Filter Pills */
+.filter-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
 .filter-pills {
     display: flex;
     gap: 0.5rem;
-    margin-bottom: 1.5rem;
     flex-wrap: wrap;
 }
 
 .pill {
-    padding: 0.375rem 0.75rem;
+    padding: 0.375rem 0.875rem;
     border-radius: 9999px;
     border: 1px solid var(--border);
-    background: var(--bg-secondary);
+    background: transparent;
     color: var(--text-secondary);
     font-size: 0.8125rem;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all var(--transition-fast);
+    font-weight: 500;
 }
 
 .pill:hover {
-    border-color: var(--text-secondary);
+    border-color: var(--text-muted);
+    background: var(--bg-elevated);
 }
 
 .pill.active {
     background: var(--text-primary);
     color: var(--bg-primary);
+    border-color: var(--text-primary);
 }
 
 .pill.critical.active { background: var(--critical); border-color: var(--critical); color: white; }
@@ -898,142 +1901,185 @@ footer a:hover {
 .pill.medium.active { background: var(--medium); border-color: var(--medium); color: #171717; }
 .pill.low.active { background: var(--low); border-color: var(--low); color: white; }
 
-/* Print styles for CISO-friendly PDF export */
+/* Empty State */
+.empty-state {
+    text-align: center;
+    padding: 4rem 2rem;
+    color: var(--text-secondary);
+}
+
+.empty-state .icon {
+    font-size: 3.5rem;
+    margin-bottom: 1rem;
+}
+
+.empty-state p {
+    font-size: 1rem;
+}
+
+/* Footer */
+footer {
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+}
+
+footer a {
+    color: var(--primary);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+footer a:hover {
+    text-decoration: underline;
+}
+
+/* Print styles */
 @media print {
-    /* Reset to light mode for printing */
     :root {
         --bg-primary: #ffffff;
-        --bg-secondary: #f5f5f5;
+        --bg-secondary: #f9fafb;
         --bg-card: #ffffff;
-        --text-primary: #171717;
-        --text-secondary: #525252;
-        --border: #e5e5e5;
+        --bg-elevated: #f3f4f6;
+        --text-primary: #111827;
+        --text-secondary: #4b5563;
+        --text-muted: #6b7280;
+        --border: #e5e7eb;
     }
 
     body {
         background: white;
-        color: black;
         padding: 0;
         max-width: none;
     }
 
-    /* Hide interactive elements */
-    .filter-buttons,
-    .finding-title .icon,
-    footer a {
-        display: none !important;
-    }
+    .global-status { page-break-inside: avoid; }
+    .agent-card { page-break-inside: avoid; }
+    .accordion-body { display: block !important; }
+    .finding-body { display: block !important; }
 
-    /* Expand all findings */
-    .finding-body {
-        display: block !important;
-    }
-
-    /* Remove hover effects */
-    .card:hover,
-    .finding-header:hover {
-        border-color: var(--border);
-        background: transparent;
-    }
-
-    /* Ensure cards print in a row */
-    .cards {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-    }
-
-    .card {
-        flex: 1;
-        min-width: 100px;
-        border: 1px solid #ccc;
-        page-break-inside: avoid;
-    }
-
-    /* Code snippets print-friendly */
     .code-snippet {
-        background: #f5f5f5;
-        color: #171717;
-        border: 1px solid #ccc;
+        background: #f3f4f6;
+        color: #111827;
         white-space: pre-wrap;
-        word-wrap: break-word;
     }
 
-    /* Severity badges print-friendly */
-    .severity-badge {
-        border: 1px solid currentColor;
-    }
-
-    .severity-critical { background: #fee2e2; color: #991b1b; }
-    .severity-high { background: #ffedd5; color: #9a3412; }
-    .severity-medium { background: #fef3c7; color: #92400e; }
-    .severity-low { background: #dcfce7; color: #166534; }
-
-    /* Page breaks */
-    .finding {
-        page-break-inside: avoid;
-        margin-bottom: 1rem;
-    }
-
-    section {
-        page-break-before: auto;
-    }
-
-    /* Compliance section should not break */
-    .compliance-grid {
-        page-break-inside: avoid;
-    }
-
-    @page {
-        margin: 2cm;
-    }
+    @page { margin: 1.5cm; }
 }
 `
 
 const htmlReportJS = `
+// State for agent filtering
+let activeAgent = null;
+
 // Finding toggle
 document.querySelectorAll('.finding-header').forEach(header => {
+    header.addEventListener('click', (e) => {
+        e.stopPropagation();
+        header.parentElement.classList.toggle('open');
+    });
+});
+
+// Accordion toggle
+document.querySelectorAll('.accordion-header').forEach(header => {
     header.addEventListener('click', () => {
         header.parentElement.classList.toggle('open');
     });
 });
 
-// Agent tab switching
-document.querySelectorAll('.agent-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-        document.querySelectorAll('.agent-tab').forEach(t => t.classList.remove('active'));
-        tab.classList.add('active');
+// Agent card click - filter findings by agent
+document.querySelectorAll('.agent-card').forEach(card => {
+    card.addEventListener('click', () => {
+        const agent = card.dataset.agent;
 
-        const agent = tab.dataset.agent;
-        document.querySelectorAll('.finding').forEach(finding => {
-            if (agent === 'all' || finding.dataset.agent === agent) {
-                finding.style.display = '';
-            } else {
-                finding.style.display = 'none';
-            }
-        });
+        // Toggle selection
+        if (activeAgent === agent) {
+            // Deselect - show all
+            activeAgent = null;
+            card.classList.remove('selected');
+        } else {
+            // Select this agent
+            document.querySelectorAll('.agent-card').forEach(c => c.classList.remove('selected'));
+            activeAgent = agent;
+            card.classList.add('selected');
+        }
+
+        filterByAgent();
     });
 });
 
-// Severity filter pills
+// Global status click - reset filter (show all)
+const globalStatus = document.querySelector('.global-status');
+if (globalStatus) {
+    globalStatus.addEventListener('click', () => {
+        activeAgent = null;
+        document.querySelectorAll('.agent-card').forEach(c => c.classList.remove('selected'));
+        filterByAgent();
+    });
+}
+
+// Filter findings by active agent
+function filterByAgent() {
+    document.querySelectorAll('.accordion').forEach(accordion => {
+        const agent = accordion.dataset.agent;
+        if (activeAgent === null || agent === activeAgent) {
+            accordion.style.display = '';
+            // Auto-open the selected agent's accordion
+            if (activeAgent !== null) {
+                accordion.classList.add('open');
+                setTimeout(() => {
+                    accordion.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }, 100);
+            }
+        } else {
+            accordion.style.display = 'none';
+            accordion.classList.remove('open');
+        }
+    });
+}
+
+// Severity filter pills - respects active agent selection
 document.querySelectorAll('.pill').forEach(pill => {
     pill.addEventListener('click', () => {
         document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
         pill.classList.add('active');
 
         const severity = pill.dataset.severity;
-        document.querySelectorAll('.finding').forEach(finding => {
-            if (severity === 'all' || finding.dataset.severity === severity) {
-                finding.style.display = '';
-            } else {
-                finding.style.display = 'none';
+
+        // Filter accordions and findings together, respecting agent filter
+        document.querySelectorAll('.accordion').forEach(accordion => {
+            const agentMatch = activeAgent === null || accordion.dataset.agent === activeAgent;
+
+            if (!agentMatch) {
+                // Hide accordion and all its findings if agent doesn't match
+                accordion.style.display = 'none';
+                accordion.querySelectorAll('.finding').forEach(f => f.style.display = 'none');
+                return;
             }
+
+            // Agent matches - now filter findings by severity
+            let visibleCount = 0;
+            accordion.querySelectorAll('.finding').forEach(finding => {
+                const severityMatch = severity === 'all' || finding.dataset.severity === severity;
+                if (severityMatch) {
+                    finding.style.display = '';
+                    visibleCount++;
+                } else {
+                    finding.style.display = 'none';
+                }
+            });
+
+            // Show accordion if it has visible findings
+            accordion.style.display = visibleCount > 0 ? '' : 'none';
         });
     });
 });
 `
 
-// outputHTML provides enterprise HTML report with dark mode / Vercel-style design
+// outputHTML provides enterprise HTML dashboard report
 func outputHTML(result *cli.ScanResult, minSeverity string) error {
 	// Calculate metrics
 	criticalCount := len(filterFindingsBySeverity(result.AllFindings, "CRITICAL"))
@@ -1042,24 +2088,16 @@ func outputHTML(result *cli.ScanResult, minSeverity string) error {
 	lowCount := len(filterFindingsBySeverity(result.AllFindings, "LOW"))
 	totalCount := len(result.AllFindings)
 
-	// Calculate security score and grade (Snyk-style)
-	securityScore := calculateSecurityScore(result.AllFindings)
-	grade, gradeLabel, gradeClass := getSecurityGrade(securityScore)
-
-	// Group findings by agent
+	// Group findings by agent and build reports
 	agentGroups := groupFindingsByAgent(result.AllFindings)
-	agentNames := getAgentNames(agentGroups)
+	agentReports := buildAgentReports(agentGroups)
 
-	// Generate agent tabs HTML
-	agentTabsHTML := generateAgentTabsHTML(agentGroups, agentNames, totalCount)
+	// Get global status
+	statusText, statusClass, _ := getGlobalStatus(criticalCount, highCount)
 
-	// Generate findings HTML with agent data attributes
-	findingsHTML := generateFindingsHTML(result.AllFindings)
-
-	// Gate status helpers
-	gateClass := gateStatusClass(criticalCount, highCount)
-	gateText := gateStatusText(criticalCount, highCount)
-	gateIcon := gateStatusIcon(criticalCount, highCount)
+	// Generate HTML components
+	agentCardsHTML := generateAgentCardsHTML(agentReports)
+	accordionsHTML := generateAccordionsHTML(agentReports)
 
 	// Build the full HTML
 	html := fmt.Sprintf(`<!DOCTYPE html>
@@ -1072,79 +2110,65 @@ func outputHTML(result *cli.ScanResult, minSeverity string) error {
 </head>
 <body>
     <header>
-        <h1>Inkog Security Report</h1>
-        <span class="timestamp">Generated: %s</span>
+        <div class="logo">
+            <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <!-- Inkog Shield Logo - Violet gradient with scanner motif -->
+                <defs>
+                    <linearGradient id="inkogGradient" x1="0%%" y1="0%%" x2="100%%" y2="100%%">
+                        <stop offset="0%%" style="stop-color:#a78bfa"/>
+                        <stop offset="100%%" style="stop-color:#7c3aed"/>
+                    </linearGradient>
+                </defs>
+                <!-- Shield base -->
+                <path d="M16 2L4 7v9c0 7.18 5.12 13.88 12 16 6.88-2.12 12-8.82 12-16V7L16 2z" fill="url(#inkogGradient)"/>
+                <!-- Scanner lines -->
+                <path d="M10 12h12M10 16h12M10 20h8" stroke="white" stroke-width="1.5" stroke-linecap="round" opacity="0.9"/>
+                <!-- Checkmark overlay -->
+                <path d="M12 16l3 3 5-6" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span>Inkog Security Report</span>
+        </div>
+        <span class="timestamp">%s</span>
     </header>
 
-    <!-- Security Grade + Gate Summary -->
-    <section class="security-grade">
-        <div class="grade-badge %s">
-            <span class="letter">%s</span>
-            <span class="label">%s</span>
+    <!-- Global Status Bar -->
+    <div class="global-status %s">
+        <div class="status-indicator">
+            <span class="pulse"></span>
+            <span class="status-text">%s</span>
         </div>
-        <div class="score-breakdown">
-            <h3>Score Breakdown</h3>
-            <ul>
-                <li>%d Critical × %d = <strong>%d</strong></li>
-                <li>%d High × %d = <strong>%d</strong></li>
-                <li>%d Medium × %d = <strong>%d</strong></li>
-                <li>%d Low × %d = <strong>%d</strong></li>
-            </ul>
-            <div class="total">Total: %d points</div>
-            <p class="scale">A (0) | B (1-20) | C (21-50) | D (51-100) | F (100+)</p>
+        <div class="status-meta">
+            <span>%d Agents Scanned</span>
+            <span class="divider">•</span>
+            <span>%d Total Issues</span>
         </div>
-    </section>
-
-    <!-- Security Gate -->
-    <section class="security-gate">
-        <div class="gate-header">
-            <span class="gate-status %s">%s Security Gate: %s</span>
-        </div>
-        <div class="gate-breakdown">
-            <div class="gate-item %s">
-                <span class="count">%d</span>
-                <span class="label">Critical</span>
-                <span class="status">%s</span>
-            </div>
-            <div class="gate-item %s">
-                <span class="count">%d</span>
-                <span class="label">High</span>
-                <span class="status">%s</span>
-            </div>
-            <div class="gate-item %s">
-                <span class="count">%d</span>
-                <span class="label">Medium</span>
-                <span class="status">%s</span>
-            </div>
-            <div class="gate-item %s">
-                <span class="count">%d</span>
-                <span class="label">Low</span>
-                <span class="status">%s</span>
-            </div>
-        </div>
-        <p class="gate-policy">Policy: 0 Critical + 0 High required to pass</p>
-    </section>
-
-    <!-- Agent Tabs -->
-    %s
-
-    <!-- Severity Filter Pills -->
-    <div class="filter-pills">
-        <button class="pill active" data-severity="all">All (%d)</button>
-        <button class="pill critical" data-severity="CRITICAL">Critical (%d)</button>
-        <button class="pill high" data-severity="HIGH">High (%d)</button>
-        <button class="pill medium" data-severity="MEDIUM">Medium (%d)</button>
-        <button class="pill low" data-severity="LOW">Low (%d)</button>
     </div>
 
-    <!-- Findings -->
+    <!-- Agent Overview Cards -->
     <section>
-        <h2>Security Findings</h2>
+        <h2>Agent Overview</h2>
+        <div class="agent-grid">
+            %s
+        </div>
+    </section>
+
+    <!-- Detailed Findings -->
+    <section>
+        <h2>Detailed Findings</h2>
+        <div class="filter-bar">
+            <div class="filter-pills">
+                <button class="pill active" data-severity="all">All (%d)</button>
+                <button class="pill critical" data-severity="CRITICAL">Critical (%d)</button>
+                <button class="pill high" data-severity="HIGH">High (%d)</button>
+                <button class="pill medium" data-severity="MEDIUM">Medium (%d)</button>
+                <button class="pill low" data-severity="LOW">Low (%d)</button>
+            </div>
+        </div>
         %s
     </section>
 
     <footer>
-        <p>Report generated by <a href="https://inkog.io" target="_blank">Inkog</a> Security Scanner v%s</p>
+        <p>Powered by <a href="https://inkog.io" target="_blank">Inkog</a> • AI Agent Security Platform v%s</p>
     </footer>
 
     <script>%s</script>
@@ -1152,33 +2176,218 @@ func outputHTML(result *cli.ScanResult, minSeverity string) error {
 </html>`,
 		htmlReportCSS,
 		currentTimestamp(),
-		// Security Grade
-		gradeClass, grade, gradeLabel,
-		// Score breakdown
-		criticalCount, PointsCritical, criticalCount*PointsCritical,
-		highCount, PointsHigh, highCount*PointsHigh,
-		mediumCount, PointsMedium, mediumCount*PointsMedium,
-		lowCount, PointsLow, lowCount*PointsLow,
-		securityScore,
-		// Security Gate
-		gateClass, gateIcon, gateText,
-		gateItemClass(criticalCount), criticalCount, gateItemStatus(criticalCount),
-		gateItemClass(highCount), highCount, gateItemStatus(highCount),
-		gateItemClassWarn(mediumCount), mediumCount, gateItemStatusWarn(mediumCount),
-		gateItemClassPass(lowCount), lowCount, gateItemStatusPass(lowCount),
-		// Agent Tabs
-		agentTabsHTML,
-		// Filter Pills
+		statusClass, statusText,
+		len(agentReports), totalCount,
+		agentCardsHTML,
 		totalCount, criticalCount, highCount, mediumCount, lowCount,
-		// Findings
-		findingsHTML,
-		// Footer
+		accordionsHTML,
 		AppVersion,
 		htmlReportJS,
 	)
 
 	fmt.Println(html)
 	return nil
+}
+
+// generateAgentCardsHTML creates the agent cards grid
+func generateAgentCardsHTML(reports []AgentReport) string {
+	if len(reports) == 0 {
+		return `<div class="empty-state"><div class="icon">✅</div><p>No agents scanned</p></div>`
+	}
+
+	var sb strings.Builder
+	for _, r := range reports {
+		// Build severity pills
+		var pillsHTML string
+		if r.CriticalCount > 0 {
+			pillsHTML += fmt.Sprintf(`<span class="mini-pill critical">%d Critical</span>`, r.CriticalCount)
+		}
+		if r.HighCount > 0 {
+			pillsHTML += fmt.Sprintf(`<span class="mini-pill high">%d High</span>`, r.HighCount)
+		}
+		if r.MediumCount > 0 {
+			pillsHTML += fmt.Sprintf(`<span class="mini-pill medium">%d Medium</span>`, r.MediumCount)
+		}
+		if r.LowCount > 0 {
+			pillsHTML += fmt.Sprintf(`<span class="mini-pill low">%d Low</span>`, r.LowCount)
+		}
+
+		// Build top issues
+		var issuesHTML string
+		for _, issue := range r.TopIssues {
+			issuesHTML += fmt.Sprintf(`<div class="top-issue">%s</div>`, escapeHTML(issue))
+		}
+
+		// Issue count text
+		issueText := "issues"
+		if r.TotalCount == 1 {
+			issueText = "issue"
+		}
+
+		sb.WriteString(fmt.Sprintf(`
+        <div class="agent-card %s" data-agent="%s">
+            <div class="agent-card-header">
+                <div class="agent-info">
+                    <div class="agent-name">%s</div>
+                    <div class="agent-meta">
+                        <span class="framework-tag">%s</span>
+                        <span class="issue-count">%d %s</span>
+                    </div>
+                </div>
+                <div class="agent-grade %s">%s</div>
+            </div>
+            <div class="severity-pills">%s</div>
+            <div class="top-issues">%s</div>
+        </div>`,
+			r.GradeClass,
+			escapeHTML(r.Directory),
+			escapeHTML(r.Name),
+			escapeHTML(r.Framework),
+			r.TotalCount, issueText,
+			r.GradeClass, r.Grade,
+			pillsHTML,
+			issuesHTML,
+		))
+	}
+	return sb.String()
+}
+
+// generateAccordionsHTML creates the accordion sections for each agent
+func generateAccordionsHTML(reports []AgentReport) string {
+	if len(reports) == 0 {
+		return `<div class="empty-state"><div class="icon">✅</div><p>No security issues found</p></div>`
+	}
+
+	var sb strings.Builder
+	for i, r := range reports {
+		// Build severity badges for accordion header
+		var badgesHTML string
+		if r.CriticalCount > 0 {
+			badgesHTML += fmt.Sprintf(`<span class="mini-pill critical">%d</span>`, r.CriticalCount)
+		}
+		if r.HighCount > 0 {
+			badgesHTML += fmt.Sprintf(`<span class="mini-pill high">%d</span>`, r.HighCount)
+		}
+		if r.MediumCount > 0 {
+			badgesHTML += fmt.Sprintf(`<span class="mini-pill medium">%d</span>`, r.MediumCount)
+		}
+
+		// Issue count text
+		issueText := "issues"
+		if r.TotalCount == 1 {
+			issueText = "issue"
+		}
+
+		// Open first accordion by default
+		openClass := ""
+		if i == 0 {
+			openClass = " open"
+		}
+
+		// Generate findings for this agent
+		findingsHTML := generateAgentFindingsHTML(r.Findings)
+
+		sb.WriteString(fmt.Sprintf(`
+        <div class="accordion%s" data-agent="%s">
+            <div class="accordion-header">
+                <span class="accordion-icon">▶</span>
+                <span class="accordion-title">%s</span>
+                <span class="accordion-count">%d %s</span>
+                <div class="accordion-badges">%s</div>
+            </div>
+            <div class="accordion-body">
+                %s
+            </div>
+        </div>`,
+			openClass,
+			escapeHTML(r.Directory),
+			escapeHTML(r.Name),
+			r.TotalCount, issueText,
+			badgesHTML,
+			findingsHTML,
+		))
+	}
+	return sb.String()
+}
+
+// generateAgentFindingsHTML creates the findings HTML for a specific agent
+func generateAgentFindingsHTML(findings []contract.Finding) string {
+	if len(findings) == 0 {
+		return `<div class="empty-state"><p>No findings for this agent</p></div>`
+	}
+
+	var sb strings.Builder
+	for _, f := range findings {
+		pattern := escapeHTML(f.Pattern)
+		file := escapeHTML(f.File)
+		message := escapeHTML(f.Message)
+
+		// Get finding type for badge display
+		findingType := getFindingType(f)
+
+		// Get code snippet or context-aware empty message
+		code, emptyMessage, icon := getCodeSnippetDisplay(f)
+		code = escapeHTML(code)
+
+		// Generate code snippet HTML based on whether code exists
+		var codeSnippetHTML string
+		if code != "" {
+			codeSnippetHTML = fmt.Sprintf(`<div class="code-snippet">%s</div>`, code)
+		} else {
+			// Only show icon span if icon is not empty (minimal emoji style)
+			if icon != "" {
+				codeSnippetHTML = fmt.Sprintf(`<div class="code-snippet empty"><span class="empty-icon">%s</span><span>%s</span></div>`,
+					icon, escapeHTML(emptyMessage))
+			} else {
+				codeSnippetHTML = fmt.Sprintf(`<div class="code-snippet empty"><span>%s</span></div>`,
+					escapeHTML(emptyMessage))
+			}
+		}
+
+		// Shorten file path for display
+		shortFile := file
+		if len(file) > 50 {
+			shortFile = "..." + file[len(file)-47:]
+		}
+
+		sb.WriteString(fmt.Sprintf(`
+            <div class="finding" data-severity="%s">
+                <div class="finding-header">
+                    <div class="finding-title">
+                        <span class="icon">▶</span>
+                        <span>%s</span>
+                    </div>
+                    <div class="finding-meta">
+                        <span>%s:%d</span>
+                        <span class="finding-type-badge %s">%s</span>
+                        <span class="severity-badge severity-%s">%s</span>
+                    </div>
+                </div>
+                <div class="finding-body">
+                    <div class="finding-details">
+                        <p><strong>File</strong>%s:%d:%d</p>
+                        <p><strong>CWE</strong>%s</p>
+                        <p><strong>OWASP</strong>%s</p>
+                        <p><strong>Confidence</strong>%.0f%%</p>
+                    </div>
+                    <p class="finding-message">%s</p>
+                    %s
+                </div>
+            </div>`,
+			f.Severity,
+			pattern,
+			shortFile, f.Line,
+			findingType, strings.Title(findingType),
+			strings.ToLower(f.Severity), f.Severity,
+			file, f.Line, f.Column,
+			f.CWE,
+			f.OWASP,
+			f.Confidence*100,
+			message,
+			codeSnippetHTML,
+		))
+	}
+	return sb.String()
 }
 
 // generateAgentTabsHTML creates the agent tabs navigation
@@ -1254,9 +2463,27 @@ func generateFindingsHTML(findings []contract.Finding) string {
 		pattern := escapeHTML(f.Pattern)
 		file := escapeHTML(f.File)
 		message := escapeHTML(f.Message)
-		code := escapeHTML(f.Code)
-		if code == "" {
-			code = "(No code snippet available)"
+
+		// Get finding type for badge display
+		findingType := getFindingType(f)
+
+		// Get code snippet or context-aware empty message
+		code, emptyMessage, icon := getCodeSnippetDisplay(f)
+		code = escapeHTML(code)
+
+		// Generate code snippet HTML based on whether code exists
+		var codeSnippetHTML string
+		if code != "" {
+			codeSnippetHTML = fmt.Sprintf(`<div class="code-snippet">%s</div>`, code)
+		} else {
+			// Only show icon span if icon is not empty (minimal emoji style)
+			if icon != "" {
+				codeSnippetHTML = fmt.Sprintf(`<div class="code-snippet empty"><span class="empty-icon">%s</span><span>%s</span></div>`,
+					icon, escapeHTML(emptyMessage))
+			} else {
+				codeSnippetHTML = fmt.Sprintf(`<div class="code-snippet empty"><span>%s</span></div>`,
+					escapeHTML(emptyMessage))
+			}
 		}
 
 		// Extract agent name for filtering
@@ -1272,6 +2499,7 @@ func generateFindingsHTML(findings []contract.Finding) string {
                 </div>
                 <div class="finding-meta">
                     <span>%s:%d</span>
+                    <span class="finding-type-badge %s">%s</span>
                     <span class="severity-badge severity-%s">%s</span>
                 </div>
             </div>
@@ -1295,19 +2523,20 @@ func generateFindingsHTML(findings []contract.Finding) string {
                     </p>
                 </div>
                 <p style="margin-bottom: 1rem; color: var(--text-secondary);">%s</p>
-                <div class="code-snippet">%s</div>
+                %s
             </div>
         </div>`,
 			escapeHTML(agent), f.Severity,
 			pattern,
 			file, f.Line,
+			findingType, strings.Title(findingType),
 			strings.ToLower(f.Severity), f.Severity,
 			file, f.Line, f.Column,
 			f.CWE,
 			f.OWASP,
 			f.Confidence*100,
 			message,
-			code,
+			codeSnippetHTML,
 		))
 	}
 	return sb.String()

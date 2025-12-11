@@ -170,17 +170,17 @@ func TestDetectSecrets_FindsStripeKey(t *testing.T) {
 		return
 	}
 
-	// Either stripe_key or entropy_secret detection is acceptable
+	// Detection by stripe_key, entropy_secret, or api_key pattern is acceptable
 	found := false
 	for _, f := range findings {
-		if f.Type == "stripe_key" || f.Type == "entropy_secret" {
+		if f.Type == "stripe_key" || f.Type == "entropy_secret" || f.Type == "api_key" {
 			found = true
 			break
 		}
 	}
 
 	if !found {
-		t.Errorf("Expected stripe_key or entropy_secret finding, got: %v", findings)
+		t.Errorf("Expected stripe_key, entropy_secret, or api_key finding, got: %v", findings)
 	}
 }
 

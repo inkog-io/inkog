@@ -1,7 +1,10 @@
 package secrets
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -253,16 +256,20 @@ func RedactSecrets(content []byte, secrets []SecretFinding) []byte {
 	}
 
 	// Redact each line
-	for lineNum, lineSecrets := range lineSecrets {
+	for lineNum, secrets := range lineSecrets {
 		if lineNum < len(lines) {
 			line := lines[lineNum]
-			// Sort secrets by position (reverse) to maintain correct indices during replacement
-			for _, secret := range lineSecrets {
-				// Use a marker to identify the secret value
+			// Sort secrets by column position (descending) to maintain correct indices during replacement
+			sort.Slice(secrets, func(i, j int) bool {
+				return secrets[i].Column > secrets[j].Column
+			})
+
+			for _, secret := range secrets {
+				// Use a marker to identify the secret type (never expose the actual value)
 				placeholder := "[REDACTED-" + strings.ToUpper(secret.Type) + "]"
 
-				// Replace the secret value with placeholder
-				// Use a simple string replacement (in production, use more sophisticated approach)
+				// Replace only the first occurrence to avoid over-redaction
+				// This handles cases where the same secret appears multiple times
 				line = strings.Replace(line, secret.Value, placeholder, 1)
 			}
 			lines[lineNum] = line
@@ -275,7 +282,28 @@ func RedactSecrets(content []byte, secrets []SecretFinding) []byte {
 // SecretsVersionHash returns a hash of all patterns for version control
 // This ensures CLI and Server have matching pattern versions
 func SecretsVersionHash() string {
-	// In production, compute a real hash of all patterns
-	// For v1, we use a simple semantic version string
-	return "v1.0.0"
+	// Compute hash of all pattern definitions for consistency verification
+	h := sha256.New()
+
+	// Get sorted pattern names for deterministic hash
+	names := make([]string, 0, len(PatternDefinitions))
+	for name := range PatternDefinitions {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	// Hash each pattern's key attributes
+	for _, name := range names {
+		p := PatternDefinitions[name]
+		h.Write([]byte(p.Name))
+		h.Write([]byte(p.Severity))
+		h.Write([]byte(p.CWE))
+		for _, re := range p.Patterns {
+			h.Write([]byte(re.String()))
+		}
+	}
+
+	// Return truncated hash (first 12 chars) prefixed with version
+	hash := hex.EncodeToString(h.Sum(nil))
+	return "v1-" + hash[:12]
 }
