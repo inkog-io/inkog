@@ -20,6 +20,100 @@ const (
 	DefaultServerURL = "https://api.inkog.io"
 )
 
+// DefaultScanExtensions defines file types to scan for security analysis.
+// Supports: Python (CrewAI, AutoGen, LangChain), No-Code (n8n, Flowise), and more.
+var DefaultScanExtensions = map[string]bool{
+	// Python ecosystem
+	".py":    true,
+	".ipynb": true, // Jupyter notebooks (contains Python cells)
+
+	// JavaScript/TypeScript
+	".js":  true,
+	".ts":  true,
+	".tsx": true,
+
+	// No-Code / Low-Code workflow configs
+	".json": true, // n8n, Flowise, Langflow
+	".yaml": true,
+	".yml":  true,
+
+	// Other languages
+	".go":   true,
+	".java": true,
+	".rb":   true,
+	".php":  true,
+	".cs":   true,
+	".rs":   true,
+	".cpp":  true,
+	".c":    true,
+	".sh":   true,
+
+	// Config files
+	".xml":  true,
+	".env":  true,
+	".conf": true,
+	".cfg":  true,
+}
+
+// ExcludedDirectories contains paths that should never be scanned.
+var ExcludedDirectories = []string{
+	"node_modules",
+	"vendor",
+	".git",
+	".svn",
+	"__pycache__",
+	".venv",
+	"venv",
+	"dist",
+	"build",
+	".next",
+	".nuxt",
+	".pytest_cache",
+	".mypy_cache",
+	"egg-info",
+}
+
+// BlockedFiles contains filenames that should not be scanned (build/config noise).
+var BlockedFiles = map[string]bool{
+	"package.json":        true,
+	"package-lock.json":   true,
+	"tsconfig.json":       true,
+	"jsconfig.json":       true,
+	"yarn.lock":           true,
+	"pnpm-lock.yaml":      true,
+	"composer.json":       true,
+	"composer.lock":       true,
+	"Cargo.toml":          true,
+	"Cargo.lock":          true,
+	"go.sum":              true,
+	"go.mod":              true,
+	"Gemfile":             true,
+	"Gemfile.lock":        true,
+	"poetry.lock":         true,
+	"Pipfile.lock":        true,
+	".eslintrc.json":      true,
+	".eslintrc.yaml":      true,
+	".prettierrc.json":    true,
+	".prettierrc.yaml":    true,
+	"babel.config.json":   true,
+	"nest-cli.json":       true,
+	"angular.json":        true,
+	"turbo.json":          true,
+	"vercel.json":         true,
+	"now.json":            true,
+	"renovate.json":       true,
+	"lerna.json":          true,
+	".babelrc":            true,
+	"webpack.config.js":   true,
+	"rollup.config.js":    true,
+	"vite.config.js":      true,
+	"vite.config.ts":      true,
+	"jest.config.js":      true,
+	"jest.config.json":    true,
+	"tsconfig.build.json": true,
+	"tsconfig.spec.json":  true,
+}
+
 // HybridScanner performs client-side secret detection + server-side logic analysis
 type HybridScanner struct {
 	ServerURL  string
@@ -286,100 +380,26 @@ func (hs *HybridScanner) mergeFindings(localSecrets []contract.Finding, serverFi
 
 // Helper functions
 
-// shouldScanFile determines if a file should be scanned
+// shouldScanFile determines if a file should be scanned.
+// Uses package-level constants for easy configuration.
 func shouldScanFile(path string) bool {
-	// Exclude common directories that should not be scanned
-	excludedDirs := []string{
-		"node_modules",
-		"vendor",
-		".git",
-		".svn",
-		"__pycache__",
-		".venv",
-		"venv",
-		"dist",
-		"build",
-		".next",
-		".nuxt",
-	}
-
-	for _, dir := range excludedDirs {
+	// Check excluded directories
+	for _, dir := range ExcludedDirectories {
 		if strings.Contains(path, string(filepath.Separator)+dir+string(filepath.Separator)) ||
 			strings.HasPrefix(path, dir+string(filepath.Separator)) {
 			return false
 		}
 	}
 
-	// Block system/build JSON/YAML files (not workflow configs)
-	blockedFiles := map[string]bool{
-		"package.json":       true,
-		"package-lock.json":  true,
-		"tsconfig.json":      true,
-		"jsconfig.json":      true,
-		"yarn.lock":          true,
-		"pnpm-lock.yaml":     true,
-		"composer.json":      true,
-		"composer.lock":      true,
-		"Cargo.toml":         true,
-		"Cargo.lock":         true,
-		"go.sum":             true,
-		"go.mod":             true,
-		"Gemfile":            true,
-		"Gemfile.lock":       true,
-		"poetry.lock":        true,
-		"Pipfile.lock":       true,
-		".eslintrc.json":     true,
-		".eslintrc.yaml":     true,
-		".prettierrc.json":   true,
-		".prettierrc.yaml":   true,
-		"babel.config.json":  true,
-		"nest-cli.json":      true,
-		"angular.json":       true,
-		"turbo.json":         true,
-		"vercel.json":        true,
-		"now.json":           true,
-		"renovate.json":      true,
-		"lerna.json":         true,
-		".babelrc":           true,
-		"webpack.config.js":  true,
-		"rollup.config.js":   true,
-		"vite.config.js":     true,
-		"vite.config.ts":     true,
-		"jest.config.js":     true,
-		"jest.config.json":   true,
-		"tsconfig.build.json": true,
-		"tsconfig.spec.json":  true,
-	}
-
+	// Check blocked files
 	filename := filepath.Base(path)
-	if blockedFiles[filename] {
+	if BlockedFiles[filename] {
 		return false
 	}
 
+	// Check supported extensions
 	ext := filepath.Ext(path)
-	scannableExts := map[string]bool{
-		".py":   true,
-		".js":   true,
-		".ts":   true,
-		".tsx":  true,
-		".go":   true,
-		".java": true,
-		".rb":   true,
-		".php":  true,
-		".cs":   true,
-		".rs":   true,
-		".cpp":  true,
-		".c":    true,
-		".sh":   true,
-		".yaml": true,
-		".yml":  true,
-		".json": true,
-		".xml":  true,
-		".env":  true,
-		".conf": true,
-		".cfg":  true,
-	}
-	return scannableExts[ext]
+	return DefaultScanExtensions[ext]
 }
 
 // sortFindings sorts findings by severity then line number
