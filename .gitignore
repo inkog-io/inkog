@@ -31,8 +31,9 @@ go.work
 # Build outputs
 /bin/
 /dist/
-inkog
-cli
+/inkog
+/cli
+/inkog-cli
 
 # Local development
 .env
