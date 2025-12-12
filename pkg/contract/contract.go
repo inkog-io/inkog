@@ -4,9 +4,29 @@ package contract
 type FindingSource string
 
 const (
-	SourceLocalCLI     FindingSource = "local_cli"      // CLI detected secrets locally
-	SourceServerLogic  FindingSource = "server_logic"   // Server logic analysis (loops, data flow)
-	SourceServerTaint  FindingSource = "server_taint"   // Server taint flow analysis
+	SourceLocalCLI    FindingSource = "local_cli"    // CLI detected secrets locally
+	SourceServerLogic FindingSource = "server_logic" // Server logic analysis (loops, data flow)
+	SourceServerTaint FindingSource = "server_taint" // Server taint flow analysis
+)
+
+// RiskTier constants for three-tier classification (Socket.dev inspired)
+const (
+	// TierVulnerability - Tier 1: Exploitable vulnerabilities with proven taint flow
+	TierVulnerability = "vulnerability"
+	// TierRiskPattern - Tier 2: Structural issues that could become exploitable
+	TierRiskPattern = "risk_pattern"
+	// TierHardening - Tier 3: Best practices and recommendations
+	TierHardening = "hardening"
+)
+
+// SecurityPolicy constants for user-selectable scan policies
+const (
+	// PolicyLowNoise shows only Tier 1 (Exploitable Vulnerabilities)
+	PolicyLowNoise = "low-noise"
+	// PolicyBalanced shows Tier 1 + Tier 2 (default)
+	PolicyBalanced = "balanced"
+	// PolicyComprehensive shows all tiers
+	PolicyComprehensive = "comprehensive"
 )
 
 // RedactionInfo tracks where content was redacted
@@ -41,10 +61,18 @@ type Finding struct {
 	CVSS  float32 `json:"cvss"`
 	OWASP string  `json:"owasp_category"`
 
+	// Risk Classification (Three-Tier System)
+	Category string `json:"category,omitempty"` // injection, resource_exhaustion, governance, etc.
+	RiskTier string `json:"risk_tier,omitempty"` // vulnerability, risk_pattern, hardening
+
+	// Taint Tracking (for credible tier elevation)
+	InputTainted bool   `json:"input_tainted,omitempty"` // True if user input flows to dangerous operation
+	TaintSource  string `json:"taint_source,omitempty"`  // e.g., "user_data", "customer_input", "request_body"
+
 	// Financial Impact
 	FinancialRisk string `json:"financial_risk"`
 
-	// NEW: Track redaction for audit
+	// Track redaction for audit
 	RedactedAt *RedactionInfo `json:"redacted_at,omitempty"`
 }
 
@@ -227,4 +255,80 @@ func CalculateRiskScore(findings []Finding) int {
 		score += RiskScoreMap[f.Severity]
 	}
 	return score
+}
+
+// GetEffectiveTier returns the effective tier for a finding, defaulting to risk_pattern if empty
+func GetEffectiveTier(f Finding) string {
+	if f.RiskTier == "" {
+		return TierRiskPattern // Default to risk_pattern (Tier 2)
+	}
+	return f.RiskTier
+}
+
+// FilterByTier returns findings matching the specified tier
+func FilterByTier(findings []Finding, tier string) []Finding {
+	var filtered []Finding
+	for _, f := range findings {
+		if GetEffectiveTier(f) == tier {
+			filtered = append(filtered, f)
+		}
+	}
+	return filtered
+}
+
+// FilterByPolicy returns findings based on security policy
+func FilterByPolicy(findings []Finding, policy string) []Finding {
+	switch policy {
+	case PolicyLowNoise:
+		// Only Tier 1: Exploitable vulnerabilities
+		return FilterByTier(findings, TierVulnerability)
+	case PolicyBalanced:
+		// Tier 1 + Tier 2: Vulnerabilities and risk patterns (default for empty)
+		var filtered []Finding
+		for _, f := range findings {
+			tier := GetEffectiveTier(f)
+			if tier == TierVulnerability || tier == TierRiskPattern {
+				filtered = append(filtered, f)
+			}
+		}
+		return filtered
+	case PolicyComprehensive:
+		// All tiers
+		return findings
+	default:
+		// Default to balanced
+		return FilterByPolicy(findings, PolicyBalanced)
+	}
+}
+
+// GroupByTier groups findings by their risk tier
+func GroupByTier(findings []Finding) map[string][]Finding {
+	groups := map[string][]Finding{
+		TierVulnerability: {},
+		TierRiskPattern:   {},
+		TierHardening:     {},
+	}
+
+	for _, f := range findings {
+		tier := GetEffectiveTier(f)
+		groups[tier] = append(groups[tier], f)
+	}
+
+	return groups
+}
+
+// CountByTier tallies findings by risk tier
+func CountByTier(findings []Finding) map[string]int {
+	counts := map[string]int{
+		TierVulnerability: 0,
+		TierRiskPattern:   0,
+		TierHardening:     0,
+	}
+
+	for _, f := range findings {
+		tier := GetEffectiveTier(f)
+		counts[tier]++
+	}
+
+	return counts
 }

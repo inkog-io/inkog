@@ -118,27 +118,45 @@ Output must be **"Screenshot Ready"** for social media and documentation:
 
 - Use ASCII tables (not JSON in default output)
 - Rich formatting (colors, icons, box-drawing)
-- Severity-based grouping
-- Show remediation guidance
+- **Three-tier risk classification** (Vulnerability → Risk Pattern → Hardening)
+- Show taint source for exploitable vulnerabilities
 - Include CWE/CVSS metadata
 
-**Example:**
+**Example (Tiered Output):**
 ```
-╔════════════════════════════════════════════════════════╗
-║           🔍 Inkog Security Scan Results               ║
-╚════════════════════════════════════════════════════════╝
+╔══════════════════════════════════════════════════════╗
+║           🔍 AI Agent Risk Assessment                ║
+╚══════════════════════════════════════════════════════╝
 
-🔴 CRITICAL (1 finding)
-  └─ Hardcoded API Key [agent.py:42]
-     CWE-798 | CVSS 9.1 | OWASP A01
+🔴 EXPLOITABLE VULNERABILITIES (2)
+  └─ [VULN] SQL Injection via LLM [database.py:89] - CRITICAL
+     LLM output used directly in SQL query without parameterization
+     Taint source: user_request (user input)
+  └─ [VULN] Prompt Injection [agent.py:42] - CRITICAL
+     User input flows to system prompt without sanitization
+     Taint source: customer_data (user input)
 
-🟠 HIGH (3 findings)
-  ├─ SQL Injection Risk [database.py:15]
-  ├─ Infinite Loop [agent.py:95]
-  └─ Eval Usage [agent.py:189]
+🟠 RISK PATTERNS (3)
+  └─ Unbounded Loop in Agentic System [agent.py:95] - CRITICAL
+     Loop lacks termination guards (max_iterations, timeout)
+  └─ Token Bombing Attack [agent.py:156] - HIGH
+     Loop depends on LLM output but lacks termination guards
 
-Risk Score: 65/100
+🟡 HARDENING RECOMMENDATIONS (1)
+  └─ Missing Rate Limits on LLM Calls [client.py:12] - LOW
+     LLM API calls lack rate limiting
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+AI Agent Risk Assessment: 6 findings (policy: balanced)
+  ● 2 Exploitable Vulnerabilities (require immediate fix)
+  ● 3 Risk Patterns (structural issues)
+  ● 1 Hardening Recommendations (best practices)
 ```
+
+**Security Policies:** Use `--policy` flag to control output noise level:
+- `--policy low-noise`: Only Tier 1 (proven vulnerabilities)
+- `--policy balanced`: Tier 1 + 2 (default)
+- `--policy comprehensive`: All tiers
 
 ### Rule 4: Contract Alignment
 
@@ -155,8 +173,27 @@ type Finding struct {
     Confidence float32
     CWE        string
     Message    string
-    // ... more fields
+
+    // Risk Classification (NEW)
+    Category     string // injection, resource_exhaustion, governance, etc.
+    RiskTier     string // vulnerability, risk_pattern, hardening
+    InputTainted bool   // True if user input flows to dangerous operation
+    TaintSource  string // e.g., "user_data", "customer_input"
 }
+
+// Risk Tier Constants
+const (
+    TierVulnerability = "vulnerability"  // Tier 1: Exploitable with proof
+    TierRiskPattern   = "risk_pattern"   // Tier 2: Structural risk
+    TierHardening     = "hardening"      // Tier 3: Best practice
+)
+
+// Security Policy Constants
+const (
+    PolicyLowNoise      = "low-noise"      // Only Tier 1
+    PolicyBalanced      = "balanced"       // Tier 1 + 2 (default)
+    PolicyComprehensive = "comprehensive"  // All tiers
+)
 ```
 
 Validate every Finding before displaying. If a field is missing, don't crash—show a placeholder.

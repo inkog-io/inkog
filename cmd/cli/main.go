@@ -43,6 +43,12 @@ const (
 	colorMedium   = "\033[33m" // yellow
 	colorLow      = "\033[32m" // green
 	colorGray     = "\033[90m" // gray for gutter
+	colorCyan     = "\033[96m" // bright cyan for taint info
+
+	// Tier colors for risk classification
+	colorTierVuln      = "\033[91m" // red for exploitable vulnerabilities
+	colorTierRisk      = "\033[93m" // yellow for risk patterns
+	colorTierHardening = "\033[36m" // cyan for hardening recommendations
 
 	// Security grading point values (Snyk-style)
 	PointsCritical = 30
@@ -50,7 +56,7 @@ const (
 	PointsMedium   = 5
 	PointsLow      = 1
 
-	HelpText = `Inkog - Security Scanner with Hybrid Privacy
+	HelpText = `Inkog - AI Agent Security Scanner
 
 Usage:
   inkog [OPTIONS] [PATH]
@@ -59,23 +65,29 @@ Options:
   -path string        Source path to scan (default: .)
   -server string      Inkog server URL (default: https://inkog-api.fly.dev)
   -output string      Output format: json, text, html, sarif (default: text)
+  -policy string      Security policy: low-noise, balanced, comprehensive (default: balanced)
   -severity string    Minimum severity level: critical, high, medium, low (default: low)
   -verbose            Enable verbose output
   -version            Show version information
   -help               Show this help message
 
+Security Policies:
+  low-noise           Only exploitable vulnerabilities (proven tainted input flows)
+  balanced            Vulnerabilities + risk patterns (default, recommended)
+  comprehensive       All findings including hardening recommendations
+
 Examples:
-  # Scan current directory
+  # Scan current directory with default policy
   inkog .
 
-  # Scan with verbose output
-  inkog -path ./src -verbose
+  # Low noise mode - only proven vulnerabilities
+  inkog -path ./agents --policy low-noise
+
+  # Comprehensive mode - all findings including best practices
+  inkog -path ./agents --policy comprehensive
 
   # Scan and output as JSON
   inkog -path . -output json
-
-  # Scan using custom server
-  inkog -path . -server https://your-inkog-server.com
 
 Environment Variables:
   INKOG_SERVER_URL     Override default server URL (highest priority)
@@ -162,12 +174,23 @@ func main() {
 	pathFlag := flag.String("path", ".", "Source path to scan")
 	serverFlag := flag.String("server", "", "Inkog server URL")
 	outputFlag := flag.String("output", "text", "Output format: json, text, html")
+	policyFlag := flag.String("policy", contract.PolicyBalanced, "Security policy: low-noise, balanced, comprehensive")
 	severityFlag := flag.String("severity", "low", "Minimum severity level")
 	verboseFlag := flag.Bool("verbose", false, "Enable verbose output")
 	versionFlag := flag.Bool("version", false, "Show version information")
 	helpFlag := flag.Bool("help", false, "Show help message")
 
 	flag.Parse()
+
+	// Validate policy flag
+	validPolicies := map[string]bool{
+		contract.PolicyLowNoise:      true,
+		contract.PolicyBalanced:      true,
+		contract.PolicyComprehensive: true,
+	}
+	if !validPolicies[*policyFlag] {
+		log.Fatalf("❌ Error: invalid policy '%s'. Valid options: low-noise, balanced, comprehensive\n", *policyFlag)
+	}
 
 	// Handle version flag
 	if *versionFlag {
@@ -217,7 +240,7 @@ func main() {
 	}
 
 	// Output results
-	if err := outputResults(result, *outputFlag, *severityFlag, *verboseFlag, isQuietMode); err != nil {
+	if err := outputResults(result, *outputFlag, *severityFlag, *policyFlag, *verboseFlag, isQuietMode); err != nil {
 		log.Fatalf("❌ Output failed: %v\n", err)
 	}
 
@@ -237,12 +260,12 @@ func main() {
 }
 
 // outputResults formats and displays scan results
-func outputResults(result *cli.ScanResult, format, minSeverity string, verbose, quiet bool) error {
+func outputResults(result *cli.ScanResult, format, minSeverity, policy string, verbose, quiet bool) error {
 	switch format {
 	case "json":
 		return outputJSON(result)
 	case "text":
-		return outputText(result, minSeverity, verbose)
+		return outputText(result, minSeverity, policy, verbose)
 	case "html":
 		return outputHTML(result, minSeverity)
 	case "sarif":
@@ -252,33 +275,119 @@ func outputResults(result *cli.ScanResult, format, minSeverity string, verbose, 
 	}
 }
 
-// outputText provides human-readable text output in Ruff/Semgrep code frame style
-func outputText(result *cli.ScanResult, minSeverity string, verbose bool) error {
-	// Filter findings by minimum severity level
+// outputText provides human-readable text output with tiered risk classification
+func outputText(result *cli.ScanResult, minSeverity, policy string, verbose bool) error {
+	// First filter by severity
 	filtered := contract.GetBySeverity(result.AllFindings, strings.ToUpper(minSeverity))
+
+	// Then filter by policy (tier-based)
+	filtered = contract.FilterByPolicy(filtered, policy)
 
 	if len(filtered) == 0 {
 		if len(result.AllFindings) > 0 {
-			fmt.Printf("✓ No issues at %s severity or above (%d lower-severity issues filtered)\n",
-				strings.ToUpper(minSeverity), len(result.AllFindings))
+			fmt.Printf("✓ No issues match policy '%s' (%d findings filtered)\n",
+				policy, len(result.AllFindings))
 		} else {
 			fmt.Println("✓ No security issues found")
 		}
 		return nil
 	}
 
-	// Sort by file path, then line number for natural reading order
-	sortFindingsByLocation(filtered)
+	// Group findings by tier
+	tierGroups := contract.GroupByTier(filtered)
 
-	// Display each finding in code frame format
-	for _, f := range filtered {
-		displayCodeFrame(f)
-	}
+	// Display header
+	fmt.Println()
+	fmt.Println("╔══════════════════════════════════════════════════════╗")
+	fmt.Println("║           🔍 AI Agent Risk Assessment                ║")
+	fmt.Println("╚══════════════════════════════════════════════════════╝")
+	fmt.Println()
 
-	// Compact summary (single line)
-	displayCompactSummary(filtered)
+	// Display each tier section
+	displayTierSection(tierGroups[contract.TierVulnerability], "🔴 EXPLOITABLE VULNERABILITIES", colorTierVuln)
+	displayTierSection(tierGroups[contract.TierRiskPattern], "🟠 RISK PATTERNS", colorTierRisk)
+	displayTierSection(tierGroups[contract.TierHardening], "🟡 HARDENING RECOMMENDATIONS", colorTierHardening)
+
+	// Display tiered summary
+	displayTieredSummary(filtered, policy)
 
 	return nil
+}
+
+// displayTierSection displays a section of findings for a specific tier
+func displayTierSection(findings []contract.Finding, header string, color string) {
+	if len(findings) == 0 {
+		return
+	}
+
+	// Sort findings within tier
+	sortFindingsByLocation(findings)
+
+	// Display header
+	fmt.Printf("%s%s (%d)%s\n", color, header, len(findings), colorReset)
+
+	// Display each finding
+	for _, f := range findings {
+		displayTieredCodeFrame(f)
+	}
+	fmt.Println()
+}
+
+// displayTieredCodeFrame renders a finding with tier-aware formatting
+func displayTieredCodeFrame(f contract.Finding) {
+	// 1. Location line with tier-aware severity
+	severityColor := getSeverityColor(f.Severity)
+	col := f.Column
+	if col == 0 {
+		col = 1
+	}
+
+	// Show tier indicator
+	tierIndicator := ""
+	if f.RiskTier == contract.TierVulnerability {
+		tierIndicator = "[VULN] "
+	}
+
+	fmt.Printf("  └─ %s%s%s [%s:%d] - %s%s%s\n",
+		severityColor, tierIndicator, f.Pattern,
+		filepath.Base(f.File), f.Line,
+		severityColor, f.Severity, colorReset)
+
+	// 2. Show message
+	if f.Message != "" {
+		// Truncate long messages
+		msg := f.Message
+		if len(msg) > 70 {
+			msg = msg[:67] + "..."
+		}
+		fmt.Printf("     %s%s%s\n", colorGray, msg, colorReset)
+	}
+
+	// 3. Show taint source if present (key differentiator for Tier 1)
+	if f.InputTainted && f.TaintSource != "" {
+		fmt.Printf("     %sTaint source: %s (user input)%s\n", colorCyan, f.TaintSource, colorReset)
+	}
+}
+
+// displayTieredSummary shows a tier-based summary
+func displayTieredSummary(findings []contract.Finding, policy string) {
+	counts := contract.CountByTier(findings)
+
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Printf("AI Agent Risk Assessment: %d findings (policy: %s)\n", len(findings), policy)
+
+	if counts[contract.TierVulnerability] > 0 {
+		fmt.Printf("  %s● %d Exploitable Vulnerabilities%s (require immediate fix)\n",
+			colorTierVuln, counts[contract.TierVulnerability], colorReset)
+	}
+	if counts[contract.TierRiskPattern] > 0 {
+		fmt.Printf("  %s● %d Risk Patterns%s (structural issues)\n",
+			colorTierRisk, counts[contract.TierRiskPattern], colorReset)
+	}
+	if counts[contract.TierHardening] > 0 {
+		fmt.Printf("  %s● %d Hardening Recommendations%s (best practices)\n",
+			colorTierHardening, counts[contract.TierHardening], colorReset)
+	}
 }
 
 // getSeverityColor returns the ANSI color code for a severity level

@@ -103,11 +103,42 @@ Microsoft AutoGen (AG2) | Vellum
 
 ---
 
+## Security Policies
+
+Inkog uses a **three-tier risk classification** inspired by [Socket.dev](https://socket.dev):
+
+| Tier | Label | Description |
+|------|-------|-------------|
+| **1** | Exploitable Vulnerabilities | Proven attack vectors with tainted user input flowing to dangerous operations |
+| **2** | Risk Patterns | Structural issues that could become exploitable (unbounded loops, missing guards) |
+| **3** | Hardening Recommendations | Best practices and security improvements |
+
+**Choose your policy based on your workflow:**
+
+```bash
+# Low Noise: Only proven vulnerabilities (Tier 1)
+# Best for: CI/CD pipelines, blocking builds
+inkog -path . --policy low-noise
+
+# Balanced: Vulnerabilities + Risk Patterns (Tier 1-2) [Default]
+# Best for: Most teams, code review
+inkog -path . --policy balanced
+
+# Comprehensive: All findings including recommendations (Tier 1-3)
+# Best for: Security audits, initial assessments
+inkog -path . --policy comprehensive
+```
+
+---
+
 ## Common Commands
 
 ```bash
 # Scan current directory
 inkog .
+
+# Low noise - only high-confidence vulnerabilities
+inkog -path ./src --policy low-noise
 
 # Verbose output
 inkog -path ./src -verbose

@@ -56,6 +56,33 @@ inkog -path . -output json > results.json
 inkog -path . -output html > report.html
 ```
 
+#### `-policy string`
+**Default:** `balanced`
+
+Security policy for filtering findings by risk tier. Controls the noise level of scan results.
+
+| Policy | Tiers Shown | Best For |
+|--------|-------------|----------|
+| `low-noise` | Tier 1 (Exploitable Vulnerabilities) | CI/CD pipelines, blocking builds |
+| `balanced` | Tier 1 + 2 (Vulnerabilities + Risk Patterns) | Most teams, code review |
+| `comprehensive` | All tiers including hardening | Security audits, assessments |
+
+```bash
+# Only proven vulnerabilities (lowest noise)
+inkog -path . --policy low-noise
+
+# Vulnerabilities + risk patterns (default)
+inkog -path . --policy balanced
+
+# All findings including best practice recommendations
+inkog -path . --policy comprehensive
+```
+
+**Tier Descriptions:**
+- **Tier 1 - Exploitable Vulnerabilities:** Issues with proven tainted user input flowing to dangerous operations (e.g., user data → eval(), LLM output → SQL query)
+- **Tier 2 - Risk Patterns:** Structural issues that could become vulnerabilities (unbounded loops, missing guards, recursive delegation)
+- **Tier 3 - Hardening Recommendations:** Best practices like rate limiting, human oversight, monitoring
+
 #### `-severity string`
 **Default:** `low`
 
@@ -250,24 +277,46 @@ If your organization uses custom credential formats, contact us about:
 
 ### Text Output (Default)
 
-Human-readable report with color-coded severity levels:
+Human-readable report with **tiered risk classification**:
 
 ```
-╔════════════════════════════════════════════════════════╗
-║           🔍 Inkog Security Scan Results               ║
-╚════════════════════════════════════════════════════════╝
+╔══════════════════════════════════════════════════════╗
+║           🔍 AI Agent Risk Assessment                ║
+╚══════════════════════════════════════════════════════╝
 
-🔴 CRITICAL (1 finding)
-  └─ Hardcoded API Key [agent.py:42]
-     CWE-798 | CVSS 9.1
+🔴 EXPLOITABLE VULNERABILITIES (2)
+  └─ [VULN] SQL Injection via LLM [database.py:89] - CRITICAL
+     LLM output used directly in SQL query without parameterization
+     Taint source: user_request (user input)
+  └─ [VULN] Prompt Injection [agent.py:42] - CRITICAL
+     User input flows to system prompt without sanitization
+     Taint source: customer_data (user input)
 
-🟠 HIGH (3 findings)
-  ├─ Infinite Loop [agent.py:95]
-  ├─ Token Bombing Risk [agent.py:156]
-  └─ Prompt Injection [agent.py:203]
+🟠 RISK PATTERNS (3)
+  └─ Unbounded Loop in Agentic System [agent.py:95] - HIGH
+     Loop lacks termination guards (max_iterations, timeout)
+  └─ Token Bombing Attack [agent.py:156] - CRITICAL
+     Loop depends on LLM output but lacks termination guards
+  └─ Recursive Tool Calling [crew.py:78] - HIGH
+     Agent delegation chain lacks cycle detection
 
-Risk Score: 65/100
+🟡 HARDENING RECOMMENDATIONS (2)
+  └─ Missing Rate Limits on LLM Calls [client.py:12] - LOW
+     LLM API calls lack rate limiting
+  └─ Missing Human Oversight [agent.py:203] - LOW
+     Agent performs autonomous actions without approval workflow
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+AI Agent Risk Assessment: 7 findings (policy: balanced)
+  ● 2 Exploitable Vulnerabilities (require immediate fix)
+  ● 3 Risk Patterns (structural issues)
+  ● 2 Hardening Recommendations (best practices)
 ```
+
+**Key Features:**
+- **Tier 1 (🔴 Exploitable Vulnerabilities):** Shows `[VULN]` badge and taint source
+- **Tier 2 (🟠 Risk Patterns):** Structural issues that need attention
+- **Tier 3 (🟡 Hardening Recommendations):** Only shown with `--policy comprehensive`
 
 ### JSON Output
 
