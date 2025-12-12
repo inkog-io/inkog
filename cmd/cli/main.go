@@ -254,21 +254,29 @@ func outputResults(result *cli.ScanResult, format, minSeverity string, verbose, 
 
 // outputText provides human-readable text output in Ruff/Semgrep code frame style
 func outputText(result *cli.ScanResult, minSeverity string, verbose bool) error {
-	if len(result.AllFindings) == 0 {
-		fmt.Println("✓ No security issues found")
+	// Filter findings by minimum severity level
+	filtered := contract.GetBySeverity(result.AllFindings, strings.ToUpper(minSeverity))
+
+	if len(filtered) == 0 {
+		if len(result.AllFindings) > 0 {
+			fmt.Printf("✓ No issues at %s severity or above (%d lower-severity issues filtered)\n",
+				strings.ToUpper(minSeverity), len(result.AllFindings))
+		} else {
+			fmt.Println("✓ No security issues found")
+		}
 		return nil
 	}
 
 	// Sort by file path, then line number for natural reading order
-	sortFindingsByLocation(result.AllFindings)
+	sortFindingsByLocation(filtered)
 
 	// Display each finding in code frame format
-	for _, f := range result.AllFindings {
+	for _, f := range filtered {
 		displayCodeFrame(f)
 	}
 
 	// Compact summary (single line)
-	displayCompactSummary(result.AllFindings)
+	displayCompactSummary(filtered)
 
 	return nil
 }
@@ -2081,15 +2089,18 @@ document.querySelectorAll('.pill').forEach(pill => {
 
 // outputHTML provides enterprise HTML dashboard report
 func outputHTML(result *cli.ScanResult, minSeverity string) error {
-	// Calculate metrics
-	criticalCount := len(filterFindingsBySeverity(result.AllFindings, "CRITICAL"))
-	highCount := len(filterFindingsBySeverity(result.AllFindings, "HIGH"))
-	mediumCount := len(filterFindingsBySeverity(result.AllFindings, "MEDIUM"))
-	lowCount := len(filterFindingsBySeverity(result.AllFindings, "LOW"))
-	totalCount := len(result.AllFindings)
+	// Filter findings by minimum severity level
+	filtered := contract.GetBySeverity(result.AllFindings, strings.ToUpper(minSeverity))
+
+	// Calculate metrics from filtered findings
+	criticalCount := len(filterFindingsBySeverity(filtered, "CRITICAL"))
+	highCount := len(filterFindingsBySeverity(filtered, "HIGH"))
+	mediumCount := len(filterFindingsBySeverity(filtered, "MEDIUM"))
+	lowCount := len(filterFindingsBySeverity(filtered, "LOW"))
+	totalCount := len(filtered)
 
 	// Group findings by agent and build reports
-	agentGroups := groupFindingsByAgent(result.AllFindings)
+	agentGroups := groupFindingsByAgent(filtered)
 	agentReports := buildAgentReports(agentGroups)
 
 	// Get global status
