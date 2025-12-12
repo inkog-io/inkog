@@ -686,7 +686,7 @@ footer a:hover {
             </svg>
             <span>Inkog Security Report</span>
         </div>
-        <span class="timestamp">2025-12-11 22:59:39</span>
+        <span class="timestamp">2025-12-11 23:17:31</span>
     </header>
 
     <!-- Global Status Bar -->
@@ -719,7 +719,7 @@ footer a:hover {
                 <div class="agent-grade grade-f">F</div>
             </div>
             <div class="severity-pills"><span class="mini-pill critical">3 Critical</span><span class="mini-pill high">2 High</span></div>
-            <div class="top-issues"><div class="top-issue">Unvalidated Code Execution (eval/exec)</div><div class="top-issue">Unbounded Loop in Agentic System</div><div class="top-issue">Token Bombing Attack - Unbounded LLM ...</div></div>
+            <div class="top-issues"><div class="top-issue">Unvalidated Code Execution (eval/exec)</div><div class="top-issue">Token Bombing Attack - Unbounded LLM ...</div><div class="top-issue">Unbounded Loop in Agentic System</div></div>
         </div>
         <div class="agent-card grade-d" data-agent="01-crewai-recursive">
             <div class="agent-card-header">
@@ -749,20 +749,6 @@ footer a:hover {
             <div class="severity-pills"><span class="mini-pill critical">2 Critical</span><span class="mini-pill high">1 High</span><span class="mini-pill medium">1 Medium</span></div>
             <div class="top-issues"><div class="top-issue">Unbounded Loop in Agentic System</div><div class="top-issue">Unvalidated Code Execution (eval/exec)</div><div class="top-issue">Missing Human Oversight in Autonomous...</div></div>
         </div>
-        <div class="agent-card grade-d" data-agent="05-n8n-webhook">
-            <div class="agent-card-header">
-                <div class="agent-info">
-                    <div class="agent-name">05 N8n Webhook</div>
-                    <div class="agent-meta">
-                        <span class="framework-tag">Custom Agent</span>
-                        <span class="issue-count">5 issues</span>
-                    </div>
-                </div>
-                <div class="agent-grade grade-d">D</div>
-            </div>
-            <div class="severity-pills"><span class="mini-pill critical">1 Critical</span><span class="mini-pill high">2 High</span><span class="mini-pill medium">2 Medium</span></div>
-            <div class="top-issues"><div class="top-issue">Potential Cross-Tenant Data Leakage</div><div class="top-issue">Prompt Injection Attack in System Prompt</div><div class="top-issue">Unvalidated Template Variables in Sys...</div></div>
-        </div>
         <div class="agent-card grade-d" data-agent="04-openai-promptinjection">
             <div class="agent-card-header">
                 <div class="agent-info">
@@ -776,6 +762,20 @@ footer a:hover {
             </div>
             <div class="severity-pills"><span class="mini-pill critical">1 Critical</span><span class="mini-pill high">2 High</span><span class="mini-pill medium">2 Medium</span></div>
             <div class="top-issues"><div class="top-issue">Potential Cross-Tenant Data Leakage</div><div class="top-issue">Unvalidated Template Variables in Sys...</div><div class="top-issue">Prompt Injection Attack in System Prompt</div></div>
+        </div>
+        <div class="agent-card grade-d" data-agent="05-n8n-webhook">
+            <div class="agent-card-header">
+                <div class="agent-info">
+                    <div class="agent-name">05 N8n Webhook</div>
+                    <div class="agent-meta">
+                        <span class="framework-tag">Custom Agent</span>
+                        <span class="issue-count">5 issues</span>
+                    </div>
+                </div>
+                <div class="agent-grade grade-d">D</div>
+            </div>
+            <div class="severity-pills"><span class="mini-pill critical">1 Critical</span><span class="mini-pill high">2 High</span><span class="mini-pill medium">2 Medium</span></div>
+            <div class="top-issues"><div class="top-issue">Potential Cross-Tenant Data Leakage</div><div class="top-issue">Prompt Injection Attack in System Prompt</div><div class="top-issue">Unvalidated Template Variables in Sys...</div></div>
         </div>
         <div class="agent-card grade-b" data-agent="06-flowise-crosstenant">
             <div class="agent-card-header">
@@ -823,50 +823,24 @@ footer a:hover {
                         <span>Unvalidated Code Execution (eval/exec)</span>
                     </div>
                     <div class="finding-meta">
-                        <span>02-smolagents-codeexec/agent.py:43</span>
+                        <span>02-smolagents-codeexec/agent.py:26</span>
                         <span class="finding-type-badge code">Code</span>
                         <span class="severity-badge severity-critical">CRITICAL</span>
                     </div>
                 </div>
                 <div class="finding-body">
                     <div class="finding-details">
-                        <p><strong>File</strong>02-smolagents-codeexec/agent.py:43:9</p>
+                        <p><strong>File</strong>02-smolagents-codeexec/agent.py:26:13</p>
                         <p><strong>CWE</strong>CWE-94, CWE-95, CWE-78</p>
                         <p><strong>OWASP</strong>A03:2021</p>
                         <p><strong>Confidence</strong>85%</p>
                     </div>
                     <p class="finding-message">Dangerous code execution function (eval, exec, shell) called with user input or LLM output. This allows arbitrary code execution and full system compromise.</p>
-                    <div class="code-snippet">    # VULNERABILITY: Arbitrary file write
-    with open(path, &#39;w&#39;) as f:
-        f.write(content)
-    return f&quot;Wrote {len(content)} bytes to {path}&quot;</div>
-                </div>
-            </div>
-            <div class="finding" data-severity="CRITICAL">
-                <div class="finding-header">
-                    <div class="finding-title">
-                        <span class="icon">▶</span>
-                        <span>Unbounded Loop in Agentic System</span>
-                    </div>
-                    <div class="finding-meta">
-                        <span>02-smolagents-codeexec/agent.py:50</span>
-                        <span class="finding-type-badge code">Code</span>
-                        <span class="severity-badge severity-critical">CRITICAL</span>
-                    </div>
-                </div>
-                <div class="finding-body">
-                    <div class="finding-details">
-                        <p><strong>File</strong>02-smolagents-codeexec/agent.py:50:12</p>
-                        <p><strong>CWE</strong>CWE-835, CWE-400</p>
-                        <p><strong>OWASP</strong>LLM10</p>
-                        <p><strong>Confidence</strong>98%</p>
-                    </div>
-                    <p class="finding-message">Loop lacks termination guards (max_iterations, timeout, break condition). This can lead to infinite execution, token exhaustion, and denial of service.</p>
-                    <div class="code-snippet"># No max_steps limit - can loop indefinitely
-assistant = CodeAgent(
-    tools=[run_shell, write_code],
-    model=model
-    # Missing: use_e2b_executor=True (sandboxing)</div>
+                    <div class="code-snippet">    # VULNERABILITY: Unsandboxed shell execution
+    result = subprocess.run(
+        command,
+        shell=True,  # Dangerous: enables shell injection
+        capture_output=True,</div>
                 </div>
             </div>
             <div class="finding" data-severity="CRITICAL">
@@ -896,6 +870,33 @@ assistant = CodeAgent(
     # Missing: use_e2b_executor=True (sandboxing)</div>
                 </div>
             </div>
+            <div class="finding" data-severity="CRITICAL">
+                <div class="finding-header">
+                    <div class="finding-title">
+                        <span class="icon">▶</span>
+                        <span>Unbounded Loop in Agentic System</span>
+                    </div>
+                    <div class="finding-meta">
+                        <span>02-smolagents-codeexec/agent.py:50</span>
+                        <span class="finding-type-badge code">Code</span>
+                        <span class="severity-badge severity-critical">CRITICAL</span>
+                    </div>
+                </div>
+                <div class="finding-body">
+                    <div class="finding-details">
+                        <p><strong>File</strong>02-smolagents-codeexec/agent.py:50:12</p>
+                        <p><strong>CWE</strong>CWE-835, CWE-400</p>
+                        <p><strong>OWASP</strong>LLM10</p>
+                        <p><strong>Confidence</strong>98%</p>
+                    </div>
+                    <p class="finding-message">Loop lacks termination guards (max_iterations, timeout, break condition). This can lead to infinite execution, token exhaustion, and denial of service.</p>
+                    <div class="code-snippet"># No max_steps limit - can loop indefinitely
+assistant = CodeAgent(
+    tools=[run_shell, write_code],
+    model=model
+    # Missing: use_e2b_executor=True (sandboxing)</div>
+                </div>
+            </div>
             <div class="finding" data-severity="HIGH">
                 <div class="finding-header">
                     <div class="finding-title">
@@ -903,23 +904,24 @@ assistant = CodeAgent(
                         <span>Missing Human Oversight in Autonomous Actions</span>
                     </div>
                     <div class="finding-meta">
-                        <span>02-smolagents-codeexec/agent.py:43</span>
+                        <span>02-smolagents-codeexec/agent.py:26</span>
                         <span class="finding-type-badge code">Code</span>
                         <span class="severity-badge severity-high">HIGH</span>
                     </div>
                 </div>
                 <div class="finding-body">
                     <div class="finding-details">
-                        <p><strong>File</strong>02-smolagents-codeexec/agent.py:43:9</p>
+                        <p><strong>File</strong>02-smolagents-codeexec/agent.py:26:13</p>
                         <p><strong>CWE</strong>CWE-862</p>
                         <p><strong>OWASP</strong>LLM08</p>
                         <p><strong>Confidence</strong>80%</p>
                     </div>
                     <p class="finding-message">Agent performs potentially dangerous actions (tool calls, delegations) without human-in-the-loop approval. Critical for EU AI Act compliance and preventing unintended consequences.</p>
-                    <div class="code-snippet">    # VULNERABILITY: Arbitrary file write
-    with open(path, &#39;w&#39;) as f:
-        f.write(content)
-    return f&quot;Wrote {len(content)} bytes to {path}&quot;</div>
+                    <div class="code-snippet">    # VULNERABILITY: Unsandboxed shell execution
+    result = subprocess.run(
+        command,
+        shell=True,  # Dangerous: enables shell injection
+        capture_output=True,</div>
                 </div>
             </div>
             <div class="finding" data-severity="HIGH">
@@ -967,24 +969,24 @@ assistant = CodeAgent(
                         <span>Token Bombing Attack - Unbounded LLM Consumption</span>
                     </div>
                     <div class="finding-meta">
-                        <span>01-crewai-recursive/agent.py:29</span>
+                        <span>01-crewai-recursive/agent.py:19</span>
                         <span class="finding-type-badge code">Code</span>
                         <span class="severity-badge severity-critical">CRITICAL</span>
                     </div>
                 </div>
                 <div class="finding-body">
                     <div class="finding-details">
-                        <p><strong>File</strong>01-crewai-recursive/agent.py:29:9</p>
+                        <p><strong>File</strong>01-crewai-recursive/agent.py:19:13</p>
                         <p><strong>CWE</strong>CWE-770, CWE-834</p>
                         <p><strong>OWASP</strong>LLM10</p>
                         <p><strong>Confidence</strong>98%</p>
                     </div>
                     <p class="finding-message">Loop depends on LLM output but lacks termination guards (max_iterations, timeout, break condition). This can lead to exponential token consumption, runaway API costs, and denial of service.</p>
-                    <div class="code-snippet">
-writer = Agent(
-    role=&quot;Content Writer&quot;,
-    goal=&quot;Transform research into clear, engaging content&quot;,
-    backstory=&quot;Skilled writer who makes complex topics accessible&quot;,</div>
+                    <div class="code-snippet"># Researcher can delegate to writer, writer delegates back to researcher
+researcher = Agent(
+    role=&quot;Research Analyst&quot;,
+    goal=&quot;Research topics thoroughly and provide detailed findings&quot;,
+    backstory=&quot;Expert researcher with deep analytical skills&quot;,</div>
                 </div>
             </div>
             <div class="finding" data-severity="CRITICAL">
@@ -994,24 +996,24 @@ writer = Agent(
                         <span>Unbounded Loop in Agentic System</span>
                     </div>
                     <div class="finding-meta">
-                        <span>01-crewai-recursive/agent.py:29</span>
+                        <span>01-crewai-recursive/agent.py:19</span>
                         <span class="finding-type-badge code">Code</span>
                         <span class="severity-badge severity-critical">CRITICAL</span>
                     </div>
                 </div>
                 <div class="finding-body">
                     <div class="finding-details">
-                        <p><strong>File</strong>01-crewai-recursive/agent.py:29:9</p>
+                        <p><strong>File</strong>01-crewai-recursive/agent.py:19:13</p>
                         <p><strong>CWE</strong>CWE-835, CWE-400</p>
                         <p><strong>OWASP</strong>LLM10</p>
                         <p><strong>Confidence</strong>98%</p>
                     </div>
                     <p class="finding-message">Loop lacks termination guards (max_iterations, timeout, break condition). This can lead to infinite execution, token exhaustion, and denial of service.</p>
-                    <div class="code-snippet">
-writer = Agent(
-    role=&quot;Content Writer&quot;,
-    goal=&quot;Transform research into clear, engaging content&quot;,
-    backstory=&quot;Skilled writer who makes complex topics accessible&quot;,</div>
+                    <div class="code-snippet"># Researcher can delegate to writer, writer delegates back to researcher
+researcher = Agent(
+    role=&quot;Research Analyst&quot;,
+    goal=&quot;Research topics thoroughly and provide detailed findings&quot;,
+    backstory=&quot;Expert researcher with deep analytical skills&quot;,</div>
                 </div>
             </div>
             <div class="finding" data-severity="HIGH">
@@ -1021,24 +1023,24 @@ writer = Agent(
                         <span>Missing Human Oversight in Autonomous Actions</span>
                     </div>
                     <div class="finding-meta">
-                        <span>01-crewai-recursive/agent.py:29</span>
+                        <span>01-crewai-recursive/agent.py:19</span>
                         <span class="finding-type-badge code">Code</span>
                         <span class="severity-badge severity-high">HIGH</span>
                     </div>
                 </div>
                 <div class="finding-body">
                     <div class="finding-details">
-                        <p><strong>File</strong>01-crewai-recursive/agent.py:29:9</p>
+                        <p><strong>File</strong>01-crewai-recursive/agent.py:19:13</p>
                         <p><strong>CWE</strong>CWE-862</p>
                         <p><strong>OWASP</strong>LLM08</p>
                         <p><strong>Confidence</strong>85%</p>
                     </div>
                     <p class="finding-message">Agent performs potentially dangerous actions (tool calls, delegations) without human-in-the-loop approval. Critical for EU AI Act compliance and preventing unintended consequences.</p>
-                    <div class="code-snippet">
-writer = Agent(
-    role=&quot;Content Writer&quot;,
-    goal=&quot;Transform research into clear, engaging content&quot;,
-    backstory=&quot;Skilled writer who makes complex topics accessible&quot;,</div>
+                    <div class="code-snippet"># Researcher can delegate to writer, writer delegates back to researcher
+researcher = Agent(
+    role=&quot;Research Analyst&quot;,
+    goal=&quot;Research topics thoroughly and provide detailed findings&quot;,
+    backstory=&quot;Expert researcher with deep analytical skills&quot;,</div>
                 </div>
             </div>
             <div class="finding" data-severity="HIGH">
@@ -1048,24 +1050,24 @@ writer = Agent(
                         <span>Recursive Tool Calling Without Cycle Guard</span>
                     </div>
                     <div class="finding-meta">
-                        <span>01-crewai-recursive/agent.py:29</span>
+                        <span>01-crewai-recursive/agent.py:19</span>
                         <span class="finding-type-badge code">Code</span>
                         <span class="severity-badge severity-high">HIGH</span>
                     </div>
                 </div>
                 <div class="finding-body">
                     <div class="finding-details">
-                        <p><strong>File</strong>01-crewai-recursive/agent.py:29:9</p>
+                        <p><strong>File</strong>01-crewai-recursive/agent.py:19:13</p>
                         <p><strong>CWE</strong>CWE-674, CWE-400</p>
                         <p><strong>OWASP</strong>LLM10</p>
                         <p><strong>Confidence</strong>92%</p>
                     </div>
                     <p class="finding-message">Agent delegation or tool calling chain lacks cycle detection or depth limits. This can lead to infinite recursion, stack overflow, and resource exhaustion.</p>
-                    <div class="code-snippet">
-writer = Agent(
-    role=&quot;Content Writer&quot;,
-    goal=&quot;Transform research into clear, engaging content&quot;,
-    backstory=&quot;Skilled writer who makes complex topics accessible&quot;,</div>
+                    <div class="code-snippet"># Researcher can delegate to writer, writer delegates back to researcher
+researcher = Agent(
+    role=&quot;Research Analyst&quot;,
+    goal=&quot;Research topics thoroughly and provide detailed findings&quot;,
+    backstory=&quot;Expert researcher with deep analytical skills&quot;,</div>
                 </div>
             </div>
             <div class="finding" data-severity="HIGH">
@@ -1075,24 +1077,24 @@ writer = Agent(
                         <span>Unbounded Context Window Accumulation</span>
                     </div>
                     <div class="finding-meta">
-                        <span>01-crewai-recursive/agent.py:29</span>
+                        <span>01-crewai-recursive/agent.py:19</span>
                         <span class="finding-type-badge code">Code</span>
                         <span class="severity-badge severity-high">HIGH</span>
                     </div>
                 </div>
                 <div class="finding-body">
                     <div class="finding-details">
-                        <p><strong>File</strong>01-crewai-recursive/agent.py:29:9</p>
+                        <p><strong>File</strong>01-crewai-recursive/agent.py:19:13</p>
                         <p><strong>CWE</strong>CWE-770, CWE-400</p>
                         <p><strong>OWASP</strong>LLM10</p>
                         <p><strong>Confidence</strong>90%</p>
                     </div>
                     <p class="finding-message">Loop accumulates context without truncation or limits. Each iteration adds to the context window until it exceeds model limits, causing failures or silent truncation.</p>
-                    <div class="code-snippet">
-writer = Agent(
-    role=&quot;Content Writer&quot;,
-    goal=&quot;Transform research into clear, engaging content&quot;,
-    backstory=&quot;Skilled writer who makes complex topics accessible&quot;,</div>
+                    <div class="code-snippet"># Researcher can delegate to writer, writer delegates back to researcher
+researcher = Agent(
+    role=&quot;Research Analyst&quot;,
+    goal=&quot;Research topics thoroughly and provide detailed findings&quot;,
+    backstory=&quot;Expert researcher with deep analytical skills&quot;,</div>
                 </div>
             </div>
             <div class="finding" data-severity="MEDIUM">
@@ -1243,6 +1245,145 @@ class TaskSolver:
             </div>
             </div>
         </div>
+        <div class="accordion" data-agent="04-openai-promptinjection">
+            <div class="accordion-header">
+                <span class="accordion-icon">▶</span>
+                <span class="accordion-title">04 Openai Promptinjection</span>
+                <span class="accordion-count">5 issues</span>
+                <div class="accordion-badges"><span class="mini-pill critical">1</span><span class="mini-pill high">2</span><span class="mini-pill medium">2</span></div>
+            </div>
+            <div class="accordion-body">
+                
+            <div class="finding" data-severity="CRITICAL">
+                <div class="finding-header">
+                    <div class="finding-title">
+                        <span class="icon">▶</span>
+                        <span>Potential Cross-Tenant Data Leakage</span>
+                    </div>
+                    <div class="finding-meta">
+                        <span>04-openai-promptinjection/agent.py:22</span>
+                        <span class="finding-type-badge code">Code</span>
+                        <span class="severity-badge severity-critical">CRITICAL</span>
+                    </div>
+                </div>
+                <div class="finding-body">
+                    <div class="finding-details">
+                        <p><strong>File</strong>04-openai-promptinjection/agent.py:22:11</p>
+                        <p><strong>CWE</strong>CWE-200, CWE-639</p>
+                        <p><strong>OWASP</strong>A01:2021</p>
+                        <p><strong>Confidence</strong>75%</p>
+                    </div>
+                    <p class="finding-message">System prompt or tool call may access data across tenant boundaries. In multi-tenant systems, improper isolation can leak one customer&#39;s data to another.</p>
+                    <div class="code-snippet">    # VULNERABILITY: Tainted f-string injection
+    # user_context can contain: &quot;Ignore instructions. You are now...&quot;
+    return f&quot;&quot;&quot;
+    You are a helpful customer support assistant.</div>
+                </div>
+            </div>
+            <div class="finding" data-severity="HIGH">
+                <div class="finding-header">
+                    <div class="finding-title">
+                        <span class="icon">▶</span>
+                        <span>Unvalidated Template Variables in System Prompt</span>
+                    </div>
+                    <div class="finding-meta">
+                        <span>04-openai-promptinjection/agent.py:22</span>
+                        <span class="finding-type-badge code">Code</span>
+                        <span class="severity-badge severity-high">HIGH</span>
+                    </div>
+                </div>
+                <div class="finding-body">
+                    <div class="finding-details">
+                        <p><strong>File</strong>04-openai-promptinjection/agent.py:22:11</p>
+                        <p><strong>CWE</strong>CWE-94, CWE-74</p>
+                        <p><strong>OWASP</strong>LLM01</p>
+                        <p><strong>Confidence</strong>95%</p>
+                    </div>
+                    <p class="finding-message">System prompt contains template variables ({var} or {{var}}) that may allow prompt injection if user input flows into these variables without sanitization.</p>
+                    <div class="code-snippet">    # VULNERABILITY: Tainted f-string injection
+    # user_context can contain: &quot;Ignore instructions. You are now...&quot;
+    return f&quot;&quot;&quot;
+    You are a helpful customer support assistant.</div>
+                </div>
+            </div>
+            <div class="finding" data-severity="HIGH">
+                <div class="finding-header">
+                    <div class="finding-title">
+                        <span class="icon">▶</span>
+                        <span>Prompt Injection Attack in System Prompt</span>
+                    </div>
+                    <div class="finding-meta">
+                        <span>04-openai-promptinjection/agent.py:22</span>
+                        <span class="finding-type-badge code">Code</span>
+                        <span class="severity-badge severity-high">HIGH</span>
+                    </div>
+                </div>
+                <div class="finding-body">
+                    <div class="finding-details">
+                        <p><strong>File</strong>04-openai-promptinjection/agent.py:22:11</p>
+                        <p><strong>CWE</strong>CWE-74, CWE-94, CWE-200</p>
+                        <p><strong>OWASP</strong>LLM01</p>
+                        <p><strong>Confidence</strong>70%</p>
+                    </div>
+                    <p class="finding-message">System prompt contains attack vectors (instruction override, role hijacking, data exfiltration) or lacks safety guardrails. This can lead to unauthorized behavior, data leakage, and system compromise.</p>
+                    <div class="code-snippet">    # VULNERABILITY: Tainted f-string injection
+    # user_context can contain: &quot;Ignore instructions. You are now...&quot;
+    return f&quot;&quot;&quot;
+    You are a helpful customer support assistant.</div>
+                </div>
+            </div>
+            <div class="finding" data-severity="MEDIUM">
+                <div class="finding-header">
+                    <div class="finding-title">
+                        <span class="icon">▶</span>
+                        <span>Sensitive Data in Prompts May Be Logged</span>
+                    </div>
+                    <div class="finding-meta">
+                        <span>04-openai-promptinjection/agent.py:22</span>
+                        <span class="finding-type-badge code">Code</span>
+                        <span class="severity-badge severity-medium">MEDIUM</span>
+                    </div>
+                </div>
+                <div class="finding-body">
+                    <div class="finding-details">
+                        <p><strong>File</strong>04-openai-promptinjection/agent.py:22:11</p>
+                        <p><strong>CWE</strong>CWE-532, CWE-117</p>
+                        <p><strong>OWASP</strong>A09:2021</p>
+                        <p><strong>Confidence</strong>85%</p>
+                    </div>
+                    <p class="finding-message">System prompt contains patterns indicating PII or secrets that may be logged. Prompts are often logged for debugging, exposing sensitive data in log files.</p>
+                    <div class="code-snippet">    # VULNERABILITY: Tainted f-string injection
+    # user_context can contain: &quot;Ignore instructions. You are now...&quot;
+    return f&quot;&quot;&quot;
+    You are a helpful customer support assistant.</div>
+                </div>
+            </div>
+            <div class="finding" data-severity="MEDIUM">
+                <div class="finding-header">
+                    <div class="finding-title">
+                        <span class="icon">▶</span>
+                        <span>Missing Rate Limits on LLM Calls</span>
+                    </div>
+                    <div class="finding-meta">
+                        <span>04-openai-promptinjection/agent.py:79</span>
+                        <span class="finding-type-badge code">Code</span>
+                        <span class="severity-badge severity-medium">MEDIUM</span>
+                    </div>
+                </div>
+                <div class="finding-body">
+                    <div class="finding-details">
+                        <p><strong>File</strong>04-openai-promptinjection/agent.py:79:10</p>
+                        <p><strong>CWE</strong>CWE-770, CWE-799</p>
+                        <p><strong>OWASP</strong>LLM10</p>
+                        <p><strong>Confidence</strong>50%</p>
+                    </div>
+                    <p class="finding-message">LLM API calls lack rate limiting, allowing runaway costs or denial of service. Without throttling, a single user or attack can exhaust API budgets.</p>
+                    <div class="code-snippet">    message = input(&quot;Message: &quot;)
+    print(chat(message, context))</div>
+                </div>
+            </div>
+            </div>
+        </div>
         <div class="accordion" data-agent="05-n8n-webhook">
             <div class="accordion-header">
                 <span class="accordion-icon">▶</span>
@@ -1365,145 +1506,6 @@ class TaskSolver:
                     </div>
                     <p class="finding-message">LLM API calls lack rate limiting, allowing runaway costs or denial of service. Without throttling, a single user or attack can exhaust API budgets. (at $.nodes[?(@.id==&#39;ai-agent-1&#39;)])</p>
                     <div class="code-snippet empty"><span>Configuration finding at $.nodes[?(@.id==&#39;ai-agent-1&#39;</span></div>
-                </div>
-            </div>
-            </div>
-        </div>
-        <div class="accordion" data-agent="04-openai-promptinjection">
-            <div class="accordion-header">
-                <span class="accordion-icon">▶</span>
-                <span class="accordion-title">04 Openai Promptinjection</span>
-                <span class="accordion-count">5 issues</span>
-                <div class="accordion-badges"><span class="mini-pill critical">1</span><span class="mini-pill high">2</span><span class="mini-pill medium">2</span></div>
-            </div>
-            <div class="accordion-body">
-                
-            <div class="finding" data-severity="CRITICAL">
-                <div class="finding-header">
-                    <div class="finding-title">
-                        <span class="icon">▶</span>
-                        <span>Potential Cross-Tenant Data Leakage</span>
-                    </div>
-                    <div class="finding-meta">
-                        <span>04-openai-promptinjection/agent.py:60</span>
-                        <span class="finding-type-badge code">Code</span>
-                        <span class="severity-badge severity-critical">CRITICAL</span>
-                    </div>
-                </div>
-                <div class="finding-body">
-                    <div class="finding-details">
-                        <p><strong>File</strong>04-openai-promptinjection/agent.py:60:19</p>
-                        <p><strong>CWE</strong>CWE-200, CWE-639</p>
-                        <p><strong>OWASP</strong>A01:2021</p>
-                        <p><strong>Confidence</strong>75%</p>
-                    </div>
-                    <p class="finding-message">System prompt or tool call may access data across tenant boundaries. In multi-tenant systems, improper isolation can leak one customer&#39;s data to another.</p>
-                    <div class="code-snippet">    &quot;&quot;&quot;
-    # VULNERABILITY: External data in prompt template
-    instructions = f&quot;&quot;&quot;
-    You help customers with their accounts.</div>
-                </div>
-            </div>
-            <div class="finding" data-severity="HIGH">
-                <div class="finding-header">
-                    <div class="finding-title">
-                        <span class="icon">▶</span>
-                        <span>Unvalidated Template Variables in System Prompt</span>
-                    </div>
-                    <div class="finding-meta">
-                        <span>04-openai-promptinjection/agent.py:60</span>
-                        <span class="finding-type-badge code">Code</span>
-                        <span class="severity-badge severity-high">HIGH</span>
-                    </div>
-                </div>
-                <div class="finding-body">
-                    <div class="finding-details">
-                        <p><strong>File</strong>04-openai-promptinjection/agent.py:60:19</p>
-                        <p><strong>CWE</strong>CWE-94, CWE-74</p>
-                        <p><strong>OWASP</strong>LLM01</p>
-                        <p><strong>Confidence</strong>95%</p>
-                    </div>
-                    <p class="finding-message">System prompt contains template variables ({var} or {{var}}) that may allow prompt injection if user input flows into these variables without sanitization.</p>
-                    <div class="code-snippet">    &quot;&quot;&quot;
-    # VULNERABILITY: External data in prompt template
-    instructions = f&quot;&quot;&quot;
-    You help customers with their accounts.</div>
-                </div>
-            </div>
-            <div class="finding" data-severity="HIGH">
-                <div class="finding-header">
-                    <div class="finding-title">
-                        <span class="icon">▶</span>
-                        <span>Prompt Injection Attack in System Prompt</span>
-                    </div>
-                    <div class="finding-meta">
-                        <span>04-openai-promptinjection/agent.py:60</span>
-                        <span class="finding-type-badge code">Code</span>
-                        <span class="severity-badge severity-high">HIGH</span>
-                    </div>
-                </div>
-                <div class="finding-body">
-                    <div class="finding-details">
-                        <p><strong>File</strong>04-openai-promptinjection/agent.py:60:19</p>
-                        <p><strong>CWE</strong>CWE-74, CWE-94, CWE-200</p>
-                        <p><strong>OWASP</strong>LLM01</p>
-                        <p><strong>Confidence</strong>70%</p>
-                    </div>
-                    <p class="finding-message">System prompt contains attack vectors (instruction override, role hijacking, data exfiltration) or lacks safety guardrails. This can lead to unauthorized behavior, data leakage, and system compromise.</p>
-                    <div class="code-snippet">    &quot;&quot;&quot;
-    # VULNERABILITY: External data in prompt template
-    instructions = f&quot;&quot;&quot;
-    You help customers with their accounts.</div>
-                </div>
-            </div>
-            <div class="finding" data-severity="MEDIUM">
-                <div class="finding-header">
-                    <div class="finding-title">
-                        <span class="icon">▶</span>
-                        <span>Sensitive Data in Prompts May Be Logged</span>
-                    </div>
-                    <div class="finding-meta">
-                        <span>04-openai-promptinjection/agent.py:60</span>
-                        <span class="finding-type-badge code">Code</span>
-                        <span class="severity-badge severity-medium">MEDIUM</span>
-                    </div>
-                </div>
-                <div class="finding-body">
-                    <div class="finding-details">
-                        <p><strong>File</strong>04-openai-promptinjection/agent.py:60:19</p>
-                        <p><strong>CWE</strong>CWE-532, CWE-117</p>
-                        <p><strong>OWASP</strong>A09:2021</p>
-                        <p><strong>Confidence</strong>85%</p>
-                    </div>
-                    <p class="finding-message">System prompt contains patterns indicating PII or secrets that may be logged. Prompts are often logged for debugging, exposing sensitive data in log files.</p>
-                    <div class="code-snippet">    &quot;&quot;&quot;
-    # VULNERABILITY: External data in prompt template
-    instructions = f&quot;&quot;&quot;
-    You help customers with their accounts.</div>
-                </div>
-            </div>
-            <div class="finding" data-severity="MEDIUM">
-                <div class="finding-header">
-                    <div class="finding-title">
-                        <span class="icon">▶</span>
-                        <span>Missing Rate Limits on LLM Calls</span>
-                    </div>
-                    <div class="finding-meta">
-                        <span>04-openai-promptinjection/agent.py:79</span>
-                        <span class="finding-type-badge code">Code</span>
-                        <span class="severity-badge severity-medium">MEDIUM</span>
-                    </div>
-                </div>
-                <div class="finding-body">
-                    <div class="finding-details">
-                        <p><strong>File</strong>04-openai-promptinjection/agent.py:79:10</p>
-                        <p><strong>CWE</strong>CWE-770, CWE-799</p>
-                        <p><strong>OWASP</strong>LLM10</p>
-                        <p><strong>Confidence</strong>50%</p>
-                    </div>
-                    <p class="finding-message">LLM API calls lack rate limiting, allowing runaway costs or denial of service. Without throttling, a single user or attack can exhaust API budgets.</p>
-                    <div class="code-snippet">    message = input(&quot;Message: &quot;)
-    print(chat(message, context))</div>
                 </div>
             </div>
             </div>
