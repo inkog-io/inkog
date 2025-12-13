@@ -173,7 +173,7 @@ func main() {
 	// Command-line flags
 	pathFlag := flag.String("path", ".", "Source path to scan")
 	serverFlag := flag.String("server", "", "Inkog server URL")
-	outputFlag := flag.String("output", "text", "Output format: json, text, html")
+	outputFlag := flag.String("output", "text", "Output format: text, json, html, sarif")
 	policyFlag := flag.String("policy", contract.PolicyBalanced, "Security policy: low-noise, balanced, comprehensive")
 	severityFlag := flag.String("severity", "low", "Minimum severity level")
 	verboseFlag := flag.Bool("verbose", false, "Enable verbose output")
