@@ -91,7 +91,7 @@ Examples:
 
 Environment Variables:
   INKOG_SERVER_URL     Override default server URL (highest priority)
-  INKOG_API_KEY        API key for authentication (optional)
+  INKOG_API_KEY        API key for authentication (get yours at https://app.inkog.io)
   INKOG_OUTPUT_FORMAT  Default output format
 
 Privacy Notice:
