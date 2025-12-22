@@ -56,7 +56,12 @@ const (
 	PointsMedium   = 5
 	PointsLow      = 1
 
-	HelpText = `Inkog - AI Agent Security Scanner
+	HelpText = `Inkog - Ship Safe Agents
+
+Scan. Ship. Comply.
+
+Verify your AI agents have human oversight, authorization controls, and audit
+trails before deployment. EU AI Act Article 14 deadline: August 2, 2026.
 
 Usage:
   inkog [OPTIONS] [PATH]
@@ -65,7 +70,7 @@ Options:
   -path string        Source path to scan (default: .)
   -server string      Inkog server URL (default: https://inkog-api.fly.dev)
   -output string      Output format: json, text, html, sarif (default: text)
-  -policy string      Security policy: low-noise, balanced, comprehensive (default: balanced)
+  -policy string      Security policy (see below, default: balanced)
   -severity string    Minimum severity level: critical, high, medium, low (default: low)
   -verbose            Enable verbose output
   -version            Show version information
@@ -75,10 +80,22 @@ Security Policies:
   low-noise           Only exploitable vulnerabilities (proven tainted input flows)
   balanced            Vulnerabilities + risk patterns (default, recommended)
   comprehensive       All findings including hardening recommendations
+  governance          Governance-focused: Article 14, authorization, audit trails
+  eu-ai-act           EU AI Act compliance: Articles 12, 14, 15
+
+Supported Platforms:
+  Pro-Code:    LangChain | LangGraph | CrewAI | Phidata | AutoGen | LlamaIndex
+  No-Code:     Microsoft Copilot Studio | Salesforce Agentforce | n8n | Flowise
 
 Examples:
   # Scan current directory with default policy
   inkog .
+
+  # EU AI Act compliance scan
+  inkog -path ./agents --policy eu-ai-act
+
+  # Governance-focused scan (Article 14 controls)
+  inkog -path ./agents --policy governance
 
   # Low noise mode - only proven vulnerabilities
   inkog -path ./agents --policy low-noise
@@ -89,17 +106,19 @@ Examples:
   # Scan and output as JSON
   inkog -path . -output json
 
+  # SARIF output for GitHub Security tab
+  inkog -path . -output sarif > results.sarif
+
 Environment Variables:
   INKOG_SERVER_URL     Override default server URL (highest priority)
   INKOG_API_KEY        API key for authentication (get yours at https://app.inkog.io)
   INKOG_OUTPUT_FORMAT  Default output format
 
 Privacy Notice:
-  Inkog uses a hybrid privacy model:
-  1. Secrets are detected and redacted on your local machine
-  2. Redacted code is sent to Inkog server for logic analysis
-  3. Your actual secrets never leave your machine
-  4. Server analysis is used for detecting loops, data flows, and logic issues
+  Source code is redacted locally before any remote analysis. Secrets, API keys,
+  and credentials never leave your machine.
+
+Learn more: https://docs.inkog.io
 `
 )
 
@@ -187,9 +206,11 @@ func main() {
 		contract.PolicyLowNoise:      true,
 		contract.PolicyBalanced:      true,
 		contract.PolicyComprehensive: true,
+		contract.PolicyGovernance:    true,
+		contract.PolicyEUAIAct:       true,
 	}
 	if !validPolicies[*policyFlag] {
-		log.Fatalf("❌ Error: invalid policy '%s'. Valid options: low-noise, balanced, comprehensive\n", *policyFlag)
+		log.Fatalf("❌ Error: invalid policy '%s'. Valid options: low-noise, balanced, comprehensive, governance, eu-ai-act\n", *policyFlag)
 	}
 
 	// Handle version flag
@@ -665,6 +686,10 @@ func detectFramework(findings []contract.Finding) string {
 		"agentops":       "AgentOps",
 		"langflow":       "Langflow",
 		"flowise":        "Flowise",
+		"copilotstudio":  "Copilot Studio",
+		"copilot-studio": "Copilot Studio",
+		"agentforce":     "Agentforce",
+		"einsteinbot":    "Einstein Bots",
 	}
 
 	// Code import patterns
@@ -719,6 +744,25 @@ func detectFramework(findings []contract.Finding) string {
 		// Check for Dify patterns
 		if strings.HasSuffix(file, ".dify.json") || strings.Contains(code, "\"mode\":\"workflow\"") {
 			return "Dify"
+		}
+
+		// Check for Copilot Studio patterns (YAML/JSON)
+		if strings.Contains(code, "kind: copilotstudio") ||
+			strings.Contains(code, "kind: copilot") ||
+			strings.Contains(code, "\"schemaversion\":") && strings.Contains(code, "\"topics\":") ||
+			strings.HasSuffix(file, ".copilot.yaml") ||
+			strings.HasSuffix(file, ".copilot.json") {
+			return "Copilot Studio"
+		}
+
+		// Check for Agentforce/Einstein patterns (XML/JSON/YAML)
+		if strings.Contains(code, "genaiplanner") ||
+			strings.Contains(code, "genaiplugin") ||
+			strings.Contains(code, "einstein") && (strings.Contains(code, "bot") || strings.Contains(code, "gpt")) ||
+			strings.HasSuffix(file, "-meta.xml") && strings.Contains(code, "agent") ||
+			strings.Contains(code, "\"agentconfig\":") ||
+			strings.Contains(code, "agentconfig:") {
+			return "Agentforce"
 		}
 	}
 

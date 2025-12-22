@@ -16,10 +16,12 @@ func TestFilterByPolicy(t *testing.T) {
 		expected int
 	}{
 		{PolicyLowNoise, 2},       // Only vulnerabilities (2 items)
-		{PolicyBalanced, 4},      // Vulnerabilities + risk patterns
-		{PolicyComprehensive, 5}, // All
-		{"", 4},                  // Default to balanced
-		{"unknown", 4},          // Unknown defaults to balanced
+		{PolicyBalanced, 4},       // Vulnerabilities + risk patterns
+		{PolicyComprehensive, 5},  // All
+		{PolicyGovernance, 4},     // Governance policy (Tier 1 + 2)
+		{PolicyEUAIAct, 4},        // EU AI Act policy (Tier 1 + 2 + governance)
+		{"", 4},                   // Default to balanced
+		{"unknown", 4},            // Unknown defaults to balanced
 	}
 
 	for _, tt := range tests {
@@ -28,6 +30,133 @@ func TestFilterByPolicy(t *testing.T) {
 			if len(filtered) != tt.expected {
 				t.Errorf("FilterByPolicy(%s) returned %d findings, want %d",
 					tt.policy, len(filtered), tt.expected)
+			}
+		})
+	}
+}
+
+func TestFilterByPolicy_WithGovernanceData(t *testing.T) {
+	findings := []Finding{
+		{
+			ID:                 "1",
+			RiskTier:           TierVulnerability,
+			Severity:           "CRITICAL",
+			GovernanceCategory: "oversight",
+			ComplianceMapping: &ComplianceMapping{
+				EUAIActArticles: []string{"Article 14.1", "Article 14.4"},
+			},
+		},
+		{
+			ID:                 "2",
+			RiskTier:           TierRiskPattern,
+			Severity:           "HIGH",
+			GovernanceCategory: "authorization",
+		},
+		{
+			ID:       "3",
+			RiskTier: TierHardening,
+			Severity: "LOW",
+		},
+		{
+			ID:       "4",
+			RiskTier: TierVulnerability,
+			Severity: "HIGH",
+		},
+	}
+
+	// Governance policy should include Tier 1 + 2 findings
+	t.Run("governance_policy", func(t *testing.T) {
+		filtered := FilterByPolicy(findings, PolicyGovernance)
+		if len(filtered) != 3 {
+			t.Errorf("PolicyGovernance returned %d findings, want 3", len(filtered))
+		}
+	})
+
+	// EU AI Act policy should include findings with EU AI Act mapping
+	t.Run("eu_ai_act_policy", func(t *testing.T) {
+		filtered := FilterByPolicy(findings, PolicyEUAIAct)
+		if len(filtered) != 3 {
+			t.Errorf("PolicyEUAIAct returned %d findings, want 3", len(filtered))
+		}
+	})
+}
+
+func TestHasGovernanceCompliance(t *testing.T) {
+	tests := []struct {
+		name     string
+		finding  Finding
+		expected bool
+	}{
+		{
+			name:     "nil_compliance_mapping",
+			finding:  Finding{ID: "1"},
+			expected: false,
+		},
+		{
+			name: "eu_ai_act_article_14",
+			finding: Finding{
+				ID: "2",
+				ComplianceMapping: &ComplianceMapping{
+					EUAIActArticles: []string{"Article 14.1"},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "eu_ai_act_article_12",
+			finding: Finding{
+				ID: "3",
+				ComplianceMapping: &ComplianceMapping{
+					EUAIActArticles: []string{"Article 12"},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "nist_govern_category",
+			finding: Finding{
+				ID: "4",
+				ComplianceMapping: &ComplianceMapping{
+					NISTCategories: []string{"GOVERN 4.1"},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "non_governance_article",
+			finding: Finding{
+				ID: "5",
+				ComplianceMapping: &ComplianceMapping{
+					EUAIActArticles: []string{"Article 5"},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "non_governance_nist",
+			finding: Finding{
+				ID: "6",
+				ComplianceMapping: &ComplianceMapping{
+					NISTCategories: []string{"MANAGE 2.1"},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "empty_compliance_mapping",
+			finding: Finding{
+				ID:                "7",
+				ComplianceMapping: &ComplianceMapping{},
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := hasGovernanceCompliance(tt.finding)
+			if got != tt.expected {
+				t.Errorf("hasGovernanceCompliance() = %v, want %v", got, tt.expected)
 			}
 		})
 	}
@@ -337,6 +466,130 @@ func TestPolicyConstants(t *testing.T) {
 	}
 	if PolicyComprehensive == "" {
 		t.Error("PolicyComprehensive should not be empty")
+	}
+	if PolicyGovernance == "" {
+		t.Error("PolicyGovernance should not be empty")
+	}
+	if PolicyEUAIAct == "" {
+		t.Error("PolicyEUAIAct should not be empty")
+	}
+
+	// Verify policy values are correct
+	if PolicyLowNoise != "low-noise" {
+		t.Errorf("PolicyLowNoise = %s, want low-noise", PolicyLowNoise)
+	}
+	if PolicyBalanced != "balanced" {
+		t.Errorf("PolicyBalanced = %s, want balanced", PolicyBalanced)
+	}
+	if PolicyComprehensive != "comprehensive" {
+		t.Errorf("PolicyComprehensive = %s, want comprehensive", PolicyComprehensive)
+	}
+	if PolicyGovernance != "governance" {
+		t.Errorf("PolicyGovernance = %s, want governance", PolicyGovernance)
+	}
+	if PolicyEUAIAct != "eu-ai-act" {
+		t.Errorf("PolicyEUAIAct = %s, want eu-ai-act", PolicyEUAIAct)
+	}
+}
+
+func TestComplianceMappingStruct(t *testing.T) {
+	// Test that ComplianceMapping struct has all required fields
+	mapping := ComplianceMapping{
+		EUAIActArticles: []string{"Article 14.1", "Article 14.4"},
+		NISTCategories:  []string{"GOVERN 4.1"},
+		ISO42001Clauses: []string{"7.2"},
+		OWASPItems:      []string{"LLM06"},
+		GDPRArticles:    []string{"Article 5"},
+		CWEIDs:          []string{"CWE-862"},
+	}
+
+	if len(mapping.EUAIActArticles) != 2 {
+		t.Errorf("EUAIActArticles length = %d, want 2", len(mapping.EUAIActArticles))
+	}
+	if len(mapping.NISTCategories) != 1 {
+		t.Errorf("NISTCategories length = %d, want 1", len(mapping.NISTCategories))
+	}
+	if len(mapping.ISO42001Clauses) != 1 {
+		t.Errorf("ISO42001Clauses length = %d, want 1", len(mapping.ISO42001Clauses))
+	}
+	if len(mapping.OWASPItems) != 1 {
+		t.Errorf("OWASPItems length = %d, want 1", len(mapping.OWASPItems))
+	}
+	if len(mapping.GDPRArticles) != 1 {
+		t.Errorf("GDPRArticles length = %d, want 1", len(mapping.GDPRArticles))
+	}
+	if len(mapping.CWEIDs) != 1 {
+		t.Errorf("CWEIDs length = %d, want 1", len(mapping.CWEIDs))
+	}
+}
+
+func TestGovernanceFieldsInFinding(t *testing.T) {
+	finding := Finding{
+		ID:                 "test-1",
+		GovernanceCategory: "oversight",
+		ComplianceMapping: &ComplianceMapping{
+			EUAIActArticles: []string{"Article 14.1"},
+		},
+	}
+
+	if finding.GovernanceCategory != "oversight" {
+		t.Errorf("GovernanceCategory = %s, want oversight", finding.GovernanceCategory)
+	}
+	if finding.ComplianceMapping == nil {
+		t.Error("ComplianceMapping should not be nil")
+	}
+	if len(finding.ComplianceMapping.EUAIActArticles) != 1 {
+		t.Errorf("EUAIActArticles length = %d, want 1", len(finding.ComplianceMapping.EUAIActArticles))
+	}
+}
+
+func TestGovernanceFieldsInScanResult(t *testing.T) {
+	result := ScanResult{
+		GovernanceScore:  85,
+		EUAIActReadiness: "PARTIAL",
+		ArticleMapping: map[string]ArticleStatus{
+			"Article 14": {
+				Article:      "Article 14",
+				Status:       "PARTIAL",
+				FindingCount: 2,
+				Description:  "Human Oversight",
+			},
+		},
+		FrameworkMapping: map[string]FrameworkStatus{
+			"OWASP_LLM06": {
+				Framework:    "OWASP_LLM06",
+				Status:       "FAIL",
+				FindingCount: 3,
+			},
+		},
+	}
+
+	if result.GovernanceScore != 85 {
+		t.Errorf("GovernanceScore = %d, want 85", result.GovernanceScore)
+	}
+	if result.EUAIActReadiness != "PARTIAL" {
+		t.Errorf("EUAIActReadiness = %s, want PARTIAL", result.EUAIActReadiness)
+	}
+	if len(result.ArticleMapping) != 1 {
+		t.Errorf("ArticleMapping length = %d, want 1", len(result.ArticleMapping))
+	}
+	if len(result.FrameworkMapping) != 1 {
+		t.Errorf("FrameworkMapping length = %d, want 1", len(result.FrameworkMapping))
+	}
+
+	// Test ArticleStatus
+	article14 := result.ArticleMapping["Article 14"]
+	if article14.Status != "PARTIAL" {
+		t.Errorf("Article 14 status = %s, want PARTIAL", article14.Status)
+	}
+	if article14.FindingCount != 2 {
+		t.Errorf("Article 14 finding count = %d, want 2", article14.FindingCount)
+	}
+
+	// Test FrameworkStatus
+	owasp := result.FrameworkMapping["OWASP_LLM06"]
+	if owasp.Status != "FAIL" {
+		t.Errorf("OWASP_LLM06 status = %s, want FAIL", owasp.Status)
 	}
 }
 

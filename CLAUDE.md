@@ -3,19 +3,23 @@
 ## Repository Identity
 
 - **GitHub:** `github.com/inkog-io/inkog` (Public)
-- **Role:** The Official Inkog CLI
+- **Role:** The Official Inkog CLI - Agent Governance Verifier
 - **Status:** Production (v1.0.0+)
 - **License:** Apache 2.0
+- **Tagline:** Ship compliant agents. Every PR.
 
 ## Vision
 
-The Inkog CLI is the **primary entry point** for developers securing AI agents. It's a **dumb client** that communicates with the Inkog backend on Fly.io. It prioritizes three pillars:
+The Inkog CLI is the **primary entry point** for developers verifying AI agent governance controls. It's a **dumb client** that communicates with the Inkog backend on Fly.io. It prioritizes four pillars:
 
-1. **User Experience:** Beautiful, fast, intuitive output
-2. **Speed:** Instant feedback. Secrets detected in <500ms locally
-3. **Privacy:** Secrets redacted *before* upload. Never send raw credentials to the server
+1. **Governance:** Verify human oversight, authorization checks, and audit trails before deployment
+2. **User Experience:** Beautiful, fast, intuitive output
+3. **Speed:** Instant feedback. Secrets detected in <500ms locally
+4. **Privacy:** Secrets redacted *before* upload. Never send raw credentials to the server
 
-The CLI must function as a **standalone dumb client**—it can work without a backend server, detecting secrets locally and refusing to upload if there's no connection.
+The CLI supports both **pro-code** (LangChain, CrewAI, LangGraph) and **no-code** (Microsoft Copilot Studio, Salesforce Agentforce) agent platforms.
+
+**EU AI Act Article 14 Deadline: August 2, 2026** - The CLI helps generate compliance evidence.
 
 ## Architectural Constraint: Strict Isolation
 
@@ -157,6 +161,8 @@ AI Agent Risk Assessment: 6 findings (policy: balanced)
 - `--policy low-noise`: Only Tier 1 (proven vulnerabilities)
 - `--policy balanced`: Tier 1 + 2 (default)
 - `--policy comprehensive`: All tiers
+- `--policy governance`: Governance-focused (Article 14, authorization, audit trails)
+- `--policy eu-ai-act`: EU AI Act compliance (Articles 12, 14, 15)
 
 ### Rule 4: Contract Alignment
 
@@ -193,6 +199,8 @@ const (
     PolicyLowNoise      = "low-noise"      // Only Tier 1
     PolicyBalanced      = "balanced"       // Tier 1 + 2 (default)
     PolicyComprehensive = "comprehensive"  // All tiers
+    PolicyGovernance    = "governance"     // Governance-focused (Article 14)
+    PolicyEUAIAct       = "eu-ai-act"      // EU AI Act compliance
 )
 ```
 
@@ -327,6 +335,12 @@ inkog -path /path/to/code
 inkog -path /path/to/code
 # Uses: https://inkog-api.fly.dev
 
+# EU AI Act compliance scan
+inkog -path /path/to/code --policy eu-ai-act
+
+# Governance-focused scan (Article 14 controls)
+inkog -path /path/to/code --policy governance
+
 # Full hybrid scan (explicit)
 inkog -path /path/to/code -server https://inkog-api.fly.dev
 
@@ -338,6 +352,9 @@ inkog -path /path/to/code -verbose
 
 # Output as JSON (for CI/CD parsing)
 inkog -path /path/to/code -output json > results.json
+
+# SARIF output for GitHub Security tab
+inkog -path /path/to/code -output sarif > results.sarif
 
 # Filter by severity
 inkog -path /path/to/code -severity critical

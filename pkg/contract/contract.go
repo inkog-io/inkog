@@ -27,6 +27,10 @@ const (
 	PolicyBalanced = "balanced"
 	// PolicyComprehensive shows all tiers
 	PolicyComprehensive = "comprehensive"
+	// PolicyGovernance focuses on governance controls (Article 14 compliance)
+	PolicyGovernance = "governance"
+	// PolicyEUAIAct focuses on EU AI Act compliance (Articles 12, 14, 15)
+	PolicyEUAIAct = "eu-ai-act"
 )
 
 // RedactionInfo tracks where content was redacted
@@ -43,7 +47,7 @@ type Finding struct {
 	ID        string        `json:"id"`
 	PatternID string        `json:"pattern_id"`
 	Pattern   string        `json:"pattern"`
-	Source    FindingSource `json:"source"` // NEW: Track source
+	Source    FindingSource `json:"source"` // Track source
 
 	// Location
 	File   string `json:"file"`
@@ -51,9 +55,9 @@ type Finding struct {
 	Column int    `json:"column"`
 
 	// Details
-	Message    string `json:"message"`
-	Code       string `json:"code_snippet"`
-	Severity   string `json:"severity"` // CRITICAL, HIGH, MEDIUM, LOW
+	Message    string  `json:"message"`
+	Code       string  `json:"code_snippet"`
+	Severity   string  `json:"severity"`   // CRITICAL, HIGH, MEDIUM, LOW
 	Confidence float32 `json:"confidence"` // 0.0-1.0
 
 	// Security Metadata
@@ -74,6 +78,20 @@ type Finding struct {
 
 	// Track redaction for audit
 	RedactedAt *RedactionInfo `json:"redacted_at,omitempty"`
+
+	// Governance fields (EU AI Act compliance)
+	GovernanceCategory string             `json:"governance_category,omitempty"` // "oversight", "authorization", "audit", "privacy"
+	ComplianceMapping  *ComplianceMapping `json:"compliance_mapping,omitempty"`
+}
+
+// ComplianceMapping maps a finding to compliance frameworks
+type ComplianceMapping struct {
+	EUAIActArticles []string `json:"eu_ai_act_articles,omitempty"` // e.g., ["Article 14.1", "Article 14.4"]
+	NISTCategories  []string `json:"nist_categories,omitempty"`    // e.g., ["GOVERN 4.1"]
+	ISO42001Clauses []string `json:"iso_42001_clauses,omitempty"`  // e.g., ["7.2"]
+	OWASPItems      []string `json:"owasp_items,omitempty"`        // e.g., ["LLM06"]
+	GDPRArticles    []string `json:"gdpr_articles,omitempty"`      // e.g., ["Article 5"]
+	CWEIDs          []string `json:"cwe_ids,omitempty"`            // e.g., ["CWE-862"]
 }
 
 // ScanResult represents the complete scan results from server
@@ -83,12 +101,12 @@ type ScanResult struct {
 	ServerVersion   string `json:"server_version"`
 
 	// Statistics
-	RiskScore       int `json:"risk_score"`
-	FindingsCount   int `json:"findings_count"`
-	CriticalCount   int `json:"critical_count"`
-	HighCount       int `json:"high_count"`
-	MediumCount     int `json:"medium_count"`
-	LowCount        int `json:"low_count"`
+	RiskScore     int `json:"risk_score"`
+	FindingsCount int `json:"findings_count"`
+	CriticalCount int `json:"critical_count"`
+	HighCount     int `json:"high_count"`
+	MediumCount   int `json:"medium_count"`
+	LowCount      int `json:"low_count"`
 
 	// Results (from server logic analysis only)
 	Findings []Finding `json:"findings"`
@@ -105,6 +123,27 @@ type ScanResult struct {
 
 	// Compliance Report
 	ComplianceReport *ComplianceReport `json:"compliance_report,omitempty"`
+
+	// Governance fields (EU AI Act compliance)
+	GovernanceScore  int                        `json:"governance_score"`             // 0-100 score
+	EUAIActReadiness string                     `json:"eu_ai_act_readiness"`          // "READY", "PARTIAL", "NOT_READY"
+	ArticleMapping   map[string]ArticleStatus   `json:"article_mapping,omitempty"`    // Per-article status
+	FrameworkMapping map[string]FrameworkStatus `json:"framework_mapping,omitempty"`  // Per-framework status
+}
+
+// ArticleStatus represents compliance status for a specific EU AI Act article
+type ArticleStatus struct {
+	Article      string `json:"article"`       // e.g., "Article 14"
+	Status       string `json:"status"`        // "PASS", "PARTIAL", "FAIL"
+	FindingCount int    `json:"finding_count"` // Number of findings related to this article
+	Description  string `json:"description"`   // e.g., "Human Oversight"
+}
+
+// FrameworkStatus represents compliance status for a specific framework
+type FrameworkStatus struct {
+	Framework    string `json:"framework"`     // e.g., "OWASP_LLM06", "ISO_42001"
+	Status       string `json:"status"`        // "PASS", "PARTIAL", "FAIL"
+	FindingCount int    `json:"finding_count"` // Number of findings related to this framework
 }
 
 // LocalSecretResult represents secrets detected locally on the CLI
@@ -295,10 +334,75 @@ func FilterByPolicy(findings []Finding, policy string) []Finding {
 	case PolicyComprehensive:
 		// All tiers
 		return findings
+	case PolicyGovernance:
+		// Governance-focused: findings with governance category or Article 14 compliance
+		var filtered []Finding
+		for _, f := range findings {
+			tier := GetEffectiveTier(f)
+			// Include governance findings (Tier 1 + 2) and those with governance category
+			if tier == TierVulnerability || tier == TierRiskPattern {
+				// Include all high-tier findings, but prioritize governance
+				if f.GovernanceCategory != "" || hasGovernanceCompliance(f) {
+					filtered = append(filtered, f)
+				} else {
+					// Also include non-governance findings for context
+					filtered = append(filtered, f)
+				}
+			}
+		}
+		return filtered
+	case PolicyEUAIAct:
+		// EU AI Act focused: findings with EU AI Act compliance mapping
+		var filtered []Finding
+		for _, f := range findings {
+			// Include findings with EU AI Act compliance mapping
+			if f.ComplianceMapping != nil && len(f.ComplianceMapping.EUAIActArticles) > 0 {
+				filtered = append(filtered, f)
+			} else if f.GovernanceCategory != "" {
+				// Also include governance findings (related to Article 14)
+				filtered = append(filtered, f)
+			} else {
+				// For other findings, include if they're high severity (risk_pattern or vulnerability)
+				tier := GetEffectiveTier(f)
+				if tier == TierVulnerability || tier == TierRiskPattern {
+					filtered = append(filtered, f)
+				}
+			}
+		}
+		return filtered
 	default:
 		// Default to balanced
 		return FilterByPolicy(findings, PolicyBalanced)
 	}
+}
+
+// hasGovernanceCompliance checks if a finding has governance-related compliance mapping
+func hasGovernanceCompliance(f Finding) bool {
+	if f.ComplianceMapping == nil {
+		return false
+	}
+	// Check for EU AI Act Articles 12, 14, 15 (governance articles)
+	governanceArticles := map[string]bool{
+		"Article 12":   true,
+		"Article 12.1": true,
+		"Article 14":   true,
+		"Article 14.1": true,
+		"Article 14.4": true,
+		"Article 15":   true,
+		"Article 15.3": true,
+	}
+	for _, article := range f.ComplianceMapping.EUAIActArticles {
+		if governanceArticles[article] {
+			return true
+		}
+	}
+	// Check for NIST governance categories
+	for _, cat := range f.ComplianceMapping.NISTCategories {
+		if len(cat) > 6 && cat[:6] == "GOVERN" {
+			return true
+		}
+	}
+	return false
 }
 
 // GroupByTier groups findings by their risk tier
