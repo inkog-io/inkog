@@ -126,11 +126,18 @@ type HybridScanner struct {
 
 // ScanResult contains both local and remote findings
 type ScanResult struct {
-	LocalSecrets      []contract.Finding      `json:"local_secrets"`
-	ServerFindings    []contract.Finding      `json:"server_findings"`
-	AllFindings       []contract.Finding      `json:"all_findings"`
+	LocalSecrets      []contract.Finding         `json:"local_secrets"`
+	ServerFindings    []contract.Finding         `json:"server_findings"`
+	AllFindings       []contract.Finding         `json:"all_findings"`
 	ComplianceReport  *contract.ComplianceReport `json:"compliance_report,omitempty"`
-	Report            string                   `json:"report"`
+	Report            string                     `json:"report"`
+
+	// Governance fields (forwarded from server)
+	GovernanceScore  int                               `json:"governance_score"`
+	EUAIActReadiness string                            `json:"eu_ai_act_readiness"`
+	ArticleMapping   map[string]contract.ArticleStatus `json:"article_mapping,omitempty"`
+	FrameworkMapping map[string]contract.FrameworkStatus `json:"framework_mapping,omitempty"`
+	TopologyMap      *contract.TopologyMap             `json:"topology_map,omitempty"`
 }
 
 // NewHybridScanner creates a new scanner instance
@@ -196,6 +203,13 @@ func (hs *HybridScanner) Scan() (*ScanResult, error) {
 		ServerFindings:   serverResult.Findings,
 		AllFindings:      allFindings,
 		ComplianceReport: serverResult.ComplianceReport,
+
+		// Forward all governance data from server
+		GovernanceScore:  serverResult.GovernanceScore,
+		EUAIActReadiness: serverResult.EUAIActReadiness,
+		ArticleMapping:   serverResult.ArticleMapping,
+		FrameworkMapping: serverResult.FrameworkMapping,
+		TopologyMap:      serverResult.TopologyMap,
 	}, nil
 }
 

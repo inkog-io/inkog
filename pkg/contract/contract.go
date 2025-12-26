@@ -9,6 +9,16 @@ const (
 	SourceServerTaint FindingSource = "server_taint" // Server taint flow analysis
 )
 
+// FindingType distinguishes vulnerabilities from governance violations
+type FindingType string
+
+const (
+	// TypeVulnerability - Security vulnerabilities (exploits, injections)
+	TypeVulnerability FindingType = "vulnerability"
+	// TypeGovernanceViolation - Governance gaps (missing oversight, audit)
+	TypeGovernanceViolation FindingType = "governance_violation"
+)
+
 // RiskTier constants for three-tier classification (Socket.dev inspired)
 const (
 	// TierVulnerability - Tier 1: Exploitable vulnerabilities with proven taint flow
@@ -66,8 +76,9 @@ type Finding struct {
 	OWASP string  `json:"owasp_category"`
 
 	// Risk Classification (Three-Tier System)
-	Category string `json:"category,omitempty"` // injection, resource_exhaustion, governance, etc.
-	RiskTier string `json:"risk_tier,omitempty"` // vulnerability, risk_pattern, hardening
+	Category    string      `json:"category,omitempty"`     // injection, resource_exhaustion, governance, etc.
+	RiskTier    string      `json:"risk_tier,omitempty"`    // vulnerability, risk_pattern, hardening
+	FindingType FindingType `json:"finding_type,omitempty"` // vulnerability, governance_violation
 
 	// Taint Tracking (for credible tier elevation)
 	InputTainted bool   `json:"input_tainted,omitempty"` // True if user input flows to dangerous operation
@@ -129,6 +140,9 @@ type ScanResult struct {
 	EUAIActReadiness string                     `json:"eu_ai_act_readiness"`          // "READY", "PARTIAL", "NOT_READY"
 	ArticleMapping   map[string]ArticleStatus   `json:"article_mapping,omitempty"`    // Per-article status
 	FrameworkMapping map[string]FrameworkStatus `json:"framework_mapping,omitempty"`  // Per-framework status
+
+	// Agent topology visualization
+	TopologyMap *TopologyMap `json:"topology_map,omitempty"` // Visual topology of agent structure
 }
 
 // ArticleStatus represents compliance status for a specific EU AI Act article
@@ -144,6 +158,58 @@ type FrameworkStatus struct {
 	Framework    string `json:"framework"`     // e.g., "OWASP_LLM06", "ISO_42001"
 	Status       string `json:"status"`        // "PASS", "PARTIAL", "FAIL"
 	FindingCount int    `json:"finding_count"` // Number of findings related to this framework
+}
+
+// TopologyMetadata contains metadata about the topology map
+type TopologyMetadata struct {
+	Framework  string `json:"framework"`
+	FilePath   string `json:"file_path"`
+	InputType  string `json:"input_type"`
+	NodeCount  int    `json:"node_count"`
+	EdgeCount  int    `json:"edge_count"`
+}
+
+// TopologyNodeLocation represents a source code location
+type TopologyNodeLocation struct {
+	File   string `json:"file,omitempty"`
+	Line   int    `json:"line,omitempty"`
+	Column int    `json:"column,omitempty"`
+}
+
+// TopologyNode represents a node in the agent topology
+type TopologyNode struct {
+	ID          string                 `json:"id"`
+	Type        string                 `json:"type"`
+	Label       string                 `json:"label"`
+	Data        map[string]interface{} `json:"data"`
+	Location    *TopologyNodeLocation  `json:"location,omitempty"`
+	RiskLevel   string                 `json:"risk_level"` // SAFE, LOW, MEDIUM, HIGH, CRITICAL
+	RiskReasons []string               `json:"risk_reasons,omitempty"`
+}
+
+// TopologyEdge represents a connection between nodes
+type TopologyEdge struct {
+	From  string `json:"from"`
+	To    string `json:"to"`
+	Type  string `json:"type"`
+	Label string `json:"label,omitempty"`
+}
+
+// GovernanceStatus tracks governance control status
+type GovernanceStatus struct {
+	HasHumanOversight bool     `json:"has_human_oversight"`
+	HasAuthChecks     bool     `json:"has_auth_checks"`
+	HasAuditLogging   bool     `json:"has_audit_logging"`
+	HasRateLimiting   bool     `json:"has_rate_limiting"`
+	MissingControls   []string `json:"missing_controls"`
+}
+
+// TopologyMap represents the agent topology visualization
+type TopologyMap struct {
+	Metadata   TopologyMetadata `json:"metadata"`
+	Nodes      []TopologyNode   `json:"nodes"`
+	Edges      []TopologyEdge   `json:"edges"`
+	Governance GovernanceStatus `json:"governance"`
 }
 
 // LocalSecretResult represents secrets detected locally on the CLI
@@ -432,6 +498,60 @@ func CountByTier(findings []Finding) map[string]int {
 	for _, f := range findings {
 		tier := GetEffectiveTier(f)
 		counts[tier]++
+	}
+
+	return counts
+}
+
+// GetEffectiveFindingType returns the effective finding type, inferring from pattern if not set
+func GetEffectiveFindingType(f Finding) FindingType {
+	if f.FindingType != "" {
+		return f.FindingType
+	}
+	// Infer from governance category or pattern
+	if f.GovernanceCategory != "" {
+		return TypeGovernanceViolation
+	}
+	// Check pattern_id for governance-related patterns
+	if isGovernancePattern(f.PatternID) {
+		return TypeGovernanceViolation
+	}
+	return TypeVulnerability
+}
+
+// isGovernancePattern checks if a pattern ID indicates a governance violation
+func isGovernancePattern(patternID string) bool {
+	governancePatterns := map[string]bool{
+		"missing_human_oversight":  true,
+		"missing_rate_limits":      true,
+		"missing_authorization":    true,
+		"missing_audit_logging":    true,
+		"missing_output_validation": true,
+	}
+	return governancePatterns[patternID]
+}
+
+// FilterByFindingType returns findings matching the specified finding type
+func FilterByFindingType(findings []Finding, findingType FindingType) []Finding {
+	var filtered []Finding
+	for _, f := range findings {
+		if GetEffectiveFindingType(f) == findingType {
+			filtered = append(filtered, f)
+		}
+	}
+	return filtered
+}
+
+// CountByFindingType tallies findings by finding type
+func CountByFindingType(findings []Finding) map[FindingType]int {
+	counts := map[FindingType]int{
+		TypeVulnerability:       0,
+		TypeGovernanceViolation: 0,
+	}
+
+	for _, f := range findings {
+		fType := GetEffectiveFindingType(f)
+		counts[fType]++
 	}
 
 	return counts

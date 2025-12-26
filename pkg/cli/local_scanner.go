@@ -107,15 +107,13 @@ func (ls *LocalScanner) findWorkerBinary() (string, error) {
 
 	return "", fmt.Errorf(`inkog-worker binary not found
 
-To use --local mode, you need the inkog-worker binary installed.
+The --local flag requires the inkog-worker binary for offline scanning.
+This feature is available for Enterprise customers with self-hosted licenses.
 
-Options:
-  1. Set INKOG_WORKER_PATH environment variable to the worker location
-  2. Place inkog-worker in the same directory as the inkog CLI
-  3. Install inkog-worker in your system PATH
+For cloud-based scanning (recommended), remove the --local flag:
+  inkog -path /path/to/scan
 
-Build from source:
-  cd inkog-backend && CGO_ENABLED=1 go build -o inkog-worker ./cmd/worker
+Contact sales@inkog.io for Enterprise self-hosted deployment options.
 `)
 }
 
