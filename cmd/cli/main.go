@@ -49,6 +49,9 @@ const (
 	colorTierVuln      = "\033[91m" // red for exploitable vulnerabilities
 	colorTierRisk      = "\033[93m" // yellow for risk patterns
 	colorTierHardening = "\033[36m" // cyan for hardening recommendations
+	colorGovernance    = "\033[95m" // magenta for governance
+	colorCheck         = "\033[92m" // green for checkmark
+	colorCross         = "\033[91m" // red for cross
 
 	// Security grading point values (Snyk-style)
 	PointsCritical = 30
@@ -69,6 +72,7 @@ Usage:
 Options:
   -path string        Source path to scan (default: .)
   -server string      Inkog server URL (default: https://inkog-api.fly.dev)
+  -local              Run offline using local inkog-worker binary (no server)
   -output string      Output format: json, text, html, sarif (default: text)
   -policy string      Security policy (see below, default: balanced)
   -severity string    Minimum severity level: critical, high, medium, low (default: low)
@@ -192,6 +196,7 @@ func main() {
 	// Command-line flags
 	pathFlag := flag.String("path", ".", "Source path to scan")
 	serverFlag := flag.String("server", "", "Inkog server URL")
+	localFlag := flag.Bool("local", false, "Run offline using local inkog-worker binary")
 	outputFlag := flag.String("output", "text", "Output format: text, json, html, sarif")
 	policyFlag := flag.String("policy", contract.PolicyBalanced, "Security policy: low-noise, balanced, comprehensive")
 	severityFlag := flag.String("severity", "low", "Minimum severity level")
@@ -246,16 +251,29 @@ func main() {
 	// Determine quiet mode (disable spinners/colors for JSON output or CI environments)
 	isQuietMode := *outputFlag == "json" || os.Getenv("CI") != ""
 
-	// Create scanner with quiet mode
-	scanner := cli.NewHybridScanner(*pathFlag, serverURL, *verboseFlag, isQuietMode)
+	var result *cli.ScanResult
+	var err error
 
-	if *verboseFlag && !isQuietMode {
-		fmt.Println("🔐 Inkog Hybrid Privacy Scanner")
-		fmt.Printf("📍 Scanning: %s\n", *pathFlag)
+	if *localFlag {
+		// Local mode: use inkog-worker binary directly (no server)
+		if *verboseFlag && !isQuietMode {
+			fmt.Println("🔐 Inkog Local Scanner (offline mode)")
+			fmt.Printf("📍 Scanning: %s\n", *pathFlag)
+		}
+
+		scanner := cli.NewLocalScanner(*pathFlag, *verboseFlag, isQuietMode)
+		result, err = scanner.Scan()
+	} else {
+		// Hybrid mode: local secrets + server analysis
+		if *verboseFlag && !isQuietMode {
+			fmt.Println("🔐 Inkog Hybrid Privacy Scanner")
+			fmt.Printf("📍 Scanning: %s\n", *pathFlag)
+		}
+
+		scanner := cli.NewHybridScanner(*pathFlag, serverURL, *verboseFlag, isQuietMode)
+		result, err = scanner.Scan()
 	}
 
-	// Run scan
-	result, err := scanner.Scan()
 	if err != nil {
 		log.Fatalf("❌ Scan failed: %v\n", err)
 	}
@@ -331,6 +349,9 @@ func outputText(result *cli.ScanResult, minSeverity, policy string, verbose bool
 
 	// Display tiered summary
 	displayTieredSummary(filtered, policy)
+
+	// Display governance status (if available)
+	displayGovernanceStatus(result)
 
 	return nil
 }
@@ -408,6 +429,87 @@ func displayTieredSummary(findings []contract.Finding, policy string) {
 	if counts[contract.TierHardening] > 0 {
 		fmt.Printf("  %s● %d Hardening Recommendations%s (best practices)\n",
 			colorTierHardening, counts[contract.TierHardening], colorReset)
+	}
+
+	// Show finding type breakdown (vulnerability vs governance)
+	typeCounts := contract.CountByFindingType(findings)
+	if typeCounts[contract.TypeGovernanceViolation] > 0 {
+		fmt.Printf("  %s● %d Governance Gaps%s (compliance issues)\n",
+			colorGovernance, typeCounts[contract.TypeGovernanceViolation], colorReset)
+	}
+}
+
+// displayGovernanceStatus shows governance control status
+func displayGovernanceStatus(result *cli.ScanResult) {
+	// Only show if we have governance data
+	if result.TopologyMap == nil && result.GovernanceScore == 0 {
+		return
+	}
+
+	fmt.Println()
+	fmt.Println("╔══════════════════════════════════════════════════════╗")
+	fmt.Println("║           🛡️  Governance Status                      ║")
+	fmt.Println("╚══════════════════════════════════════════════════════╝")
+	fmt.Println()
+
+	// Show governance controls if we have topology data
+	if result.TopologyMap != nil {
+		gov := result.TopologyMap.Governance
+		fmt.Println("Control Status:")
+
+		// Human Oversight
+		if gov.HasHumanOversight {
+			fmt.Printf("  %s✓%s Human Oversight: %sPRESENT%s\n", colorCheck, colorReset, colorCheck, colorReset)
+		} else {
+			fmt.Printf("  %s✗%s Human Oversight: %sMISSING%s (Article 14.1)\n", colorCross, colorReset, colorCross, colorReset)
+		}
+
+		// Authorization
+		if gov.HasAuthChecks {
+			fmt.Printf("  %s✓%s Authorization:   %sPRESENT%s\n", colorCheck, colorReset, colorCheck, colorReset)
+		} else {
+			fmt.Printf("  %s✗%s Authorization:   %sMISSING%s\n", colorCross, colorReset, colorCross, colorReset)
+		}
+
+		// Rate Limiting
+		if gov.HasRateLimiting {
+			fmt.Printf("  %s✓%s Rate Limiting:   %sPRESENT%s\n", colorCheck, colorReset, colorCheck, colorReset)
+		} else {
+			fmt.Printf("  %s✗%s Rate Limiting:   %sMISSING%s (OWASP LLM04)\n", colorCross, colorReset, colorCross, colorReset)
+		}
+
+		// Audit Logging
+		if gov.HasAuditLogging {
+			fmt.Printf("  %s✓%s Audit Logging:   %sPRESENT%s\n", colorCheck, colorReset, colorCheck, colorReset)
+		} else {
+			fmt.Printf("  %s✗%s Audit Logging:   %sMISSING%s\n", colorCross, colorReset, colorCross, colorReset)
+		}
+		fmt.Println()
+	}
+
+	// Show governance score
+	if result.GovernanceScore > 0 {
+		scoreColor := colorCross
+		if result.GovernanceScore >= 80 {
+			scoreColor = colorCheck
+		} else if result.GovernanceScore >= 50 {
+			scoreColor = colorMedium
+		}
+		fmt.Printf("Governance Score: %s%d/100%s\n", scoreColor, result.GovernanceScore, colorReset)
+	}
+
+	// Show readiness status
+	if result.EUAIActReadiness != "" {
+		statusColor := colorCross
+		statusIcon := "✗"
+		if result.EUAIActReadiness == "READY" {
+			statusColor = colorCheck
+			statusIcon = "✓"
+		} else if result.EUAIActReadiness == "PARTIAL" {
+			statusColor = colorMedium
+			statusIcon = "~"
+		}
+		fmt.Printf("Compliance Status: %s%s %s%s\n", statusColor, statusIcon, result.EUAIActReadiness, colorReset)
 	}
 }
 
