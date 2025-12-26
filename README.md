@@ -62,6 +62,17 @@ Inkog Verify parses your Code (Python) and Configs (n8n) to find structural flaw
 - **Recursive Tool Calls** — Tools calling themselves without depth limits
 - **Missing Rate Limits** — Unthrottled API calls that can spiral out of control
 
+### AGENTS.md Governance Mismatch
+Declare agent capabilities in an `AGENTS.md` file. Inkog cross-validates declarations against actual code:
+
+```markdown
+## Limitations
+- Read-only database access (no writes)
+- No external API calls
+```
+
+If your code contains `db.write()` or `http.request()`, Inkog flags a **Governance Mismatch**—proving your agent exceeds its stated boundaries. This is unique to Inkog.
+
 ### Hybrid Privacy
 Source code is redacted **locally** before transmission. Only the sanitized logic graph is analyzed remotely. Secrets, API keys, and credentials never leave your machine.
 
@@ -82,7 +93,7 @@ Pluggable YAML-based rule engine. Add custom detection patterns for your organiz
 ## Supported Frameworks
 
 **Code-First**
-LangChain | LangGraph | CrewAI | Phidata | Smolagents
+LangChain | LangGraph | CrewAI | PydanticAI | Phidata | Smolagents
 
 **SDKs**
 OpenAI Agents | LlamaIndex | Semantic Kernel | Haystack | DSPy
@@ -91,7 +102,7 @@ OpenAI Agents | LlamaIndex | Semantic Kernel | Haystack | DSPy
 n8n | Flowise | Langflow | Dify
 
 **Enterprise**
-Microsoft AutoGen (AG2) | Vellum
+Microsoft Copilot Studio | Salesforce Agentforce | Microsoft AutoGen (AG2) | Vellum
 
 ---
 
@@ -127,6 +138,14 @@ inkog -path . --policy balanced
 # Comprehensive: All findings including recommendations (Tier 1-3)
 # Best for: Security audits, initial assessments
 inkog -path . --policy comprehensive
+
+# Governance: Focus on human oversight and authorization controls
+# Best for: Article 14 compliance, audit trails
+inkog -path . --policy governance
+
+# EU AI Act: Full compliance mapping to Articles 12-15
+# Best for: Regulatory compliance, AGENTS.md verification
+inkog -path . --policy eu-ai-act
 ```
 
 ---
