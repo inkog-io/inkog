@@ -20,7 +20,7 @@ import (
 // 1. Environment variable INKOG_SERVER_URL (highest priority)
 // 2. Command-line flag -server
 // 3. Build-time via -ldflags "-X main.ServerURL=..."
-var ServerURL = "https://inkog-api.fly.dev"
+var ServerURL = "https://api.inkog.io"
 
 func init() {
 	// Allow override via environment variable (highest priority)
@@ -71,7 +71,7 @@ Usage:
 
 Options:
   -path string        Source path to scan (default: .)
-  -server string      Inkog server URL (default: https://inkog-api.fly.dev)
+  -server string      Inkog server URL (default: https://api.inkog.io)
   -local              Run offline using local inkog-worker binary (no server)
   -output string      Output format: json, text, html, sarif (default: text)
   -policy string      Security policy (see below, default: balanced)
