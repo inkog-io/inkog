@@ -232,7 +232,7 @@ go run cmd/server/main.go
 
 ### Test Against Fly.io Production
 ```bash
-# Uses default Fly.io endpoint (https://inkog-api.fly.dev)
+# Uses default endpoint (https://api.inkog.io)
 ./inkog -path ../demo_agent
 ```
 
@@ -333,7 +333,7 @@ inkog -path /path/to/code
 
 # Full hybrid scan with Fly.io API (default)
 inkog -path /path/to/code
-# Uses: https://inkog-api.fly.dev
+# Uses: https://api.inkog.io
 
 # EU AI Act compliance scan
 inkog -path /path/to/code --policy eu-ai-act
@@ -342,7 +342,7 @@ inkog -path /path/to/code --policy eu-ai-act
 inkog -path /path/to/code --policy governance
 
 # Full hybrid scan (explicit)
-inkog -path /path/to/code -server https://inkog-api.fly.dev
+inkog -path /path/to/code -server https://api.inkog.io
 
 # Self-hosted server
 inkog -path /path/to/code -server https://inkog.company.internal

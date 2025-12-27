@@ -28,7 +28,7 @@ inkog ./agent.py
 ```
 
 #### `-server string`
-**Default:** `https://inkog-api.fly.dev`
+**Default:** `https://api.inkog.io`
 
 Inkog server URL for remote analysis. Set to a custom endpoint for self-hosted deployments.
 
