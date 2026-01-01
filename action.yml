@@ -86,62 +86,29 @@ outputs:
 runs:
   using: 'composite'
   steps:
-    - name: Determine OS and Architecture
-      id: platform
-      shell: bash
-      run: |
-        OS=$(uname -s | tr '[:upper:]' '[:lower:]')
-        ARCH=$(uname -m)
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+        cache: false
 
-        # Map architecture names
-        case $ARCH in
-          x86_64) ARCH="amd64" ;;
-          aarch64|arm64) ARCH="arm64" ;;
-          *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
-        esac
-
-        echo "os=$OS" >> $GITHUB_OUTPUT
-        echo "arch=$ARCH" >> $GITHUB_OUTPUT
-        echo "Detected platform: $OS/$ARCH"
-
-    - name: Download Inkog CLI
+    - name: Build Inkog CLI
       id: download
       shell: bash
-      env:
-        INKOG_VERSION: ${{ inputs.version }}
       run: |
-        OS="${{ steps.platform.outputs.os }}"
-        ARCH="${{ steps.platform.outputs.arch }}"
+        echo "Building Inkog CLI from source..."
 
-        # Determine version
-        if [ "$INKOG_VERSION" = "latest" ]; then
-          VERSION=$(curl -s https://api.github.com/repos/inkog-io/inkog/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
-          if [ -z "$VERSION" ]; then
-            VERSION="v1.0.0"
-          fi
-        else
-          VERSION="$INKOG_VERSION"
-        fi
-
-        # Download binary
-        DOWNLOAD_URL="https://github.com/inkog-io/inkog/releases/download/${VERSION}/inkog-${OS}-${ARCH}"
-        echo "Downloading Inkog CLI ${VERSION} for ${OS}/${ARCH}..."
-        echo "URL: $DOWNLOAD_URL"
-
-        curl -L -o inkog "$DOWNLOAD_URL" || {
-          echo "::warning::Failed to download from releases, using built-in binary"
-          # Fallback: build from source if in the repo
-          if [ -f "go.mod" ]; then
-            go build -o inkog ./cmd/cli/main.go
-          else
-            echo "::error::Could not download or build Inkog CLI"
-            exit 1
-          fi
-        }
-
+        # Build from the action's source code
+        cd "${{ github.action_path }}"
+        go build -o inkog ./cmd/cli/main.go
         chmod +x inkog
-        echo "inkog_path=$(pwd)/inkog" >> $GITHUB_OUTPUT
-        ./inkog -version || true
+
+        # Move to workspace
+        mv inkog "${{ github.workspace }}/inkog"
+        cd "${{ github.workspace }}"
+
+        echo "inkog_path=${{ github.workspace }}/inkog" >> $GITHUB_OUTPUT
+        ./inkog -version || echo "Inkog CLI built successfully"
 
     - name: Run Security Scan
       id: scan
