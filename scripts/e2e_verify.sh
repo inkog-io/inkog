@@ -117,7 +117,7 @@ N8NEOF
 
 # Step 2: Build CLI
 echo -e "${YELLOW}[2/5]${NC} Building CLI..."
-go build -o "$CLI_BINARY" cmd/cli/main.go
+go build -o "$CLI_BINARY" cmd/inkog/main.go
 echo -e "${GREEN}      Built: $CLI_BINARY${NC}"
 
 # Step 3: Run scan

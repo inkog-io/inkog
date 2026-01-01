@@ -133,20 +133,20 @@ git clone https://github.com/inkog-io/inkog.git
 cd inkog
 
 # Run the CLI locally
-go run cmd/cli/main.go -path ./examples
+go run cmd/inkog/main.go -path ./examples
 
 # Run tests
 go test ./...
 
 # Build the binary
-go build -o inkog cmd/cli/main.go
+go build -o inkog cmd/inkog/main.go
 ```
 
 ### Project Structure
 
 ```
 inkog/
-├── cmd/cli/          # CLI entry point
+├── cmd/inkog/          # CLI entry point
 ├── pkg/
 │   ├── cli/          # Scanner, output formatting
 │   ├── contract/     # API types

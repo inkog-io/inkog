@@ -429,10 +429,10 @@ fi
 
 ```bash
 # Build the CLI
-go build -o inkog ./cmd/cli
+go build -o inkog ./cmd/inkog
 
 # Pure Go build (no CGO)
-CGO_ENABLED=0 go build -o inkog ./cmd/cli
+CGO_ENABLED=0 go build -o inkog ./cmd/inkog
 ```
 
 ### Testing

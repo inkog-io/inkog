@@ -69,7 +69,7 @@ User's Machine          Inkog Cloud (Fly.io)
 ```
 inkog/ (inkog-io/inkog on GitHub)
 ├── cmd/
-│   └── cli/              Main CLI entry point (cmd/cli/main.go)
+│   └── cli/              Main CLI entry point (cmd/inkog/main.go)
 ├── pkg/
 │   ├── cli/              Core CLI logic
 │   │   ├── scanner.go    Hybrid scanning (local + remote)
@@ -211,13 +211,13 @@ Validate every Finding before displaying. If a field is missing, don't crash—s
 ### Test Locally (No Server)
 ```bash
 # Detects secrets locally, no server upload
-go run cmd/cli/main.go -path ../demo_agent
+go run cmd/inkog/main.go -path ../demo_agent
 ```
 
 ### Build Binary
 ```bash
 # Pure Go, no CGO
-CGO_ENABLED=0 go build -o inkog cmd/cli/main.go
+CGO_ENABLED=0 go build -o inkog cmd/inkog/main.go
 ```
 
 ### Test Against Local Server

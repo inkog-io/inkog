@@ -21,7 +21,7 @@ curl -fsSL https://inkog.io/install.sh | sh
 Or via Go:
 
 ```bash
-go install github.com/inkog-io/inkog/cmd/cli@latest
+go install github.com/inkog-io/inkog/cmd/inkog@latest
 ```
 
 ## Quick Start

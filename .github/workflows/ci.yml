@@ -18,7 +18,7 @@ jobs:
           go-version: '1.21'
 
       - name: Build
-        run: CGO_ENABLED=0 go build -o inkog ./cmd/cli
+        run: CGO_ENABLED=0 go build -o inkog ./cmd/inkog
 
       - name: Test
         run: go test -v ./...

@@ -100,7 +100,7 @@ runs:
 
         # Build from the action's source code
         cd "${{ github.action_path }}"
-        go build -o inkog ./cmd/cli/main.go
+        go build -o inkog ./cmd/inkog/main.go
         chmod +x inkog
 
         # Move to workspace
