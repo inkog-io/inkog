@@ -1,0 +1,32 @@
+linters:
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+  disable:
+    - unused      # Many helper functions for future use
+    - ineffassign # Minor issues
+
+linters-settings:
+  errcheck:
+    exclude-functions:
+      - (io.Writer).Write
+      - (*bytes.Buffer).Write
+      - (*mime/multipart.Writer).WriteField
+      - fmt.Fprintf
+      - fmt.Printf
+
+issues:
+  exclude-rules:
+    # Test files can be more relaxed
+    - path: _test\.go
+      linters:
+        - errcheck
+    # Deprecated functions are fine for now
+    - linters:
+        - staticcheck
+      text: "SA1019"
+    # Printf with dynamic format is intentional
+    - linters:
+        - staticcheck
+      text: "SA1006"
