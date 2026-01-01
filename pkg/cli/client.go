@@ -232,11 +232,43 @@ func (c *InkogClient) calculateBackoff(attempt int) time.Duration {
 
 // formatUserError creates a user-friendly error message
 func (c *InkogClient) formatUserError(serverErr *ServerError) error {
+	// Special handling for authentication errors - show signup CTA
+	if serverErr.Code == "UNAUTHORIZED" || serverErr.Code == "api_key_required" || serverErr.Code == "invalid_api_key" || serverErr.Code == "auth_required" {
+		return fmt.Errorf(APIKeyRequiredMessage())
+	}
+
 	msg := fmt.Sprintf("Server Error: %s (Code: %s)", c.humanizeErrorCode(serverErr.Code), serverErr.Code)
 	if serverErr.RequestID != "" {
 		msg += fmt.Sprintf("\n   Request ID: %s (Please quote this in support)", serverErr.RequestID)
 	}
 	return fmt.Errorf(msg)
+}
+
+// APIKeyRequiredMessage returns a formatted signup CTA message
+func APIKeyRequiredMessage() string {
+	return `
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  API Key Required
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Get your free API key in 30 seconds:
+
+  1. Sign up at https://app.inkog.io
+  2. Go to Settings → API Keys
+  3. Create a new key
+
+  Then run:
+    export INKOG_API_KEY=sk_live_your_key_here
+    inkog .
+
+  Or for GitHub Actions:
+    - name: Inkog Security Scan
+      uses: inkog-io/inkog@v1
+      with:
+        api-key: ${{ secrets.INKOG_API_KEY }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`
 }
 
 // humanizeErrorCode converts error codes to human-readable messages

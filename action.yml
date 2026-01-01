@@ -47,8 +47,8 @@ inputs:
     required: false
     default: 'true'
   api-key:
-    description: 'Inkog API key (optional, get one at https://app.inkog.io)'
-    required: false
+    description: 'Inkog API key (required - get yours at https://app.inkog.io)'
+    required: true
   version:
     description: 'Inkog CLI version to use (default: latest)'
     required: false
@@ -86,6 +86,35 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    - name: Validate API Key
+      shell: bash
+      run: |
+        if [ -z "${{ inputs.api-key }}" ]; then
+          echo "::error::API key required. Get yours at https://app.inkog.io"
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "  API Key Required"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          echo "  Get your free API key in 30 seconds:"
+          echo ""
+          echo "  1. Sign up at https://app.inkog.io"
+          echo "  2. Go to Settings → API Keys"
+          echo "  3. Create a new key"
+          echo "  4. Add as repository secret: INKOG_API_KEY"
+          echo ""
+          echo "  Then update your workflow:"
+          echo ""
+          echo "    - name: Inkog Security Scan"
+          echo "      uses: inkog-io/inkog@v1"
+          echo "      with:"
+          echo "        api-key: \${{ secrets.INKOG_API_KEY }}"
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          exit 1
+        fi
+        echo "API key configured ✓"
+
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
