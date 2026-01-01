@@ -11,7 +11,3 @@ require (
 	golang.org/x/sys v0.14.0 // indirect
 	golang.org/x/term v0.1.0 // indirect
 )
-
-replace github.com/inkog-io/inkog/pkg/patterns/secrets => ./pkg/patterns/secrets
-
-replace github.com/inkog-io/inkog/pkg/contract => ./pkg/contract
