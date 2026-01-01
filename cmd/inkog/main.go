@@ -72,7 +72,6 @@ Usage:
 Options:
   -path string        Source path to scan (default: .)
   -server string      Inkog server URL (default: https://api.inkog.io)
-  -local              Run offline using local inkog-worker binary (no server)
   -output string      Output format: json, text, html, sarif (default: text)
   -policy string      Security policy (see below, default: balanced)
   -severity string    Minimum severity level: critical, high, medium, low (default: low)
@@ -208,7 +207,6 @@ func main() {
 	// Command-line flags
 	pathFlag := flag.String("path", ".", "Source path to scan")
 	serverFlag := flag.String("server", "", "Inkog server URL")
-	localFlag := flag.Bool("local", false, "Run offline using local inkog-worker binary")
 	outputFlag := flag.String("output", "text", "Output format: text, json, html, sarif")
 	policyFlag := flag.String("policy", contract.PolicyBalanced, "Security policy: low-noise, balanced, comprehensive")
 	severityFlag := flag.String("severity", "low", "Minimum severity level")
@@ -269,25 +267,14 @@ func main() {
 	var result *cli.ScanResult
 	var err error
 
-	if *localFlag {
-		// Local mode: use inkog-worker binary directly (no server)
-		if *verboseFlag && !isQuietMode {
-			fmt.Println("🔐 Inkog Local Scanner (offline mode)")
-			fmt.Printf("📍 Scanning: %s\n", *pathFlag)
-		}
-
-		scanner := cli.NewLocalScanner(*pathFlag, *verboseFlag, isQuietMode)
-		result, err = scanner.Scan()
-	} else {
-		// Hybrid mode: local secrets + server analysis
-		if *verboseFlag && !isQuietMode {
-			fmt.Println("🔐 Inkog Hybrid Privacy Scanner")
-			fmt.Printf("📍 Scanning: %s\n", *pathFlag)
-		}
-
-		scanner := cli.NewHybridScanner(*pathFlag, serverURL, *verboseFlag, isQuietMode)
-		result, err = scanner.Scan()
+	// Hybrid mode: local secrets detection + server analysis
+	if *verboseFlag && !isQuietMode {
+		fmt.Println("🔐 Inkog Security Scanner")
+		fmt.Printf("📍 Scanning: %s\n", *pathFlag)
 	}
+
+	scanner := cli.NewHybridScanner(*pathFlag, serverURL, *verboseFlag, isQuietMode)
+	result, err = scanner.Scan()
 
 	if err != nil {
 		log.Fatalf("❌ Scan failed: %v\n", err)
