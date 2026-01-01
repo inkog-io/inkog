@@ -1,0 +1,67 @@
+# Example: Inkog EU AI Act Compliance Workflow
+#
+# This workflow demonstrates compliance-focused scanning:
+# - Uses the 'eu-ai-act' policy for Article 12, 14, 15 controls
+# - Uploads compliance report as artifact
+# - Posts detailed compliance status to PR
+
+name: AI Agent Compliance Check
+
+on:
+  pull_request:
+    branches: [main, master]
+  # Run weekly compliance audit on main
+  schedule:
+    - cron: '0 9 * * 1'  # Every Monday at 9am UTC
+
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: write
+
+jobs:
+  compliance-scan:
+    runs-on: ubuntu-latest
+    name: EU AI Act Compliance
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Compliance Scan
+        id: compliance
+        uses: inkog-io/inkog@v1
+        with:
+          path: '.'
+          policy: 'eu-ai-act'
+          output: 'json'
+          fail-on-findings: 'false'  # Report but don't block for compliance
+          comment-on-pr: 'true'
+          sarif-upload: 'true'
+
+      # Save compliance report as artifact
+      - name: Generate Compliance Report
+        run: |
+          mkdir -p reports
+          # Run scan with text output for human-readable report
+          ./inkog -path . -policy eu-ai-act -output text > reports/compliance-report.txt 2>&1 || true
+          # JSON version for programmatic access
+          ./inkog -path . -policy eu-ai-act -output json > reports/compliance-report.json 2>&1 || true
+
+      - name: Upload Compliance Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: eu-ai-act-compliance-report
+          path: reports/
+          retention-days: 90
+
+      - name: Check Governance Controls
+        if: always()
+        run: |
+          echo "=== EU AI Act Compliance Summary ==="
+          echo "Article 14 (Human Oversight): Check scan results for 'missing_human_oversight' findings"
+          echo "Article 12 (Recordkeeping): Check for 'missing_audit_trail' findings"
+          echo "Article 15 (Accuracy): Check for 'output_validation_failures' findings"
+          echo ""
+          echo "Deadline: August 2, 2026"
+          echo "Learn more: https://docs.inkog.io/compliance/eu-ai-act"

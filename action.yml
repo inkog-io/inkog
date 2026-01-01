@@ -1,0 +1,374 @@
+name: 'Inkog - AI Agent Security Scanner'
+description: 'Scan AI agents for security vulnerabilities, compliance gaps, and governance issues. Ship safe agents.'
+author: 'Inkog'
+branding:
+  icon: 'shield'
+  color: 'purple'
+
+inputs:
+  path:
+    description: 'Path to scan (file or directory)'
+    required: false
+    default: '.'
+  policy:
+    description: 'Security policy: low-noise, balanced, comprehensive, governance, eu-ai-act'
+    required: false
+    default: 'balanced'
+  severity:
+    description: 'Minimum severity level: critical, high, medium, low'
+    required: false
+    default: 'low'
+  output:
+    description: 'Output format: text, json, sarif'
+    required: false
+    default: 'text'
+  diff:
+    description: 'Show only new findings since baseline (for PR checks)'
+    required: false
+    default: 'false'
+  baseline:
+    description: 'Path to baseline file for diff mode'
+    required: false
+    default: '.inkog-baseline.json'
+  update-baseline:
+    description: 'Update baseline file after scan (use on main branch)'
+    required: false
+    default: 'false'
+  fail-on-findings:
+    description: 'Fail the workflow if findings are detected'
+    required: false
+    default: 'true'
+  comment-on-pr:
+    description: 'Post scan results as a PR comment'
+    required: false
+    default: 'true'
+  sarif-upload:
+    description: 'Upload SARIF results to GitHub Security tab'
+    required: false
+    default: 'true'
+  api-key:
+    description: 'Inkog API key (optional, get one at https://app.inkog.io)'
+    required: false
+  version:
+    description: 'Inkog CLI version to use (default: latest)'
+    required: false
+    default: 'latest'
+
+outputs:
+  findings-count:
+    description: 'Total number of security findings'
+    value: ${{ steps.scan.outputs.findings_count }}
+  critical-count:
+    description: 'Number of critical severity findings'
+    value: ${{ steps.scan.outputs.critical_count }}
+  high-count:
+    description: 'Number of high severity findings'
+    value: ${{ steps.scan.outputs.high_count }}
+  medium-count:
+    description: 'Number of medium severity findings'
+    value: ${{ steps.scan.outputs.medium_count }}
+  low-count:
+    description: 'Number of low severity findings'
+    value: ${{ steps.scan.outputs.low_count }}
+  risk-score:
+    description: 'Overall risk score (0-100)'
+    value: ${{ steps.scan.outputs.risk_score }}
+  sarif-file:
+    description: 'Path to SARIF output file'
+    value: ${{ steps.scan.outputs.sarif_file }}
+  is-regression:
+    description: 'True if new critical/high findings detected (diff mode)'
+    value: ${{ steps.scan.outputs.is_regression }}
+  exit-code:
+    description: 'Scan exit code (0=clean, 1=findings, 2=error)'
+    value: ${{ steps.scan.outputs.exit_code }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Determine OS and Architecture
+      id: platform
+      shell: bash
+      run: |
+        OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+        ARCH=$(uname -m)
+
+        # Map architecture names
+        case $ARCH in
+          x86_64) ARCH="amd64" ;;
+          aarch64|arm64) ARCH="arm64" ;;
+          *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
+        esac
+
+        echo "os=$OS" >> $GITHUB_OUTPUT
+        echo "arch=$ARCH" >> $GITHUB_OUTPUT
+        echo "Detected platform: $OS/$ARCH"
+
+    - name: Download Inkog CLI
+      id: download
+      shell: bash
+      env:
+        INKOG_VERSION: ${{ inputs.version }}
+      run: |
+        OS="${{ steps.platform.outputs.os }}"
+        ARCH="${{ steps.platform.outputs.arch }}"
+
+        # Determine version
+        if [ "$INKOG_VERSION" = "latest" ]; then
+          VERSION=$(curl -s https://api.github.com/repos/inkog-io/inkog/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
+          if [ -z "$VERSION" ]; then
+            VERSION="v1.0.0"
+          fi
+        else
+          VERSION="$INKOG_VERSION"
+        fi
+
+        # Download binary
+        DOWNLOAD_URL="https://github.com/inkog-io/inkog/releases/download/${VERSION}/inkog-${OS}-${ARCH}"
+        echo "Downloading Inkog CLI ${VERSION} for ${OS}/${ARCH}..."
+        echo "URL: $DOWNLOAD_URL"
+
+        curl -L -o inkog "$DOWNLOAD_URL" || {
+          echo "::warning::Failed to download from releases, using built-in binary"
+          # Fallback: build from source if in the repo
+          if [ -f "go.mod" ]; then
+            go build -o inkog ./cmd/cli/main.go
+          else
+            echo "::error::Could not download or build Inkog CLI"
+            exit 1
+          fi
+        }
+
+        chmod +x inkog
+        echo "inkog_path=$(pwd)/inkog" >> $GITHUB_OUTPUT
+        ./inkog -version || true
+
+    - name: Run Security Scan
+      id: scan
+      shell: bash
+      env:
+        INKOG_API_KEY: ${{ inputs.api-key }}
+        INKOG_PATH: ${{ inputs.path }}
+        INKOG_POLICY: ${{ inputs.policy }}
+        INKOG_SEVERITY: ${{ inputs.severity }}
+        INKOG_OUTPUT: ${{ inputs.output }}
+        INKOG_DIFF: ${{ inputs.diff }}
+        INKOG_BASELINE: ${{ inputs.baseline }}
+        INKOG_UPDATE_BASELINE: ${{ inputs.update-baseline }}
+      run: |
+        set +e  # Don't exit on error, we handle exit codes
+
+        # Build command
+        CMD="${{ steps.download.outputs.inkog_path }}"
+        ARGS="-path $INKOG_PATH -policy $INKOG_POLICY -severity $INKOG_SEVERITY"
+
+        # Add diff mode flags
+        if [ "$INKOG_DIFF" = "true" ]; then
+          ARGS="$ARGS -diff -baseline $INKOG_BASELINE"
+        fi
+
+        if [ "$INKOG_UPDATE_BASELINE" = "true" ]; then
+          ARGS="$ARGS -update-baseline"
+        fi
+
+        # Run JSON scan first to capture structured output
+        echo "Running: $CMD $ARGS -output json"
+        JSON_OUTPUT=$($CMD $ARGS -output json 2>&1)
+        EXIT_CODE=$?
+
+        # Parse JSON output for metrics
+        if echo "$JSON_OUTPUT" | jq -e . > /dev/null 2>&1; then
+          FINDINGS_COUNT=$(echo "$JSON_OUTPUT" | jq -r '.findings_count // .summary.total_new // 0')
+          CRITICAL_COUNT=$(echo "$JSON_OUTPUT" | jq -r '.critical_count // .summary.new_by_severity.CRITICAL // 0')
+          HIGH_COUNT=$(echo "$JSON_OUTPUT" | jq -r '.high_count // .summary.new_by_severity.HIGH // 0')
+          MEDIUM_COUNT=$(echo "$JSON_OUTPUT" | jq -r '.medium_count // .summary.new_by_severity.MEDIUM // 0')
+          LOW_COUNT=$(echo "$JSON_OUTPUT" | jq -r '.low_count // .summary.new_by_severity.LOW // 0')
+          RISK_SCORE=$(echo "$JSON_OUTPUT" | jq -r '.risk_score // 0')
+          IS_REGRESSION=$(echo "$JSON_OUTPUT" | jq -r '.summary.is_regression // false')
+        else
+          FINDINGS_COUNT=0
+          CRITICAL_COUNT=0
+          HIGH_COUNT=0
+          MEDIUM_COUNT=0
+          LOW_COUNT=0
+          RISK_SCORE=0
+          IS_REGRESSION=false
+        fi
+
+        # Set outputs
+        echo "findings_count=$FINDINGS_COUNT" >> $GITHUB_OUTPUT
+        echo "critical_count=$CRITICAL_COUNT" >> $GITHUB_OUTPUT
+        echo "high_count=$HIGH_COUNT" >> $GITHUB_OUTPUT
+        echo "medium_count=$MEDIUM_COUNT" >> $GITHUB_OUTPUT
+        echo "low_count=$LOW_COUNT" >> $GITHUB_OUTPUT
+        echo "risk_score=$RISK_SCORE" >> $GITHUB_OUTPUT
+        echo "is_regression=$IS_REGRESSION" >> $GITHUB_OUTPUT
+        echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
+
+        # Generate SARIF for upload
+        SARIF_FILE="${{ runner.temp }}/inkog-results.sarif"
+        $CMD $ARGS -output sarif > "$SARIF_FILE" 2>/dev/null || true
+        echo "sarif_file=$SARIF_FILE" >> $GITHUB_OUTPUT
+
+        # Store JSON output for PR comment
+        echo "$JSON_OUTPUT" > "${{ runner.temp }}/inkog-results.json"
+
+        # Run text output for display
+        echo ""
+        echo "============================================"
+        echo "        INKOG SECURITY SCAN RESULTS        "
+        echo "============================================"
+        $CMD $ARGS -output text
+
+        # Return original exit code
+        exit $EXIT_CODE
+
+    - name: Upload SARIF to GitHub Security
+      if: inputs.sarif-upload == 'true' && always()
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ steps.scan.outputs.sarif_file }}
+        category: 'inkog-ai-agent-security'
+      continue-on-error: true
+
+    - name: Post PR Comment
+      if: inputs.comment-on-pr == 'true' && github.event_name == 'pull_request' && always()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+
+          // Read scan results
+          let results;
+          try {
+            const jsonPath = '${{ runner.temp }}/inkog-results.json';
+            const content = fs.readFileSync(jsonPath, 'utf8');
+            results = JSON.parse(content);
+          } catch (e) {
+            console.log('Could not parse scan results:', e.message);
+            return;
+          }
+
+          // Build comment body
+          const findingsCount = ${{ steps.scan.outputs.findings_count }};
+          const criticalCount = ${{ steps.scan.outputs.critical_count }};
+          const highCount = ${{ steps.scan.outputs.high_count }};
+          const mediumCount = ${{ steps.scan.outputs.medium_count }};
+          const lowCount = ${{ steps.scan.outputs.low_count }};
+          const riskScore = ${{ steps.scan.outputs.risk_score }};
+          const isRegression = ${{ steps.scan.outputs.is_regression }};
+          const isDiff = '${{ inputs.diff }}' === 'true';
+
+          let statusEmoji = '✅';
+          let statusText = 'No security issues detected';
+
+          if (criticalCount > 0) {
+            statusEmoji = '🚨';
+            statusText = `${criticalCount} critical issue${criticalCount > 1 ? 's' : ''} found`;
+          } else if (highCount > 0) {
+            statusEmoji = '⚠️';
+            statusText = `${highCount} high severity issue${highCount > 1 ? 's' : ''} found`;
+          } else if (findingsCount > 0) {
+            statusEmoji = '📋';
+            statusText = `${findingsCount} finding${findingsCount > 1 ? 's' : ''} to review`;
+          }
+
+          let body = `## ${statusEmoji} Inkog Security Scan\n\n`;
+
+          if (isDiff && isRegression) {
+            body += `> **⚠️ Security Regression Detected** - New critical/high severity findings introduced in this PR.\n\n`;
+          } else if (isDiff && findingsCount === 0) {
+            body += `> **✅ No New Issues** - This PR does not introduce new security findings.\n\n`;
+          }
+
+          body += `| Metric | Value |\n`;
+          body += `|--------|-------|\n`;
+          body += `| **Status** | ${statusText} |\n`;
+          body += `| **Risk Score** | ${riskScore}/100 |\n`;
+          body += `| 🔴 Critical | ${criticalCount} |\n`;
+          body += `| 🟠 High | ${highCount} |\n`;
+          body += `| 🟡 Medium | ${mediumCount} |\n`;
+          body += `| 🟢 Low | ${lowCount} |\n`;
+
+          // Add top findings if any
+          const findings = results.findings || results.new_findings || [];
+          if (findings.length > 0) {
+            body += `\n### Top Findings\n\n`;
+            const topFindings = findings.slice(0, 5);
+            for (const f of topFindings) {
+              const severity = f.severity || 'UNKNOWN';
+              const severityEmoji = severity === 'CRITICAL' ? '🔴' : severity === 'HIGH' ? '🟠' : severity === 'MEDIUM' ? '🟡' : '🟢';
+              body += `- ${severityEmoji} **${f.message || f.pattern_id}** - \`${f.file}:${f.line}\`\n`;
+            }
+            if (findings.length > 5) {
+              body += `\n_...and ${findings.length - 5} more findings_\n`;
+            }
+          }
+
+          body += `\n---\n`;
+          body += `<sub>Scanned with [Inkog](https://inkog.io) | Policy: \`${{ inputs.policy }}\` | [View in Security Tab](${context.payload.repository.html_url}/security/code-scanning)</sub>`;
+
+          // Find existing comment
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+          });
+
+          const botComment = comments.find(c =>
+            c.user.type === 'Bot' &&
+            c.body.includes('Inkog Security Scan')
+          );
+
+          if (botComment) {
+            // Update existing comment
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: botComment.id,
+              body: body
+            });
+          } else {
+            // Create new comment
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
+          }
+      continue-on-error: true
+
+    - name: Check Failure Condition
+      if: inputs.fail-on-findings == 'true'
+      shell: bash
+      run: |
+        EXIT_CODE=${{ steps.scan.outputs.exit_code }}
+        IS_DIFF="${{ inputs.diff }}"
+        IS_REGRESSION="${{ steps.scan.outputs.is_regression }}"
+
+        # In diff mode, only fail on regression (new critical/high)
+        if [ "$IS_DIFF" = "true" ]; then
+          if [ "$IS_REGRESSION" = "true" ]; then
+            echo "::error::Security regression detected: New critical or high severity findings introduced"
+            exit 1
+          else
+            echo "No security regression detected"
+            exit 0
+          fi
+        fi
+
+        # In normal mode, fail on any findings (based on scan exit code)
+        if [ "$EXIT_CODE" = "1" ]; then
+          CRITICAL=${{ steps.scan.outputs.critical_count }}
+          HIGH=${{ steps.scan.outputs.high_count }}
+          if [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 0 ]; then
+            echo "::error::Security findings detected: $CRITICAL critical, $HIGH high severity"
+            exit 1
+          fi
+        elif [ "$EXIT_CODE" = "2" ]; then
+          echo "::error::Scan failed with error"
+          exit 1
+        fi
+
+        echo "Scan completed successfully"

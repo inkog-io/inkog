@@ -1,0 +1,95 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.so.*
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Dependency directories
+vendor/
+
+# Go workspace file
+go.work
+
+# IDE and editor configurations
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-workspace
+*.sublime-project
+
+# Build outputs
+/bin/
+/dist/
+/inkog
+/cli
+/inkog-cli
+inkog-worker
+
+# Generated reports (never commit scan results)
+*.html
+results.json
+*.sarif
+
+# Local development
+.env
+.env.local
+.env.*.local
+config.local.yml
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+/tmp/
+
+# OS-specific
+Thumbs.db
+.DS_Store
+*.pem
+*.key
+
+# Test coverage
+*.coverprofile
+coverage.txt
+coverage.html
+
+# IDE generated files
+.code-workspace
+.classpath
+.factorypath
+.gradle
+.jdtScope
+.project
+.pydevproject
+.settings/
+.springBeans
+.sts4-cache/
+bin/
+.vscode-test/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.Python
+env/
+venv/
+
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
