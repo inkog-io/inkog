@@ -20,17 +20,17 @@ all: build
 ## Build commands
 
 build: ## Build the CLI binary
-	CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(BINARY) ./cmd/cli
+	CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(BINARY) ./cmd/inkog
 
 build-prod: ## Build production binary (stripped)
-	CGO_ENABLED=0 go build -ldflags "$(LDFLAGS_PROD)" -o $(BINARY) ./cmd/cli
+	CGO_ENABLED=0 go build -ldflags "$(LDFLAGS_PROD)" -o $(BINARY) ./cmd/inkog
 
 build-all: ## Build for all platforms
-	GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "$(LDFLAGS_PROD)" -o $(BINARY)-darwin-amd64 ./cmd/cli
-	GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "$(LDFLAGS_PROD)" -o $(BINARY)-darwin-arm64 ./cmd/cli
-	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "$(LDFLAGS_PROD)" -o $(BINARY)-linux-amd64 ./cmd/cli
-	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "$(LDFLAGS_PROD)" -o $(BINARY)-linux-arm64 ./cmd/cli
-	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "$(LDFLAGS_PROD)" -o $(BINARY)-windows-amd64.exe ./cmd/cli
+	GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "$(LDFLAGS_PROD)" -o $(BINARY)-darwin-amd64 ./cmd/inkog
+	GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "$(LDFLAGS_PROD)" -o $(BINARY)-darwin-arm64 ./cmd/inkog
+	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "$(LDFLAGS_PROD)" -o $(BINARY)-linux-amd64 ./cmd/inkog
+	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "$(LDFLAGS_PROD)" -o $(BINARY)-linux-arm64 ./cmd/inkog
+	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "$(LDFLAGS_PROD)" -o $(BINARY)-windows-amd64.exe ./cmd/inkog
 
 ## Development
 

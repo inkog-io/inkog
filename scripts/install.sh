@@ -21,7 +21,7 @@ esac
 # For now, use go install (until we have binary releases)
 if command -v go >/dev/null 2>&1; then
   echo "Found Go, installing via go install..."
-  go install github.com/${REPO}/cmd/cli@latest
+  go install github.com/${REPO}/cmd/inkog@latest
 
   # Verify installation
   if command -v inkog >/dev/null 2>&1; then
