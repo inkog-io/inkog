@@ -41,6 +41,9 @@ Comprehensive detection for:
 
 [View vulnerability patterns →](https://docs.inkog.io/vulnerabilities)
 
+<img width="2446" height="1316" alt="image" src="https://github.com/user-attachments/assets/fb7c1429-6392-447c-9c1e-612d09c0b58e" />
+
+
 ## Supported Frameworks
 
 LangChain · LangGraph · CrewAI · AutoGen · LlamaIndex · n8n · Flowise · Langflow · Dify · Copilot Studio · Agentforce · Google ADK
