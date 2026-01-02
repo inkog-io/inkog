@@ -43,17 +43,20 @@ inkog -server http://localhost:8080 .
 #### `-output string`
 **Default:** `text`
 
-Output format. Supported values: `json`, `text`, `html`
+Output format. Supported values: `json`, `text`, `html`, `sarif`
 
 ```bash
 # Human-readable text output (default)
-inkog -path . -output text
+inkog -output text .
 
 # Structured JSON (ideal for CI/CD and tooling)
-inkog -path . -output json > results.json
+inkog -output json . > results.json
 
 # Interactive HTML report
-inkog -path . -output html > report.html
+inkog -output html . > report.html
+
+# SARIF format (for GitHub Security tab)
+inkog -output sarif . > results.sarif
 ```
 
 #### `-policy string`
@@ -133,14 +136,17 @@ inkog .
 ```
 
 ### `INKOG_API_KEY`
-**Priority:** Optional (reserved for future use)
+**Priority:** Required
 
-API key for authentication with enterprise servers.
+API key for authentication. All scans require a valid API key.
 
 ```bash
-export INKOG_API_KEY=your-api-key-here
+# Get your free API key at https://app.inkog.io
+export INKOG_API_KEY=sk_live_your_key_here
 inkog .
 ```
+
+If no API key is set, you'll see a friendly error message with signup instructions.
 
 ## Usage Examples
 
@@ -178,13 +184,22 @@ fi
 **GitHub Actions example:**
 ```yaml
 - name: Run Inkog Security Scan
-  run: inkog -path . -output json > results.json
+  env:
+    INKOG_API_KEY: ${{ secrets.INKOG_API_KEY }}
+  run: inkog -output json . > results.json
 
 - name: Upload Report
-  uses: actions/upload-artifact@v2
+  uses: actions/upload-artifact@v4
   with:
     name: inkog-report
     path: results.json
+```
+
+Or use the official GitHub Action for a simpler setup:
+```yaml
+- uses: inkog-io/inkog@v1
+  with:
+    api-key: ${{ secrets.INKOG_API_KEY }}
 ```
 
 ### Custom Server
