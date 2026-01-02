@@ -27,6 +27,10 @@ go install github.com/inkog-io/inkog/cmd/inkog@latest
 ## Quick Start
 
 ```bash
+# Get your API key at https://app.inkog.io
+export INKOG_API_KEY=sk_live_your_key_here
+
+# Scan your agent code
 inkog .
 ```
 
@@ -53,27 +57,28 @@ LangChain · LangGraph · CrewAI · AutoGen · LlamaIndex · n8n · Flowise · L
 ```yaml
 - uses: inkog-io/inkog@v1
   with:
+    api-key: ${{ secrets.INKOG_API_KEY }}
     sarif-upload: true
 ```
 
 [Full GitHub Action docs →](https://docs.inkog.io/ci-cd/github-action)
 
-## Extensibility
+## Policies
 
-Write custom detection rules in YAML:
+Filter findings by security policy:
 
-```yaml
-id: my-new-vulnerability
-severity: HIGH
-frameworks: [langchain, crewai]
-pattern:
-  node_type: LLMCall
-  condition: missing_rate_limit
-message: "Agent makes unbounded LLM calls without rate limiting"
-cwe: CWE-770
+```bash
+# Low noise - only proven vulnerabilities
+inkog . --policy low-noise
+
+# Governance-focused (Article 14 controls)
+inkog . --policy governance
+
+# EU AI Act compliance
+inkog . --policy eu-ai-act
 ```
 
-[Write your own rule →](CONTRIBUTING.md#quickstart-write-a-security-rule)
+[Learn more about policies →](https://docs.inkog.io/cli/policies)
 
 ## Roadmap
 

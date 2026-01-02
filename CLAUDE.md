@@ -290,13 +290,14 @@ func DetectNewPattern(content []byte) []Finding {
 
 ## Error Handling
 
-Graceful degradation:
+Graceful degradation where possible:
 
-- Server unreachable? → Show local secrets only (offline mode)
 - Parse error on file? → Log warning, continue scanning
-- Invalid response from server? → Show partial results
+- Invalid response from server? → Show error with details
 - Redaction failed? → Block upload (privacy first!)
-- Fly.io API timeout? → Fallback to local findings
+- Server unreachable or API error? → Fail with clear error message and signup CTA
+
+**Note:** The CLI requires server connectivity for full analysis. Local-only mode is not supported.
 
 All errors logged to stderr. Findings always logged to stdout (JSON or text).
 
@@ -321,7 +322,7 @@ The **core vulnerability detection logic** lives in the private `inkog-backend` 
 2. ✅ Does it export secrets? → REJECT (privacy first)
 3. ✅ Is output "screenshot ready"? → ACCEPT
 4. ✅ Does it align with `pkg/contract`? → ACCEPT
-5. ✅ Can it work offline? → IDEAL (fallback mode)
+5. ✅ Does it maintain Pure Go (no CGO)? → ACCEPT
 
 **For backend features:** These belong in `inkog-backend` (private repo). File a GitHub issue in this repo if you have a feature request.
 
@@ -370,12 +371,12 @@ inkog -version
 ✅ **STABLE** - Ready for production use.
 
 Core features:
-- ✅ Local secret detection
-- ✅ Hybrid scanning (local + Fly.io API)
-- ✅ Multiple output formats (text, JSON, HTML)
+- ✅ Local secret detection (pre-redaction)
+- ✅ Hybrid scanning (local secrets + remote analysis)
+- ✅ Multiple output formats (text, JSON, HTML, SARIF)
 - ✅ Structured logging (stderr)
-- ✅ Offline fallback mode
-- ✅ Auth middleware (ready for monetization)
+- ✅ API key authentication (required for all scans)
+- ✅ Clear error messages with signup CTA
 - ✅ Docker distribution
 
 ## Future Roadmap
