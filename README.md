@@ -50,7 +50,9 @@ Comprehensive detection for:
 
 ## Supported Frameworks
 
-LangChain · LangGraph · CrewAI · AutoGen · LlamaIndex · n8n · Flowise · Langflow · Dify · Copilot Studio · Agentforce · Google ADK
+**Code-First:** LangChain · LangGraph · CrewAI · AutoGen · OpenAI Agents · Semantic Kernel · LlamaIndex · Haystack · DSPy · Phidata · Smolagents · PydanticAI · Google ADK
+
+**No-Code:** n8n · Flowise · Langflow · Dify · Microsoft Copilot Studio · Salesforce Agentforce
 
 ## CI/CD Integration
 
@@ -80,17 +82,37 @@ inkog . --policy eu-ai-act
 
 [Learn more about policies →](https://docs.inkog.io/cli/policies)
 
+## MCP Server (Claude, ChatGPT, Cursor)
+
+Native integration for AI coding assistants. Scan agent code directly from Claude, ChatGPT, or Cursor.
+
+```bash
+npx -y @inkog-io/mcp
+```
+
+**7 Security Tools:**
+- `inkog-scan` - Vulnerability scanning
+- `inkog-explain` - Remediation guidance
+- `inkog-governance` - AGENTS.md verification
+- `inkog-compliance` - EU AI Act, NIST, OWASP reports
+- `inkog-mlbom` - ML Bill of Materials
+- `inkog-mcp-audit` - MCP server security audit
+- `inkog-a2a-audit` - Multi-agent communication audit
+
+[MCP Integration Docs →](https://docs.inkog.io/integrations/mcp)
+
 ## Roadmap
 
 | Feature | Status |
 |---------|--------|
-| MCP Security Scanning | Planned |
-| PydanticAI Support | Planned |
 | IDE Extensions (VS Code) | Planned |
+| Python SDK | Planned |
+| JavaScript SDK | Planned |
 
 ## Documentation
 
 - [CLI Reference](https://docs.inkog.io/cli/commands)
+- [MCP Server Integration](https://docs.inkog.io/integrations/mcp)
 - [Vulnerability Patterns](https://docs.inkog.io/vulnerabilities)
 - [GitHub Action](https://docs.inkog.io/ci-cd/github-action)
 - [AGENTS.md Governance](https://docs.inkog.io/governance/agents-md)
