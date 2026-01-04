@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/inkog-io/inkog/pkg/cli"
 	"github.com/inkog-io/inkog/pkg/contract"
+	"golang.org/x/term"
 )
 
 // ServerURL is the default server endpoint. Can be overridden via:
@@ -264,6 +266,25 @@ func main() {
 	// Determine quiet mode (disable spinners/colors for JSON output or CI environments)
 	isQuietMode := *outputFlag == "json" || os.Getenv("CI") != ""
 
+	// Check for API key and provide interactive first-run experience
+	apiKey := os.Getenv("INKOG_API_KEY")
+	if apiKey == "" && !isQuietMode {
+		// Check if we're in an interactive terminal
+		if isInteractiveTerminal() {
+			apiKey = promptForAPIKey()
+			if apiKey != "" {
+				// Set for this process so the scanner can use it
+				os.Setenv("INKOG_API_KEY", apiKey)
+			}
+		}
+	}
+
+	// If still no API key in interactive mode, show friendly message and exit
+	if apiKey == "" && !isQuietMode {
+		showWelcomeMessage()
+		os.Exit(1)
+	}
+
 	var result *cli.ScanResult
 	var err error
 
@@ -278,6 +299,11 @@ func main() {
 
 	if err != nil {
 		log.Fatalf("❌ Scan failed: %v\n", err)
+	}
+
+	// Show framework detection feedback (not in quiet mode)
+	if !isQuietMode {
+		showFrameworkFeedback(result)
 	}
 
 	// Handle baseline update
@@ -347,8 +373,9 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Clean scan - show celebratory success message
 	if !isQuietMode {
-		fmt.Println("\n✅ Scan complete: No security issues found")
+		showSuccessMessage(result, *policyFlag)
 	}
 	os.Exit(0)
 }
@@ -3052,4 +3079,110 @@ func outputDiffSARIF(diff *contract.DiffResult) error {
 	}
 
 	return outputSARIF(sarifResult)
+}
+
+// =============================================================================
+// FIRST-RUN EXPERIENCE: Interactive API Key Prompt
+// =============================================================================
+
+// isInteractiveTerminal checks if stdin is a terminal (not piped)
+func isInteractiveTerminal() bool {
+	return term.IsTerminal(int(os.Stdin.Fd()))
+}
+
+// showWelcomeMessage displays a friendly welcome message for first-time users
+func showWelcomeMessage() {
+	fmt.Println()
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Println("  Welcome to Inkog - Ship Safe Agents")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Println()
+	fmt.Println("  To scan your AI agents, you'll need a free API key:")
+	fmt.Println()
+	fmt.Println("  1. Sign up at https://app.inkog.io (30 seconds)")
+	fmt.Println("  2. Go to Settings → API Keys")
+	fmt.Println("  3. Create a new key")
+	fmt.Println()
+	fmt.Println("  Then set your key:")
+	fmt.Println()
+	fmt.Println("    export INKOG_API_KEY=sk_live_your_key_here")
+	fmt.Println("    inkog .")
+	fmt.Println()
+	fmt.Println("  Or add to ~/.bashrc or ~/.zshrc for persistence.")
+	fmt.Println()
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Println()
+}
+
+// promptForAPIKey displays an interactive prompt for the API key
+func promptForAPIKey() string {
+	fmt.Println()
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Println("  Inkog - Ship Safe Agents")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Println()
+	fmt.Println("  No API key found.")
+	fmt.Println("  Get your free key: https://app.inkog.io")
+	fmt.Println()
+	fmt.Print("  Enter API key (or press Enter to skip): ")
+
+	reader := bufio.NewReader(os.Stdin)
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		return ""
+	}
+
+	apiKey := strings.TrimSpace(input)
+	if apiKey == "" {
+		return ""
+	}
+
+	// Basic validation
+	if !strings.HasPrefix(apiKey, "sk_") {
+		fmt.Println()
+		fmt.Println("  ⚠️  That doesn't look like an Inkog API key.")
+		fmt.Println("     Keys start with 'sk_live_' or 'sk_test_'.")
+		fmt.Println()
+		return ""
+	}
+
+	fmt.Println()
+	fmt.Println("  ✓ API key accepted!")
+	fmt.Println("  Tip: Set INKOG_API_KEY in your shell to avoid this prompt.")
+	fmt.Println()
+
+	return apiKey
+}
+
+// showSuccessMessage displays a celebratory message for clean scans
+func showSuccessMessage(result *cli.ScanResult, policy string) {
+	fmt.Println()
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Printf("%s✅ All Clear! No security issues found%s\n", colorCheck, colorReset)
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Println()
+
+	// Show governance status if available
+	if result.GovernanceScore > 0 {
+		fmt.Printf("  Governance Score: %d/100\n", result.GovernanceScore)
+	}
+	if result.EUAIActReadiness != "" {
+		fmt.Printf("  EU AI Act Status: %s\n", result.EUAIActReadiness)
+	}
+
+	// Show policy used
+	fmt.Printf("  Policy: %s\n", policy)
+	fmt.Println()
+
+	// Friendly sign-off
+	fmt.Println("  Your AI agents are looking good! 🚀")
+	fmt.Println()
+}
+
+// showFrameworkFeedback displays detected frameworks at the start of output
+func showFrameworkFeedback(result *cli.ScanResult) {
+	framework := detectFramework(result.AllFindings)
+	if framework != "" {
+		fmt.Printf("🔍 Detected: %s framework\n", framework)
+	}
 }
