@@ -299,6 +299,15 @@ func (hs *HybridScanner) redactSecretsFromFiles(redactedFiles map[string]bool) (
 	filesAdded := 0
 	totalRedactions := 0
 
+	// Determine the base path for computing relative paths
+	// When scanning a single file, use its parent directory as base
+	basePath := hs.SourcePath
+	sourceInfo, err := os.Stat(hs.SourcePath)
+	if err == nil && !sourceInfo.IsDir() {
+		// Source is a single file - use parent directory as base
+		basePath = filepath.Dir(hs.SourcePath)
+	}
+
 	// For each file, redact secrets and store
 	for filePath := range redactedFiles {
 		content, err := os.ReadFile(filePath)
@@ -312,7 +321,12 @@ func (hs *HybridScanner) redactSecretsFromFiles(redactedFiles map[string]bool) (
 		totalRedactions += len(secretFindings)
 
 		// Create field name for multipart form using URL encoding
-		relPath, _ := filepath.Rel(hs.SourcePath, filePath)
+		// Use the base path (parent directory for single files) to get proper relative path
+		relPath, err := filepath.Rel(basePath, filePath)
+		if err != nil || relPath == "." {
+			// Fallback: use just the filename if relative path fails or is "."
+			relPath = filepath.Base(filePath)
+		}
 		encodedPath := url.PathEscape(relPath)
 		fieldName := "file_" + encodedPath
 
