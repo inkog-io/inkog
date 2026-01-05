@@ -1,9 +1,10 @@
 <p align="center">
-  <img src="logo.png" width="120" alt="Inkog">
+  <img src="logo.png" width="280" alt="Inkog">
 </p>
 
-<h1 align="center">Inkog</h1>
-<p align="center">Static security scanner for AI agents</p>
+<p align="center">
+  <strong>Static security scanner for AI agents</strong>
+</p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License"></a>
