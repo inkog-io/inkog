@@ -96,10 +96,12 @@ npx -y @inkog-io/mcp
 - `inkog-governance` - AGENTS.md verification
 - `inkog-compliance` - EU AI Act, NIST, OWASP reports
 - `inkog-mlbom` - ML Bill of Materials
-- `inkog-mcp-audit` - MCP server security audit
-- `inkog-a2a-audit` - Multi-agent communication audit
+- `inkog-mcp-audit` - **First tool to audit MCP servers** for security before installation
+- `inkog-a2a-audit` - **Multi-agent security** - Detect infinite delegation loops, privilege escalation in CrewAI, Swarm, LangGraph
 
-[MCP Integration Docs →](https://docs.inkog.io/integrations/mcp)
+> **Multi-Agent Security (A2A):** For topology analysis and agent delegation auditing, use the MCP server integration. Ask your AI assistant: *"Audit my CrewAI agents for security issues"* or *"How many agents are in my LangGraph workflow?"*
+
+[MCP Integration Docs →](https://docs.inkog.io/integrations/mcp) | [A2A Security Tutorial →](https://docs.inkog.io/tutorials/securing-multi-agent)
 
 ## Roadmap
 
