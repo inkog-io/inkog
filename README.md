@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo.png" width="280" alt="Inkog">
+  <img src="logo.png" width="340" alt="Inkog">
 </p>
 
 <p align="center">
