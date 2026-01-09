@@ -24,13 +24,11 @@
 curl -fsSL https://inkog.io/install.sh | sh
 ```
 
-**Other methods:**
+Or via Go:
 
-| Method | Command |
-|--------|---------|
-| **Homebrew** | `brew tap inkog-io/inkog && brew install inkog` |
-| **Go** | `go install github.com/inkog-io/inkog/cmd/inkog@latest` |
-| **Binary** | [Download from Releases](https://github.com/inkog-io/inkog/releases) |
+```bash
+go install github.com/inkog-io/inkog/cmd/inkog@latest
+```
 
 ## Quick Start
 
