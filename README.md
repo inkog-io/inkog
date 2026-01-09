@@ -3,7 +3,8 @@
 </p>
 
 <p align="center">
-  <strong>Static security scanner for AI agents</strong>
+  <strong>Static security scanner for AI agents</strong><br>
+  <em>Catch infinite loops, token bombing, and prompt injection before deployment</em>
 </p>
 
 <p align="center">
@@ -11,9 +12,13 @@
   <a href="https://goreportcard.com/report/github.com/inkog-io/inkog"><img src="https://goreportcard.com/badge/github.com/inkog-io/inkog" alt="Go Report Card"></a>
 </p>
 
+<p align="center">
+  <img src="demo.gif" width="800" alt="Inkog Demo">
+</p>
+
 ---
 
-## Install
+## Install (30 seconds)
 
 ```bash
 curl -fsSL https://inkog.io/install.sh | sh
