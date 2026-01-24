@@ -195,6 +195,17 @@ func hasGoodCharacterMix(s string) bool {
 func isLikelyNonSecret(value string) bool {
 	lower := strings.ToLower(value)
 
+	// URLs are not secrets (even if they have high entropy from query params)
+	if strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://") {
+		return true
+	}
+	// Also catch URLs without protocol that look like domains
+	if strings.Contains(lower, ".com/") || strings.Contains(lower, ".io/") ||
+		strings.Contains(lower, ".org/") || strings.Contains(lower, ".net/") ||
+		strings.Contains(lower, ".dev/") || strings.Contains(lower, "api.") {
+		return true
+	}
+
 	// Common non-secret patterns
 	nonSecretPatterns := []string{
 		// UUIDs (legitimate identifiers)
