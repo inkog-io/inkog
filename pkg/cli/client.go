@@ -44,7 +44,7 @@ func NewInkogClient(baseURL string, quiet bool, progress *ProgressReporter) *Ink
 		BaseURL: baseURL,
 		APIKey:  os.Getenv("INKOG_API_KEY"), // Read API key from environment
 		HTTPClient: &http.Client{
-			Timeout: 60 * time.Second, // 60s timeout for large uploads
+			Timeout: 210 * time.Second, // 3.5 minutes: matches worker timeout + network buffer
 		},
 		MaxRetries:  3,
 		BaseBackoff: 2 * time.Second,
