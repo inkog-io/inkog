@@ -231,11 +231,12 @@ type MergedResult struct {
 
 // ScanRequest is sent by CLI to the server
 type ScanRequest struct {
-	ContractVersion string   `json:"contract_version"`
-	CLIVersion      string   `json:"cli_version"`
-	SecretsVersion  string   `json:"secrets_version"`
-	LocalSecrets    int      `json:"local_secrets_found"` // Count of secrets detected
-	RedactedFileCount int    `json:"redacted_file_count"` // How many files were redacted
+	ContractVersion   string `json:"contract_version"`
+	CLIVersion        string `json:"cli_version"`
+	SecretsVersion    string `json:"secrets_version"`
+	LocalSecrets      int    `json:"local_secrets_found"`   // Count of secrets detected
+	RedactedFileCount int    `json:"redacted_file_count"`   // How many files were redacted
+	ScanPolicy        string `json:"scan_policy,omitempty"` // Policy: low-noise, balanced, comprehensive, governance, eu-ai-act
 	// File content is sent as multipart form (binary zip)
 }
 
@@ -403,19 +404,11 @@ func FilterByPolicy(findings []Finding, policy string) []Finding {
 		// All tiers
 		return findings
 	case PolicyGovernance:
-		// Governance-focused: findings with governance category or Article 14 compliance
+		// Governance-focused: only findings with governance category or governance compliance mapping
 		var filtered []Finding
 		for _, f := range findings {
-			tier := GetEffectiveTier(f)
-			// Include governance findings (Tier 1 + 2) and those with governance category
-			if tier == TierVulnerability || tier == TierRiskPattern {
-				// Include all high-tier findings, but prioritize governance
-				if f.GovernanceCategory != "" || hasGovernanceCompliance(f) {
-					filtered = append(filtered, f)
-				} else {
-					// Also include non-governance findings for context
-					filtered = append(filtered, f)
-				}
+			if f.GovernanceCategory != "" || hasGovernanceCompliance(f) || isGovernancePattern(f.PatternID) {
+				filtered = append(filtered, f)
 			}
 		}
 		return filtered

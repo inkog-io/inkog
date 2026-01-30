@@ -294,7 +294,7 @@ func main() {
 		fmt.Printf("📍 Scanning: %s\n", *pathFlag)
 	}
 
-	scanner := cli.NewHybridScanner(*pathFlag, serverURL, *verboseFlag, isQuietMode)
+	scanner := cli.NewHybridScanner(*pathFlag, serverURL, *policyFlag, *verboseFlag, isQuietMode)
 	result, err = scanner.Scan()
 
 	if err != nil {
