@@ -200,6 +200,22 @@ func (hs *HybridScanner) Scan() (*ScanResult, error) {
 	// STEP 4: Merge results
 	allFindings := hs.mergeFindings(localSecrets, serverResult.Findings)
 
+	// STEP 5: Update severity counts to include local secrets
+	// Server counts only reflect server-side findings; local secrets must be added
+	for _, f := range localSecrets {
+		switch f.Severity {
+		case "CRITICAL":
+			serverResult.CriticalCount++
+		case "HIGH":
+			serverResult.HighCount++
+		case "MEDIUM":
+			serverResult.MediumCount++
+		case "LOW":
+			serverResult.LowCount++
+		}
+		serverResult.FindingsCount++
+	}
+
 	return &ScanResult{
 		LocalSecrets:     localSecrets,
 		ServerFindings:   serverResult.Findings,
@@ -259,12 +275,20 @@ func (hs *HybridScanner) scanLocalSecretsAndCollectFiles() ([]contract.Finding, 
 					owasp = pattern.OWASP
 				}
 
+				// Use relative path to match server findings format
+				findingPath := filePath
+				if rel, err := filepath.Rel(hs.SourcePath, filePath); err == nil && rel != "." {
+					findingPath = rel
+				} else {
+					findingPath = filepath.Base(filePath)
+				}
+
 				finding := contract.Finding{
 					ID:         fmt.Sprintf("secret_%s_%d_%d", sf.Type, sf.Line, sf.Column),
 					PatternID:  "hardcoded_credentials_" + sf.Type,
 					Pattern:    "Hardcoded Credentials - " + strings.ToTitle(sf.Type),
 					Source:     contract.SourceLocalCLI,
-					File:       filePath,
+					File:       findingPath,
 					Line:       sf.Line,
 					Column:     sf.Column,
 					Severity:   sf.Severity,

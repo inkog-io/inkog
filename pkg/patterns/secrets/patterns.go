@@ -154,7 +154,9 @@ var PatternDefinitions = map[string]*SecretPattern{
 		Name:        "nonce_seed",
 		Description: "High Entropy String (Potential Secret/Nonce)",
 		Patterns: []*regexp.Regexp{
-			regexp.MustCompile(`(?i)(secret|token|nonce|seed|key|passwd)\s*[:=]\s*["\']([a-zA-Z0-9\-_!@#$%^&*()+=]{32,})["\']`),
+			// Narrowed keywords: removed "key" and "token" to avoid overlap with API key patterns.
+			// "secret" is kept because "secret = '<value>'" is a strong signal for hardcoded secrets.
+			regexp.MustCompile(`(?i)\b(secret|nonce|seed|salt|pepper|passwd|passphrase|private_key|signing_key|encryption_key)\s*[:=]\s*["\']([a-zA-Z0-9\-_!@#$%^&*()+=]{32,})["\']`),
 		},
 		Severity:   "MEDIUM",
 		Confidence: 0.70,
