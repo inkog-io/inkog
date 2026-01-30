@@ -118,6 +118,7 @@ var BlockedFiles = map[string]bool{
 type HybridScanner struct {
 	ServerURL  string
 	SourcePath string
+	Policy     string // Security policy to send to server
 	Verbose    bool
 	Quiet      bool // Disable spinners/colors (for JSON output or CI)
 	progress   *ProgressReporter
@@ -142,7 +143,7 @@ type ScanResult struct {
 
 // NewHybridScanner creates a new scanner instance
 // Set quiet=true to disable spinners and colors (for JSON output or CI environments)
-func NewHybridScanner(sourcePath, serverURL string, verbose, quiet bool) *HybridScanner {
+func NewHybridScanner(sourcePath, serverURL, policy string, verbose, quiet bool) *HybridScanner {
 	if serverURL == "" {
 		serverURL = DefaultServerURL
 	}
@@ -153,6 +154,7 @@ func NewHybridScanner(sourcePath, serverURL string, verbose, quiet bool) *Hybrid
 	return &HybridScanner{
 		ServerURL:  serverURL,
 		SourcePath: sourcePath,
+		Policy:     policy,
 		Verbose:    verbose,
 		Quiet:      quiet,
 		progress:   progress,
@@ -360,6 +362,7 @@ func (hs *HybridScanner) sendToServer(redactedFiles map[string][]byte, localSecr
 		SecretsVersion:    secrets.SecretsVersionHash(),
 		LocalSecrets:      localSecretCount,
 		RedactedFileCount: redactedFileCount,
+		ScanPolicy:        hs.Policy,
 	}
 
 	// Create multipart request
