@@ -137,7 +137,7 @@ func TestShouldScanFile_BlockedFiles(t *testing.T) {
 }
 
 func TestNewHybridScanner_Defaults(t *testing.T) {
-	scanner := NewHybridScanner("/path/to/code", "", false, false)
+	scanner := NewHybridScanner("/path/to/code", "", "balanced", false, false)
 
 	if scanner.ServerURL != DefaultServerURL {
 		t.Errorf("expected default server URL %s, got %s", DefaultServerURL, scanner.ServerURL)
@@ -160,7 +160,7 @@ func TestNewHybridScanner_Defaults(t *testing.T) {
 }
 
 func TestNewHybridScanner_CustomServerURL(t *testing.T) {
-	scanner := NewHybridScanner("/path", "http://custom.server.io", true, true)
+	scanner := NewHybridScanner("/path", "http://custom.server.io", "comprehensive", true, true)
 
 	if scanner.ServerURL != "http://custom.server.io" {
 		t.Errorf("expected custom server URL, got %s", scanner.ServerURL)
@@ -206,7 +206,7 @@ def multiply(a, b):
 		t.Fatal(err)
 	}
 
-	scanner := NewHybridScanner(tmpDir, "http://test", false, true)
+	scanner := NewHybridScanner(tmpDir, "http://test", "balanced", false, true)
 	findings, files, err := scanner.scanLocalSecretsAndCollectFiles()
 
 	if err != nil {
@@ -273,7 +273,7 @@ func TestBlockedFiles(t *testing.T) {
 }
 
 func TestMergeFindings(t *testing.T) {
-	scanner := NewHybridScanner("/test", "http://test", false, true)
+	scanner := NewHybridScanner("/test", "http://test", "balanced", false, true)
 
 	// Verify the scanner is properly initialized
 	if scanner == nil {

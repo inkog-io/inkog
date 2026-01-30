@@ -18,7 +18,7 @@ func TestFilterByPolicy(t *testing.T) {
 		{PolicyLowNoise, 2},       // Only vulnerabilities (2 items)
 		{PolicyBalanced, 4},       // Vulnerabilities + risk patterns
 		{PolicyComprehensive, 5},  // All
-		{PolicyGovernance, 4},     // Governance policy (Tier 1 + 2)
+		{PolicyGovernance, 0},     // No governance markers in test data
 		{PolicyEUAIAct, 4},        // EU AI Act policy (Tier 1 + 2 + governance)
 		{"", 4},                   // Default to balanced
 		{"unknown", 4},            // Unknown defaults to balanced
@@ -64,11 +64,11 @@ func TestFilterByPolicy_WithGovernanceData(t *testing.T) {
 		},
 	}
 
-	// Governance policy should include Tier 1 + 2 findings
+	// Governance policy should only include findings with governance markers
 	t.Run("governance_policy", func(t *testing.T) {
 		filtered := FilterByPolicy(findings, PolicyGovernance)
-		if len(filtered) != 3 {
-			t.Errorf("PolicyGovernance returned %d findings, want 3", len(filtered))
+		if len(filtered) != 2 {
+			t.Errorf("PolicyGovernance returned %d findings, want 2 (only governance-marked)", len(filtered))
 		}
 	})
 
