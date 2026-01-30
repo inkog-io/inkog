@@ -268,7 +268,7 @@ func TestNewInkogClient_Defaults(t *testing.T) {
 	if client.Quiet != false {
 		t.Error("expected Quiet false")
 	}
-	if client.HTTPClient.Timeout != 60*time.Second {
-		t.Errorf("expected HTTPClient.Timeout 60s, got %v", client.HTTPClient.Timeout)
+	if client.HTTPClient.Timeout != 210*time.Second {
+		t.Errorf("expected HTTPClient.Timeout 210s, got %v", client.HTTPClient.Timeout)
 	}
 }
