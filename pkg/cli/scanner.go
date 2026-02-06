@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/inkog-io/inkog/pkg/contract"
@@ -119,11 +120,17 @@ type HybridScanner struct {
 	ServerURL  string
 	SourcePath string
 	Policy     string // Security policy to send to server
+	MaxFiles   int    // Maximum files to upload (0 = default 500)
 	Verbose    bool
 	Quiet      bool // Disable spinners/colors (for JSON output or CI)
 	progress   *ProgressReporter
 	client     *InkogClient
 }
+
+const (
+	DefaultMaxFiles   = 500
+	MaxUploadSizeMB   = 95 // Client-side limit (server is 100MB, leave margin)
+)
 
 // ScanResult contains both local and remote findings
 type ScanResult struct {
@@ -155,6 +162,7 @@ func NewHybridScanner(sourcePath, serverURL, policy string, verbose, quiet bool)
 		ServerURL:  serverURL,
 		SourcePath: sourcePath,
 		Policy:     policy,
+		MaxFiles:   DefaultMaxFiles,
 		Verbose:    verbose,
 		Quiet:      quiet,
 		progress:   progress,
@@ -236,9 +244,28 @@ func (hs *HybridScanner) scanLocalSecretsAndCollectFiles() ([]contract.Finding, 
 	var localFindings []contract.Finding
 	allFiles := make(map[string]bool)
 
+	// Load .gitignore patterns from root directory
+	gitignore := LoadGitIgnore(hs.SourcePath)
+
+	totalFound := 0
+
 	err := filepath.Walk(hs.SourcePath, func(filePath string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
+		}
+
+		// Get relative path for gitignore matching
+		relPath, relErr := filepath.Rel(hs.SourcePath, filePath)
+		if relErr != nil {
+			relPath = filePath
+		}
+
+		// Skip .gitignore'd paths (check directories too for early pruning)
+		if relPath != "." && gitignore.Match(relPath, info.IsDir()) {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 
 		// Skip directories and non-source files
@@ -246,12 +273,14 @@ func (hs *HybridScanner) scanLocalSecretsAndCollectFiles() ([]contract.Finding, 
 			return nil
 		}
 
+		totalFound++
+
 		content, err := os.ReadFile(filePath)
 		if err != nil {
 			return nil // Skip unreadable files
 		}
 
-		// Collect ALL files for server analysis
+		// Collect files for server analysis
 		allFiles[filePath] = true
 
 		// Detect secrets locally
@@ -259,10 +288,10 @@ func (hs *HybridScanner) scanLocalSecretsAndCollectFiles() ([]contract.Finding, 
 		if len(secretFindings) > 0 {
 			// Print privacy proof messages (verbose mode)
 			if hs.Verbose && !hs.Quiet {
-				relPath, _ := filepath.Rel(hs.SourcePath, filePath)
+				displayPath, _ := filepath.Rel(hs.SourcePath, filePath)
 				for _, sf := range secretFindings {
 					fmt.Fprintf(os.Stderr, "[PRIVACY] ✓ Redacted potential %s in %s at line %d\n",
-						sf.Type, relPath, sf.Line)
+						sf.Type, displayPath, sf.Line)
 				}
 			}
 
@@ -310,7 +339,70 @@ func (hs *HybridScanner) scanLocalSecretsAndCollectFiles() ([]contract.Finding, 
 		return nil
 	})
 
+	// Enforce file count limit
+	maxFiles := hs.MaxFiles
+	if maxFiles <= 0 {
+		maxFiles = DefaultMaxFiles
+	}
+	if len(allFiles) > maxFiles {
+		if !hs.Quiet {
+			fmt.Fprintf(os.Stderr, "\n⚠️  Found %d files (max: %d). Scanning first %d files.\n", len(allFiles), maxFiles, maxFiles)
+			fmt.Fprintf(os.Stderr, "   Use -max-files to increase the limit, or add patterns to .gitignore to exclude files.\n\n")
+		}
+		allFiles = truncateFileMap(allFiles, maxFiles, hs.SourcePath)
+	}
+
 	return localFindings, allFiles, err
+}
+
+// truncateFileMap reduces the file map to maxFiles entries, prioritizing agent-related files.
+func truncateFileMap(files map[string]bool, maxFiles int, basePath string) map[string]bool {
+	type scoredFile struct {
+		path  string
+		score int // higher = more relevant
+	}
+
+	// Score files by relevance to agent security scanning
+	agentKeywords := []string{"agent", "tool", "chain", "crew", "flow", "graph", "prompt", "llm", "model", "openai", "anthropic"}
+	scored := make([]scoredFile, 0, len(files))
+	for path := range files {
+		relPath := path
+		if rel, err := filepath.Rel(basePath, path); err == nil {
+			relPath = rel
+		}
+		lower := strings.ToLower(relPath)
+		score := 0
+		for _, kw := range agentKeywords {
+			if strings.Contains(lower, kw) {
+				score += 10
+			}
+		}
+		// Prioritize Python and TypeScript (most common agent code)
+		ext := filepath.Ext(path)
+		if ext == ".py" || ext == ".ts" || ext == ".js" {
+			score += 5
+		}
+		// Deprioritize config/data files
+		if ext == ".json" || ext == ".yaml" || ext == ".yml" {
+			score -= 2
+		}
+		scored = append(scored, scoredFile{path: path, score: score})
+	}
+
+	// Sort by score descending, then alphabetically for stability
+	sort.Slice(scored, func(i, j int) bool {
+		if scored[i].score != scored[j].score {
+			return scored[i].score > scored[j].score
+		}
+		return scored[i].path < scored[j].path
+	})
+
+	// Take top maxFiles
+	result := make(map[string]bool, maxFiles)
+	for i := 0; i < maxFiles && i < len(scored); i++ {
+		result[scored[i].path] = true
+	}
+	return result
 }
 
 // redactSecretsFromFiles returns redacted file contents as a map
@@ -405,6 +497,12 @@ func (hs *HybridScanner) sendToServer(redactedFiles map[string][]byte, localSecr
 	}
 
 	writer.Close()
+
+	// Pre-upload size validation (server limit is 100MB, check at 95MB to leave margin)
+	uploadSizeMB := buf.Len() / (1024 * 1024)
+	if buf.Len() > MaxUploadSizeMB*1024*1024 {
+		return nil, fmt.Errorf("upload payload is %dMB (max: %dMB). Reduce file count with -max-files or add patterns to .gitignore", uploadSizeMB, MaxUploadSizeMB)
+	}
 
 	// Update progress to show we're waiting for analysis
 	hs.progress.Update("Analyzing code...")
