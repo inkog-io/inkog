@@ -433,8 +433,8 @@ func (hs *HybridScanner) redactSecretsFromFiles(redactedFiles map[string]bool) (
 			continue
 		}
 
-		// Detect and redact secrets
-		secretFindings := secrets.DetectSecrets(filePath, content)
+		// Detect ALL secrets for redaction (unfiltered — privacy first)
+		secretFindings := secrets.DetectSecretsForRedaction(filePath, content)
 		redactedContent := secrets.RedactSecrets(content, secretFindings)
 		totalRedactions += len(secretFindings)
 
