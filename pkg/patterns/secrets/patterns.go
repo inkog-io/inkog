@@ -109,7 +109,8 @@ var PatternDefinitions = map[string]*SecretPattern{
 		Description: "Database Connection String with Password",
 		Patterns: []*regexp.Regexp{
 			regexp.MustCompile(`(?i)(mysql|postgres|mongodb|sql)://[a-zA-Z0-9]+:([a-zA-Z0-9\-_!@#$%^&*()]+)@`),
-			regexp.MustCompile(`(?i)password\s*[:=]\s*["\']([^"\']+)["\']`),
+			// Require value to be 8+ chars to filter out "password", "pass", etc.
+			regexp.MustCompile(`(?i)password\s*[:=]\s*["\']([a-zA-Z0-9\-_!@#$%^&*()+=]{8,})["\']`),
 		},
 		Severity:   "CRITICAL",
 		Confidence: 0.90,
@@ -174,9 +175,50 @@ var PatternDefinitions = map[string]*SecretPattern{
 	},
 }
 
-// DetectSecrets scans content for hardcoded secrets using both regex and entropy detection
-// Returns a list of secrets found without modifying the content
+// DetectSecrets scans content for hardcoded secrets with FP filtering.
+// Used for REPORTING findings to the user. Test files, placeholders, and
+// low-confidence context matches are filtered out.
+// For redaction (privacy), use DetectSecretsForRedaction which returns ALL findings.
 func DetectSecrets(filePath string, content []byte) []SecretFinding {
+	// Layer 1: File-level skip (test files, minified JS, fixtures)
+	if ShouldSkipFile(filePath) {
+		return nil
+	}
+
+	// Get raw findings
+	allFindings := detectSecretsRaw(content)
+
+	// Layer 2+3: Filter each finding
+	lines := strings.Split(string(content), "\n")
+	var filtered []SecretFinding
+	for _, f := range allFindings {
+		// Layer 2: Placeholder check
+		if IsPlaceholderValue(f.Value) {
+			continue
+		}
+
+		// Layer 3: Context-aware confidence adjustment
+		lineText := ""
+		if f.Line > 0 && f.Line <= len(lines) {
+			lineText = lines[f.Line-1]
+		}
+		f = AdjustConfidence(f, lineText, filePath)
+		if f.Confidence >= 0.4 {
+			filtered = append(filtered, f)
+		}
+	}
+
+	return filtered
+}
+
+// DetectSecretsForRedaction scans content for ALL potential secrets without filtering.
+// Used by the redaction pipeline to ensure privacy — even FP-filtered values get redacted.
+func DetectSecretsForRedaction(filePath string, content []byte) []SecretFinding {
+	return detectSecretsRaw(content)
+}
+
+// detectSecretsRaw performs unfiltered detection (regex + entropy)
+func detectSecretsRaw(content []byte) []SecretFinding {
 	// Step 1: Detect secrets using regex patterns
 	regexFindings := detectByRegex(content)
 
