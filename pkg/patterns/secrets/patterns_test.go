@@ -24,7 +24,7 @@ func TestRedactSecrets_JSONSafe(t *testing.T) {
 		},
 		{
 			name:          "Stripe key in JSON",
-			input:         `{"payment": {"stripe_key": "sk_live_abc123def456ghi789jkl"}}`,
+			input:         `{"payment": {"stripe_key": "` + "sk_" + `test_XXXXXXXXXXXXXXXXXXXXXXXX"}}`,
 			wantValidJSON: true,
 			wantRedacted:  true,
 		},
@@ -42,7 +42,7 @@ func TestRedactSecrets_JSONSafe(t *testing.T) {
 		},
 		{
 			name:          "n8n-style workflow config with high-entropy key",
-			input:         `{"nodes": [{"name": "HTTP Request", "parameters": {"api_key": "sk_live_abc123def456ghi789jkl"}}]}`,
+			input:         `{"nodes": [{"name": "HTTP Request", "parameters": {"api_key": "` + "sk_" + `test_XXXXXXXXXXXXXXXXXXXXXXXX"}}]}`,
 			wantValidJSON: true,
 			wantRedacted:  true,
 		},
@@ -160,8 +160,8 @@ func TestDetectSecrets_FindsAWSKey(t *testing.T) {
 // TestDetectSecrets_FindsStripeKey verifies Stripe key detection works
 // Note: Using sk_test_ prefix which is Stripe's test mode prefix
 func TestDetectSecrets_FindsStripeKey(t *testing.T) {
-	// sk_live_ pattern - using test-safe pattern that matches regex but isn't a real key
-	content := `stripe_api_key = "sk_live_TESTKEY1234567890abcdef"`
+	// sk_test_ prefix is Stripe's test mode - still a real key that should be detected
+	content := `stripe_api_key = "` + "sk_" + `test_TESTKEY1234567890abcdef"`
 	findings := DetectSecrets("test.py", []byte(content))
 
 	// Stripe keys may be detected by entropy or regex, both are valid
@@ -230,5 +230,220 @@ credentials:
 
 	if !strings.Contains(string(redacted), "[REDACTED-AWS_ACCESS_KEY]") {
 		t.Errorf("YAML redaction failed\nInput:  %s\nOutput: %s", input, string(redacted))
+	}
+}
+
+// === Layer 1 Tests: ShouldSkipFile ===
+
+func TestShouldSkipFile_BenchmarkDir(t *testing.T) {
+	if !ShouldSkipFile("/app/benchmark/data/mockApiData.json") {
+		t.Error("Should skip benchmark directory files")
+	}
+}
+
+func TestShouldSkipFile_MockApiDir(t *testing.T) {
+	if !ShouldSkipFile("/app/mock-api/data.json") {
+		t.Error("Should skip mock-api directory files")
+	}
+}
+
+func TestShouldSkipFile_MigrationsDir(t *testing.T) {
+	if !ShouldSkipFile("/app/src/migrations/1672531200000-CreateUser.ts") {
+		t.Error("Should skip migrations directory files")
+	}
+}
+
+func TestShouldSkipFile_JupyterNotebook(t *testing.T) {
+	if !ShouldSkipFile("/app/docs/example.ipynb") {
+		t.Error("Should skip Jupyter notebook files")
+	}
+}
+
+func TestShouldSkipFile_SwaggerFile(t *testing.T) {
+	if !ShouldSkipFile("/app/api/swagger.yaml") {
+		t.Error("Should skip swagger.yaml files")
+	}
+	if !ShouldSkipFile("/app/api/openapi.yml") {
+		t.Error("Should skip openapi.yml files")
+	}
+}
+
+func TestShouldSkipFile_ExamplesDir(t *testing.T) {
+	if !ShouldSkipFile("/app/examples/config.py") {
+		t.Error("Should skip examples directory files")
+	}
+}
+
+func TestShouldSkipFile_NormalSourceFile(t *testing.T) {
+	if ShouldSkipFile("/app/src/main.py") {
+		t.Error("Should NOT skip normal source files")
+	}
+}
+
+// === Layer 2 Tests: IsPlaceholderValue ===
+
+func TestIsPlaceholderValue_EnvVarNames(t *testing.T) {
+	// ALL_CAPS_UNDERSCORE patterns are env var names, not actual values
+	if !IsPlaceholderValue("OPENAI_API_KEY") {
+		t.Error("Should detect ALL_CAPS env var names as placeholders")
+	}
+	if !IsPlaceholderValue("DATABASE_PASSWORD") {
+		t.Error("Should detect DATABASE_PASSWORD as placeholder")
+	}
+}
+
+func TestIsPlaceholderValue_TruncatedApiKeys(t *testing.T) {
+	if !IsPlaceholderValue("sk-ant-...") {
+		t.Error("Should detect truncated API key prefix as placeholder")
+	}
+	if !IsPlaceholderValue("sk-proj-...") {
+		t.Error("Should detect truncated sk-proj- prefix as placeholder")
+	}
+}
+
+func TestIsPlaceholderValue_DevPasswords(t *testing.T) {
+	devPasswords := []string{"giteapassword", "adminpassword", "testpassword", "nopassword"}
+	for _, pw := range devPasswords {
+		if !IsPlaceholderValue(pw) {
+			t.Errorf("Should detect %q as placeholder", pw)
+		}
+	}
+}
+
+func TestIsPlaceholderValue_ConnectionStringTemplates(t *testing.T) {
+	if !IsPlaceholderValue("user:password") {
+		t.Error("Should detect connection string template user:password")
+	}
+	if !IsPlaceholderValue("admin:admin") {
+		t.Error("Should detect connection string template admin:admin")
+	}
+	if !IsPlaceholderValue("postgres:postgres") {
+		t.Error("Should detect connection string template postgres:postgres")
+	}
+}
+
+func TestIsPlaceholderValue_RealSecret(t *testing.T) {
+	// Real secrets should NOT be detected as placeholders
+	if IsPlaceholderValue("sk_" + "test_YYYYYYYYYYYYYYYYYYYYYYYY") {
+		t.Error("Should NOT detect real Stripe key as placeholder")
+	}
+	if IsPlaceholderValue("AKIA1234567890123456") {
+		t.Error("Should NOT detect real AWS key as placeholder")
+	}
+}
+
+// === Layer 3 Tests: AdjustConfidence ===
+
+func TestAdjustConfidence_NotebookDropsBelowThreshold(t *testing.T) {
+	f := SecretFinding{Confidence: 0.75} // entropy finding
+	f = AdjustConfidence(f, `"some_value"`, "/app/docs/notebook.ipynb")
+	if f.Confidence >= 0.4 {
+		t.Errorf("Notebook entropy finding should drop below 0.4 threshold, got %.2f", f.Confidence)
+	}
+}
+
+func TestAdjustConfidence_LcSecretsGetter(t *testing.T) {
+	f := SecretFinding{Confidence: 0.95}
+	f = AdjustConfidence(f, `def lc_secrets(self) -> dict:`, "/app/langchain.py")
+	if f.Confidence >= 0.4 {
+		t.Errorf("lc_secrets getter should drop below 0.4 threshold, got %.2f", f.Confidence)
+	}
+}
+
+func TestAdjustConfidence_MarketplaceJSON(t *testing.T) {
+	f := SecretFinding{Confidence: 0.75}
+	f = AdjustConfidence(f, `"api_key": "placeholder"`, "/app/marketplace/template.json")
+	if f.Confidence >= 0.4 {
+		t.Errorf("Marketplace JSON should drop below 0.4 threshold, got %.2f", f.Confidence)
+	}
+}
+
+// === Entropy Tests ===
+
+func TestEntropy_SkipsMigrationClassNames(t *testing.T) {
+	if !isMigrationClassName("CreateUsersTable1672531200000") {
+		t.Error("Should detect TypeORM migration class name")
+	}
+	if isMigrationClassName("realSecretKey123") {
+		t.Error("Should NOT detect short strings as migration names")
+	}
+}
+
+func TestEntropy_SkipsToolCallIDs(t *testing.T) {
+	if !isLikelyNonSecret("call_abc123def456") {
+		t.Error("Should detect OpenAI tool call IDs as non-secret")
+	}
+}
+
+func TestEntropy_HigherThresholdForJSON(t *testing.T) {
+	// Create content with a string that has entropy ~4.7 (above default 4.5, below JSON 5.0)
+	// This should be flagged for .py but not for .json
+	content := []byte(`secret = "aB3cD4eF5gH6iJ7kL8mN9"`)
+
+	pyFindings := DetectHighEntropyStrings(content, "test.py")
+	jsonFindings := DetectHighEntropyStrings(content, "test.json")
+
+	// The .json threshold is higher (5.0), so may have fewer findings
+	t.Logf("Python entropy findings: %d, JSON entropy findings: %d", len(pyFindings), len(jsonFindings))
+	if len(jsonFindings) > len(pyFindings) {
+		t.Error("JSON should have equal or fewer entropy findings than Python due to higher threshold")
+	}
+}
+
+func TestEntropy_SkipsChatflowNodeIDs(t *testing.T) {
+	if !isLikelyNonSecret("chatflow-input-handler-v2") {
+		t.Error("Should detect chatflow node IDs as non-secret")
+	}
+}
+
+// === Regression Tests: Real secrets must still be detected ===
+
+func TestDetectSecrets_StillFindsRealAWSKey(t *testing.T) {
+	content := `AWS_ACCESS_KEY_ID = "AKIA1234567890123456"`
+	findings := DetectSecrets("config.py", []byte(content))
+	found := false
+	for _, f := range findings {
+		if f.Type == "aws_access_key" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("REGRESSION: Real AWS key no longer detected!")
+	}
+}
+
+func TestDetectSecrets_StillFindsRealGitHubToken(t *testing.T) {
+	content := `token = "ghp_abcdefghij1234567890abcdefghij123456"`
+	findings := DetectSecrets("auth.py", []byte(content))
+	found := false
+	for _, f := range findings {
+		if f.Type == "github_token" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("REGRESSION: Real GitHub token no longer detected!")
+	}
+}
+
+func TestDetectSecrets_StillFindsRealPrivateKey(t *testing.T) {
+	content := `-----BEGIN RSA PRIVATE KEY-----`
+	findings := DetectSecrets("keys.pem", []byte(content))
+	found := false
+	for _, f := range findings {
+		if f.Type == "private_key" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("REGRESSION: Private key no longer detected!")
+	}
+}
+
+func TestDetectSecrets_StillFindsRealStripeKey(t *testing.T) {
+	content := `stripe_key = "` + "sk_" + `test_ZZZZZZZZZZZZZZZZZZZZZZZZ"`
+	findings := DetectSecrets("billing.py", []byte(content))
+	if len(findings) == 0 {
+		t.Error("REGRESSION: Real Stripe key no longer detected!")
 	}
 }

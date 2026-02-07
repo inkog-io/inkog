@@ -58,10 +58,17 @@ type EntropyFinding struct {
 }
 
 // DetectHighEntropyStrings scans content for suspicious high-entropy strings
-// that may be secrets not caught by regex patterns
-func DetectHighEntropyStrings(content []byte) []EntropyFinding {
+// that may be secrets not caught by regex patterns.
+// filePath is used for file-type-aware threshold adjustment (e.g., JSON files).
+func DetectHighEntropyStrings(content []byte, filePath string) []EntropyFinding {
 	var findings []EntropyFinding
 	lines := strings.Split(string(content), "\n")
+
+	// JSON files have naturally higher-entropy strings (UUIDs, IDs, hashes)
+	threshold := EntropyThreshold
+	if strings.HasSuffix(strings.ToLower(filePath), ".json") {
+		threshold = 5.0
+	}
 
 	for lineNum, line := range lines {
 		// Find all string literals on this line
@@ -84,7 +91,7 @@ func DetectHighEntropyStrings(content []byte) []EntropyFinding {
 			entropy := ShannonEntropy(value)
 
 			// Check if entropy exceeds threshold
-			if entropy < EntropyThreshold {
+			if entropy < threshold {
 				continue
 			}
 
@@ -226,11 +233,56 @@ func isLikelyNonSecret(value string) bool {
 		}
 	}
 
+	// Tool call IDs (call_XXXX pattern from OpenAI)
+	if strings.HasPrefix(value, "call_") && len(value) < 30 {
+		return true
+	}
+
+	// PostHog-style public analytics keys
+	if strings.HasPrefix(lower, "phc_") || strings.HasPrefix(lower, "ph_") {
+		return true
+	}
+
+	// Chatflow/workflow node IDs (Flowise format)
+	if strings.Contains(value, "-input-") || strings.Contains(value, "-output-") {
+		return true
+	}
+
+	// TypeORM/migration class names (CamelCase + 13-digit timestamp)
+	if isMigrationClassName(value) {
+		return true
+	}
+
 	// Check for repeated substrings (likely not a secret)
 	if hasRepeatedPatterns(value) {
 		return true
 	}
 
+	return false
+}
+
+// isMigrationClassName checks if a value looks like a TypeORM migration class name
+// e.g., "CreateUsersTable1672531200000" (CamelCase prefix + 13-digit Unix timestamp)
+func isMigrationClassName(value string) bool {
+	if len(value) < 20 {
+		return false
+	}
+	digitSuffix := 0
+	for i := len(value) - 1; i >= 0; i-- {
+		if value[i] >= '0' && value[i] <= '9' {
+			digitSuffix++
+		} else {
+			break
+		}
+	}
+	// TypeORM timestamps are 13 digits (Unix ms)
+	if digitSuffix >= 10 {
+		prefix := value[:len(value)-digitSuffix]
+		// Must start with uppercase (CamelCase class name)
+		if len(prefix) > 0 && prefix[0] >= 'A' && prefix[0] <= 'Z' {
+			return true
+		}
+	}
 	return false
 }
 

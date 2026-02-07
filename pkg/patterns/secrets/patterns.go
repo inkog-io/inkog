@@ -134,6 +134,8 @@ var PatternDefinitions = map[string]*SecretPattern{
 		Patterns: []*regexp.Regexp{
 			regexp.MustCompile(`sk_live_[a-zA-Z0-9]{24,}`),
 			regexp.MustCompile(`pk_live_[a-zA-Z0-9]{24,}`),
+			regexp.MustCompile(`sk_test_[a-zA-Z0-9]{24,}`),
+			regexp.MustCompile(`pk_test_[a-zA-Z0-9]{24,}`),
 		},
 		Severity:   "CRITICAL",
 		Confidence: 0.99,
@@ -186,7 +188,7 @@ func DetectSecrets(filePath string, content []byte) []SecretFinding {
 	}
 
 	// Get raw findings
-	allFindings := detectSecretsRaw(content)
+	allFindings := detectSecretsRaw(content, filePath)
 
 	// Layer 2+3: Filter each finding
 	lines := strings.Split(string(content), "\n")
@@ -214,16 +216,16 @@ func DetectSecrets(filePath string, content []byte) []SecretFinding {
 // DetectSecretsForRedaction scans content for ALL potential secrets without filtering.
 // Used by the redaction pipeline to ensure privacy — even FP-filtered values get redacted.
 func DetectSecretsForRedaction(filePath string, content []byte) []SecretFinding {
-	return detectSecretsRaw(content)
+	return detectSecretsRaw(content, filePath)
 }
 
 // detectSecretsRaw performs unfiltered detection (regex + entropy)
-func detectSecretsRaw(content []byte) []SecretFinding {
+func detectSecretsRaw(content []byte, filePath string) []SecretFinding {
 	// Step 1: Detect secrets using regex patterns
 	regexFindings := detectByRegex(content)
 
 	// Step 2: Detect high-entropy strings that may be secrets
-	entropyFindings := DetectHighEntropyStrings(content)
+	entropyFindings := DetectHighEntropyStrings(content, filePath)
 
 	// Step 3: Merge findings, avoiding duplicates
 	var allFindings []SecretFinding

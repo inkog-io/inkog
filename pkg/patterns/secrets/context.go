@@ -29,6 +29,16 @@ func ShouldSkipFile(filePath string) bool {
 		"/tests/", "/__tests__/", "/test_", "/_test/",
 		"/fixtures/", "/mocks/", "/testdata/", "/test-data/",
 		"/mock_", "/__mocks__/", "/__fixtures__/",
+		// Benchmark & mock data (eliminates n8n mockApiData FPs)
+		"/benchmark/", "/benchmarks/", "/mock-api/", "/mappings/",
+		// Documentation example directories
+		"/docs/examples/", "/doc/examples/",
+		// Database migration files (class name entropy FPs)
+		"/migrations/",
+		// E2E/integration test dirs
+		"/playwright/", "/e2e/", "/cypress/",
+		// Examples dirs (for secret reporting only — redaction still happens)
+		"/examples/",
 	}
 	for _, pattern := range testPathPatterns {
 		if strings.Contains(lower, pattern) {
@@ -41,11 +51,19 @@ func ShouldSkipFile(filePath string) bool {
 		"_test.go", "_test.py", ".test.ts", ".test.js",
 		".spec.ts", ".spec.js", ".test.tsx", ".test.jsx",
 		".spec.tsx", ".spec.jsx",
+		// Jupyter notebooks — almost entirely documentation/example code
+		".ipynb",
 	}
 	for _, suffix := range testSuffixes {
 		if strings.HasSuffix(lower, suffix) {
 			return true
 		}
+	}
+
+	// Swagger/OpenAPI documentation files
+	if base == "swagger.yml" || base == "swagger.yaml" ||
+		base == "openapi.yml" || base == "openapi.yaml" {
+		return true
 	}
 
 	return false
@@ -113,6 +131,17 @@ var placeholderValues = map[string]bool{
 	"sample":             true,
 	"my_password":        true,
 	"my_secret":          true,
+	"giteapassword":      true,
+	"adminpassword":      true,
+	"testpassword":       true,
+	"mysecret":           true,
+	"mypassword":         true,
+	"not-needed":         true,
+	"nopassword":         true,
+	"passw0rd":           true,
+	"qwerty":             true,
+	"letmein":            true,
+	"trustno1":           true,
 }
 
 // placeholderPatterns match common FP value patterns
@@ -125,6 +154,13 @@ var placeholderPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)^(TODO|FIXME|CHANGEME|REPLACE)`),
 	regexp.MustCompile(`^[\*]{3,}$`),
 	regexp.MustCompile(`^\$\{[^}]+\}$`),
+	// Truncated API key prefixes in docs (sk-ant-..., sk-proj-...)
+	regexp.MustCompile(`(?i)^(sk|pk)[-_](ant|proj|live|test)[-_]\.{2,}`),
+	// ALL_CAPS_UNDERSCORE env var names — must contain underscore to distinguish
+	// from actual credential values like AKIA1234567890123456
+	regexp.MustCompile(`^[A-Z][A-Z0-9]*_[A-Z0-9_]{3,}$`),
+	// user:password@ in connection string templates
+	regexp.MustCompile(`(?i)^(user|username|admin|postgres|root):(password|pass|secret|admin|postgres|root)$`),
 }
 
 // IsPlaceholderValue returns true if the value looks like a placeholder, not a real secret
@@ -181,9 +217,24 @@ func AdjustConfidence(finding SecretFinding, lineText string, filePath string) S
 		return finding
 	}
 
-	// Notebook files get a confidence reduction
+	// Notebook files get a heavy confidence reduction (ensures drop below 0.4 threshold)
 	if strings.HasSuffix(strings.ToLower(filePath), ".ipynb") {
-		finding.Confidence *= 0.7
+		finding.Confidence *= 0.2
+	}
+
+	lowerPath := strings.ToLower(filePath)
+
+	// JSON/YAML in marketplace/chatflow/workflow dirs — config data, not secrets
+	if (strings.HasSuffix(lowerPath, ".json") || strings.HasSuffix(lowerPath, ".yml") ||
+		strings.HasSuffix(lowerPath, ".yaml")) &&
+		(strings.Contains(lowerPath, "/marketplace") || strings.Contains(lowerPath, "/chatflow") ||
+			strings.Contains(lowerPath, "/workflow")) {
+		finding.Confidence *= 0.3
+	}
+
+	// LangChain lc_secrets getter pattern — maps to env var names, not actual keys
+	if strings.Contains(lineText, "lc_secrets") || strings.Contains(lineText, "lc_aliases") {
+		finding.Confidence *= 0.1
 	}
 
 	return finding
