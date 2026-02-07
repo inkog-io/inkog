@@ -506,3 +506,163 @@ func TestDetectSecrets_StillFindsRealStripeKey(t *testing.T) {
 		t.Error("REGRESSION: Real Stripe key no longer detected!")
 	}
 }
+
+// =============================================================================
+// V4 FP REDUCTION TESTS — isLikelyNonSecret extensions
+// =============================================================================
+
+func TestIsLikelyNonSecret_ModelPaths(t *testing.T) {
+	if !isLikelyNonSecret("accounts/fireworks/models/llama-v3p1-8b-instruct") {
+		t.Error("Should detect ML model path as non-secret")
+	}
+	if !isLikelyNonSecret("projects/my-project/models/gpt4-turbo") {
+		t.Error("Should detect project model path as non-secret")
+	}
+}
+
+func TestIsLikelyNonSecret_UUIDs(t *testing.T) {
+	if !isLikelyNonSecret("550e8400-e29b-41d4-a716-446655440000") {
+		t.Error("Should detect full UUID format as non-secret")
+	}
+	if !isLikelyNonSecret("f47ac10b-58cc-4372-a567-0e02b2c3d479") {
+		t.Error("Should detect UUID v4 as non-secret")
+	}
+}
+
+func TestIsLikelyNonSecret_RouteStrings(t *testing.T) {
+	if !isLikelyNonSecret("/api/v1/users/create/confirm") {
+		t.Error("Should detect URL path segments as non-secret")
+	}
+}
+
+func TestIsLikelyNonSecret_SchemaContext(t *testing.T) {
+	if !isLikelyNonSecret("aB3cD4eF5gH6iJ7kL8mN9oP0", `"example": "aB3cD4eF5gH6iJ7kL8mN9oP0"`) {
+		t.Error("Should detect value with 'example' context as non-secret")
+	}
+	if !isLikelyNonSecret("aB3cD4eF5gH6iJ7kL8mN9oP0", `default: "aB3cD4eF5gH6iJ7kL8mN9oP0"`) {
+		t.Error("Should detect value with 'default' context as non-secret")
+	}
+	if !isLikelyNonSecret("aB3cD4eF5gH6iJ7kL8mN9oP0", `model_name = "aB3cD4eF5gH6iJ7kL8mN9oP0"`) {
+		t.Error("Should detect value with 'model' context as non-secret")
+	}
+}
+
+// === ShouldSkipFile extensions ===
+
+func TestShouldSkipFile_LocaleAndSchema(t *testing.T) {
+	if !ShouldSkipFile("/app/locale/en/messages.json") {
+		t.Error("Should skip locale directory files")
+	}
+	if !ShouldSkipFile("/app/i18n/translations.yaml") {
+		t.Error("Should skip i18n directory files")
+	}
+	if !ShouldSkipFile("/app/schemas/user.schema.json") {
+		t.Error("Should skip schema directory files")
+	}
+	if !ShouldSkipFile("/app/config/app.schema.json") {
+		t.Error("Should skip .schema.json files")
+	}
+}
+
+func TestShouldSkipFile_GeneratedAndVendor(t *testing.T) {
+	if !ShouldSkipFile("/app/generated/api_client.py") {
+		t.Error("Should skip generated directory files")
+	}
+	if !ShouldSkipFile("/app/vendor/third-party/lib.go") {
+		t.Error("Should skip vendor directory files")
+	}
+	if !ShouldSkipFile("/app/node_modules/pkg/index.js") {
+		t.Error("Should skip node_modules directory files")
+	}
+}
+
+func TestShouldSkipFile_LockFiles(t *testing.T) {
+	if !ShouldSkipFile("/app/package-lock.json") {
+		t.Error("Should skip package-lock.json")
+	}
+	if !ShouldSkipFile("/app/yarn.lock") {
+		t.Error("Should skip yarn.lock")
+	}
+	if !ShouldSkipFile("/app/go.sum") {
+		t.Error("Should skip go.sum")
+	}
+}
+
+func TestShouldSkipFile_MarkdownAndEnvExample(t *testing.T) {
+	if !ShouldSkipFile("/app/README.md") {
+		t.Error("Should skip markdown files")
+	}
+	if !ShouldSkipFile("/app/.env.example") {
+		t.Error("Should skip .env.example files")
+	}
+	if !ShouldSkipFile("/app/.env.template") {
+		t.Error("Should skip .env.template files")
+	}
+}
+
+// === AdjustConfidence extensions ===
+
+func TestAdjustConfidence_JSONExample(t *testing.T) {
+	f := SecretFinding{Confidence: 0.95}
+	f = AdjustConfidence(f, `"example": "aB3cD4eF5gH6iJ7kL8mN9"`, "/app/schema.json")
+	if f.Confidence >= 0.4 {
+		t.Errorf("JSON example line should drop below 0.4 threshold, got %.2f", f.Confidence)
+	}
+}
+
+func TestAdjustConfidence_EnvVarReference(t *testing.T) {
+	f := SecretFinding{Confidence: 0.95}
+	f = AdjustConfidence(f, `api_key = os.environ.get("OPENAI_API_KEY")`, "/app/config.py")
+	if f.Confidence >= 0.4 {
+		t.Errorf("os.environ reference should drop below 0.4 threshold, got %.2f", f.Confidence)
+	}
+}
+
+// === Regex FP filter tests ===
+
+func TestDetectSecrets_ApiKeyEnvVarName(t *testing.T) {
+	// ALL_CAPS env var names in quotes should NOT be flagged as api_key
+	content := `api_key = os.environ.get("OPENAI_API_KEY")`
+	findings := DetectSecrets("config.py", []byte(content))
+	for _, f := range findings {
+		if f.Type == "api_key" {
+			t.Errorf("Should NOT flag env var name as api_key: %v", f.Value)
+		}
+	}
+}
+
+func TestDetectSecrets_PrivateKeyInComment(t *testing.T) {
+	content := `# -----BEGIN RSA PRIVATE KEY-----`
+	findings := DetectSecrets("setup.py", []byte(content))
+	for _, f := range findings {
+		if f.Type == "private_key" {
+			t.Error("Should NOT flag private key in comment line")
+		}
+	}
+}
+
+// === Placeholder extensions ===
+
+func TestIsPlaceholderValue_YourHere(t *testing.T) {
+	if !IsPlaceholderValue("your-api-key-here") {
+		t.Error("Should detect 'your-*-here' format as placeholder")
+	}
+}
+
+func TestIsPlaceholderValue_CommonWords(t *testing.T) {
+	commonWords := []string{"required", "optional", "encrypted", "redacted", "disabled"}
+	for _, word := range commonWords {
+		if !IsPlaceholderValue(word) {
+			t.Errorf("Should detect %q as placeholder", word)
+		}
+	}
+}
+
+func TestIsPlaceholderValue_InsertReplace(t *testing.T) {
+	if !IsPlaceholderValue("INSERT_YOUR_KEY") {
+		t.Error("Should detect INSERT_* as placeholder")
+	}
+	if !IsPlaceholderValue("REPLACE_WITH_YOUR_TOKEN") {
+		t.Error("Should detect REPLACE_* as placeholder")
+	}
+}

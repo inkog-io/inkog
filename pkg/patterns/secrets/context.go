@@ -66,6 +66,65 @@ func ShouldSkipFile(filePath string) bool {
 		return true
 	}
 
+	// Internationalization/locale data directories
+	localePatterns := []string{
+		"/locale/", "/locales/", "/i18n/", "/translations/",
+	}
+	for _, pattern := range localePatterns {
+		if strings.Contains(lower, pattern) {
+			return true
+		}
+	}
+
+	// Schema files (JSON Schema, OpenAPI schemas)
+	schemaPatterns := []string{"/schemas/", "/schema/"}
+	for _, pattern := range schemaPatterns {
+		if strings.Contains(lower, pattern) {
+			return true
+		}
+	}
+	if strings.HasSuffix(base, ".schema.json") || strings.HasSuffix(base, ".schema.yaml") ||
+		strings.HasSuffix(base, ".schema.yml") {
+		return true
+	}
+
+	// Generated code directories
+	generatedPatterns := []string{"/generated/", "/_generated/"}
+	for _, pattern := range generatedPatterns {
+		if strings.Contains(lower, pattern) {
+			return true
+		}
+	}
+
+	// Third-party vendored dependencies
+	vendorPatterns := []string{"/vendor/", "/node_modules/"}
+	for _, pattern := range vendorPatterns {
+		if strings.Contains(lower, pattern) {
+			return true
+		}
+	}
+
+	// Lock files (package-lock.json, yarn.lock, etc.)
+	lockFiles := []string{"package-lock.json", "yarn.lock", "pnpm-lock.yaml", "poetry.lock", "go.sum", "composer.lock", "gemfile.lock", "cargo.lock"}
+	for _, lockFile := range lockFiles {
+		if base == lockFile {
+			return true
+		}
+	}
+
+	// Markdown and docs (private keys in README are documentation, not leaks)
+	if strings.HasSuffix(base, ".md") || strings.HasSuffix(base, ".rst") {
+		return true
+	}
+
+	// Environment example/template files (not real secrets)
+	envExampleFiles := []string{".env.example", ".env.template", ".env.sample", ".env.test"}
+	for _, envFile := range envExampleFiles {
+		if base == envFile {
+			return true
+		}
+	}
+
 	return false
 }
 
@@ -184,6 +243,27 @@ func IsPlaceholderValue(value string) bool {
 		return true
 	}
 
+	// "your-*-here" format (e.g., "your-api-key-here", "your-secret-here")
+	if strings.HasPrefix(lower, "your-") && strings.HasSuffix(lower, "-here") {
+		return true
+	}
+
+	// INSERT_* and REPLACE_* prefixes
+	if strings.HasPrefix(lower, "insert_") || strings.HasPrefix(lower, "replace_") {
+		return true
+	}
+
+	// Common non-secret words that happen to be 8+ chars (matching database_password regex)
+	commonWords := map[string]bool{
+		"required": true, "optional": true, "changeme": true,
+		"password": true, "redacted": true, "encrypted": true,
+		"disabled": true, "excluded": true, "override": true,
+		"database": true, "username": true, "hostname": true,
+	}
+	if commonWords[lower] {
+		return true
+	}
+
 	return false
 }
 
@@ -235,6 +315,32 @@ func AdjustConfidence(finding SecretFinding, lineText string, filePath string) S
 	// LangChain lc_secrets getter pattern — maps to env var names, not actual keys
 	if strings.Contains(lineText, "lc_secrets") || strings.Contains(lineText, "lc_aliases") {
 		finding.Confidence *= 0.1
+	}
+
+	lowerLine := strings.ToLower(trimmed)
+
+	// JSON/YAML files with "example" or "default" context — likely schema/docs
+	if strings.HasSuffix(lowerPath, ".json") || strings.HasSuffix(lowerPath, ".yml") ||
+		strings.HasSuffix(lowerPath, ".yaml") {
+		exampleKeywords := []string{"example", "default", "placeholder", "sample", "description", "schema"}
+		for _, kw := range exampleKeywords {
+			if strings.Contains(lowerLine, kw) {
+				finding.Confidence *= 0.2
+				return finding
+			}
+		}
+	}
+
+	// JSDoc/docstring annotations — describing parameters, not actual values
+	if strings.Contains(lowerLine, "@param") || strings.Contains(lowerLine, "@type") ||
+		strings.Contains(lowerLine, "@returns") || strings.Contains(lowerLine, "@example") {
+		finding.Confidence *= 0.3
+	}
+
+	// Environment variable reference (not actual value): os.environ, process.env, os.getenv
+	if strings.Contains(lowerLine, "os.environ") || strings.Contains(lowerLine, "process.env") ||
+		strings.Contains(lowerLine, "os.getenv") {
+		finding.Confidence *= 0.2
 	}
 
 	return finding

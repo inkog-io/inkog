@@ -265,6 +265,21 @@ func detectByRegex(content []byte) []SecretFinding {
 							value = line[match[2]:match[3]]
 						}
 
+						// Filter api_key FPs: skip if the matched value is an ALL_CAPS env var name
+						if patternName == "api_key" && isAllCapsEnvVarName(value) {
+							continue
+						}
+
+						// Filter api_key FPs: skip if line references env var getter
+						if patternName == "api_key" && isEnvVarReference(line) {
+							continue
+						}
+
+						// Filter private_key FPs: skip if the line is a comment/docstring
+						if patternName == "private_key" && isCommentLine(line) {
+							continue
+						}
+
 						finding := SecretFinding{
 							Type:        patternName,
 							Description: patternDef.Description,
@@ -283,6 +298,43 @@ func detectByRegex(content []byte) []SecretFinding {
 	}
 
 	return findings
+}
+
+// isAllCapsEnvVarName checks if a value looks like an ALL_CAPS environment variable name
+// (not an actual secret value). E.g., "OPENAI_API_KEY" is a name, not a key.
+func isAllCapsEnvVarName(value string) bool {
+	if len(value) < 5 || !strings.Contains(value, "_") {
+		return false
+	}
+	for _, c := range value {
+		if c != '_' && (c < 'A' || c > 'Z') && (c < '0' || c > '9') {
+			return false
+		}
+	}
+	return true
+}
+
+// isEnvVarReference checks if a line contains an environment variable getter pattern.
+// These lines reference env var names as values, not actual secrets.
+func isEnvVarReference(line string) bool {
+	lower := strings.ToLower(line)
+	return strings.Contains(lower, "os.environ") ||
+		strings.Contains(lower, "os.getenv") ||
+		strings.Contains(lower, "process.env") ||
+		strings.Contains(lower, "env.get(") ||
+		strings.Contains(lower, "getenv(")
+}
+
+// isCommentLine checks if a line is a code comment or docstring
+func isCommentLine(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	return strings.HasPrefix(trimmed, "#") ||
+		strings.HasPrefix(trimmed, "//") ||
+		strings.HasPrefix(trimmed, "*") ||
+		strings.HasPrefix(trimmed, "/*") ||
+		strings.HasPrefix(trimmed, "\"\"\"") ||
+		strings.HasPrefix(trimmed, "'''") ||
+		strings.HasPrefix(trimmed, "<!--")
 }
 
 // RedactSecrets replaces detected secrets in content with [REDACTED]
