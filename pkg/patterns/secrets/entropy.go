@@ -18,8 +18,9 @@ const (
 // stringLiteralRegex matches quoted string literals
 var stringLiteralRegex = regexp.MustCompile(`["']([a-zA-Z0-9+/=_\-]{16,256})["']`)
 
-// credentialContextRegex matches variable/key names suggesting credentials
-var credentialContextRegex = regexp.MustCompile(`(?i)(key|token|secret|password|passwd|pwd|api|auth|credential|private|signing)`)
+// credentialContextRegex matches variable/key names suggesting credentials.
+// Requires more specific patterns than bare "key" to avoid matching any dict key reference.
+var credentialContextRegex = regexp.MustCompile(`(?i)(_key\b|api[_-]?key|token|secret|password|passwd|pwd|auth[_-]?|credential|private[_-]?key|signing[_-]?key|access[_-]?key)`)
 
 // ShannonEntropy calculates the Shannon entropy of a string
 // Returns bits per character (0-8 for byte data)
@@ -304,6 +305,53 @@ func isLikelyNonSecret(value string, lineContext ...string) bool {
 		lowerCtx := strings.ToLower(ctx)
 		hashKeywords := []string{"hash", "sha1", "sha256", "sha512", "checksum", "digest", "integrity", "fingerprint", "md5", "hmac"}
 		for _, kw := range hashKeywords {
+			if strings.Contains(lowerCtx, kw) {
+				return true
+			}
+		}
+	}
+
+	// Model path IDs: strings containing /models/ or accounts/ or projects/
+	// e.g., "accounts/fireworks/models/llama-v3p1-8b-instruct"
+	if strings.Contains(lower, "/models/") || strings.Contains(lower, "accounts/") || strings.Contains(lower, "projects/") {
+		return true
+	}
+
+	// UUID format: 36 chars with dashes at positions 8,13,18,23 (RFC 4122)
+	if len(value) == 36 && value[8] == '-' && value[13] == '-' && value[18] == '-' && value[23] == '-' {
+		return true
+	}
+
+	// Route/path strings: multiple URL path segments (e.g., "/api/v1/users/create")
+	if strings.Count(value, "/") >= 3 {
+		return true
+	}
+
+	// Version-like strings (semver): e.g., "1.2.3", "v2.0.0-beta.1"
+	if len(value) < 30 && (strings.HasPrefix(lower, "v") || (value[0] >= '0' && value[0] <= '9')) &&
+		strings.Count(value, ".") >= 2 {
+		// Rough semver check: contains digits and dots
+		isSemver := true
+		for _, c := range value {
+			if !((c >= '0' && c <= '9') || c == '.' || c == '-' || c == '+' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_') {
+				isSemver = false
+				break
+			}
+		}
+		if isSemver {
+			return true
+		}
+	}
+
+	// Context-based skips: schema/example/placeholder/description/locale/i18n
+	if ctx != "" {
+		lowerCtx := strings.ToLower(ctx)
+		contextSkipKeywords := []string{
+			"example", "schema", "placeholder", "default", "description",
+			"locale", "i18n", "translation", "message", "label",
+			"model", "version", "revision",
+		}
+		for _, kw := range contextSkipKeywords {
 			if strings.Contains(lowerCtx, kw) {
 				return true
 			}
