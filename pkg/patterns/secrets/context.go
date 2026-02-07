@@ -260,11 +260,7 @@ func IsPlaceholderValue(value string) bool {
 		"disabled": true, "excluded": true, "override": true,
 		"database": true, "username": true, "hostname": true,
 	}
-	if commonWords[lower] {
-		return true
-	}
-
-	return false
+	return commonWords[lower]
 }
 
 // fieldNameIndicators suggest the matched value is a field name, not a credential
