@@ -135,7 +135,7 @@ func looksLikeCredential(value, lineContext string) bool {
 	}
 
 	// Skip common non-secret patterns
-	if isLikelyNonSecret(value) {
+	if isLikelyNonSecret(value, lineContext) {
 		return false
 	}
 
@@ -198,9 +198,29 @@ func hasGoodCharacterMix(s string) bool {
 	return count >= 2
 }
 
+// isHexString checks if a string is entirely hexadecimal characters.
+// Requires minimum length of 16 to avoid matching short hex values that could be secrets.
+func isHexString(s string) bool {
+	if len(s) < 16 {
+		return false
+	}
+	for _, c := range s {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return true
+}
+
 // isLikelyNonSecret checks for patterns that are high-entropy but not secrets
-func isLikelyNonSecret(value string) bool {
+func isLikelyNonSecret(value string, lineContext ...string) bool {
 	lower := strings.ToLower(value)
+
+	// Get line context if provided
+	ctx := ""
+	if len(lineContext) > 0 {
+		ctx = lineContext[0]
+	}
 
 	// URLs are not secrets (even if they have high entropy from query params)
 	if strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://") {
@@ -251,6 +271,43 @@ func isLikelyNonSecret(value string) bool {
 	// TypeORM/migration class names (CamelCase + 13-digit timestamp)
 	if isMigrationClassName(value) {
 		return true
+	}
+
+	// Pure hex strings (SHA hashes, checksums, git commit SHAs)
+	// e.g., "a3f8b2c1d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9"
+	if isHexString(value) {
+		return true
+	}
+
+	// SRI integrity hashes (sha256-XXXXX, sha384-XXXXX, sha512-XXXXX)
+	// Used in web security (Content-Security-Policy, <script integrity>)
+	if strings.HasPrefix(lower, "sha256-") || strings.HasPrefix(lower, "sha384-") ||
+		strings.HasPrefix(lower, "sha512-") {
+		return true
+	}
+
+	// n8n-style sentinel/constant values — workflow node IDs with predictable patterns
+	if strings.HasPrefix(lower, "n8n_") || strings.HasPrefix(lower, "workflow_") {
+		return true
+	}
+
+	// Base64-padded content (ends with = or ==, common in config/data files)
+	// Only skip if the line context suggests data, not a secret assignment
+	if (strings.HasSuffix(value, "==") || strings.HasSuffix(value, "=")) &&
+		!credentialContextRegex.MatchString(ctx) {
+		return true
+	}
+
+	// Hash context in surrounding line — if the line mentions hash/checksum keywords,
+	// the value is likely a hash output, not a secret
+	if ctx != "" {
+		lowerCtx := strings.ToLower(ctx)
+		hashKeywords := []string{"hash", "sha1", "sha256", "sha512", "checksum", "digest", "integrity", "fingerprint", "md5", "hmac"}
+		for _, kw := range hashKeywords {
+			if strings.Contains(lowerCtx, kw) {
+				return true
+			}
+		}
 	}
 
 	// Check for repeated substrings (likely not a secret)

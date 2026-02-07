@@ -396,6 +396,65 @@ func TestEntropy_SkipsChatflowNodeIDs(t *testing.T) {
 	}
 }
 
+func TestEntropy_SkipsHexHashes(t *testing.T) {
+	// SHA-256 hex hash should not be flagged as a secret
+	if !isLikelyNonSecret("a3f8b2c1d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9") {
+		t.Error("Should detect pure hex hash as non-secret")
+	}
+	// Git commit SHA
+	if !isLikelyNonSecret("550e8400e29b41d4a716446655440000a3f8b2c1") {
+		t.Error("Should detect git commit SHA as non-secret")
+	}
+}
+
+func TestEntropy_SkipsSRIHashes(t *testing.T) {
+	if !isLikelyNonSecret("sha256-abcdef1234567890ABCDEF") {
+		t.Error("Should detect SRI sha256 hash as non-secret")
+	}
+	if !isLikelyNonSecret("sha384-abcdef1234567890ABCDEF1234567890") {
+		t.Error("Should detect SRI sha384 hash as non-secret")
+	}
+	if !isLikelyNonSecret("sha512-abcdef1234567890ABCDEF1234567890") {
+		t.Error("Should detect SRI sha512 hash as non-secret")
+	}
+}
+
+func TestEntropy_SkipsNonHyphenatedGUIDs(t *testing.T) {
+	// 32-char hex without hyphens (GUID without formatting)
+	if !isLikelyNonSecret("550e8400e29b41d4a716446655440000") {
+		t.Error("Should detect 32-char hex GUID as non-secret")
+	}
+}
+
+func TestEntropy_SkipsBase64Data(t *testing.T) {
+	// Base64 data without credential context
+	if !isLikelyNonSecret("dGhpcyBpcyBiYXNlNjQgZGF0YQ==", `content_data = "dGhpcyBpcyBiYXNlNjQgZGF0YQ=="`) {
+		t.Error("Should detect base64 data without credential context as non-secret")
+	}
+}
+
+func TestEntropy_KeepsBase64WithCredContext(t *testing.T) {
+	// Base64 value WITH credential context should still be detected
+	if isLikelyNonSecret("dGhpcyBpcyBiYXNlNjQgZGF0YQ==", `api_key = "dGhpcyBpcyBiYXNlNjQgZGF0YQ=="`) {
+		t.Error("Should NOT skip base64 when line has credential context (api_key)")
+	}
+}
+
+func TestEntropy_SkipsHashContext(t *testing.T) {
+	// Line contains "sha256" keyword — value is a hash output
+	if !isLikelyNonSecret("aB3cD4eF5gH6iJ7kL8mN9oP0", `sha256_hash = "aB3cD4eF5gH6iJ7kL8mN9oP0"`) {
+		t.Error("Should detect value on sha256 context line as non-secret")
+	}
+	// Line contains "checksum" keyword
+	if !isLikelyNonSecret("aB3cD4eF5gH6iJ7kL8mN9oP0", `file_checksum = "aB3cD4eF5gH6iJ7kL8mN9oP0"`) {
+		t.Error("Should detect value on checksum context line as non-secret")
+	}
+	// Line contains "integrity" keyword
+	if !isLikelyNonSecret("aB3cD4eF5gH6iJ7kL8mN9oP0", `integrity = "aB3cD4eF5gH6iJ7kL8mN9oP0"`) {
+		t.Error("Should detect value on integrity context line as non-secret")
+	}
+}
+
 // === Regression Tests: Real secrets must still be detected ===
 
 func TestDetectSecrets_StillFindsRealAWSKey(t *testing.T) {
