@@ -224,6 +224,11 @@ var placeholderValues = map[string]bool{
 	"qwerty":             true,
 	"letmein":            true,
 	"trustno1":           true,
+	"change-me":          true,
+	"fill-in":            true,
+	"update-me":          true,
+	"set-me":             true,
+	"configure-me":       true,
 }
 
 // placeholderPatterns match common FP value patterns
@@ -274,6 +279,20 @@ func IsPlaceholderValue(value string) bool {
 	// INSERT_* and REPLACE_* prefixes
 	if strings.HasPrefix(lower, "insert_") || strings.HasPrefix(lower, "replace_") {
 		return true
+	}
+
+	// Same-character repetition (aaaaaaaa, 00000000, etc.)
+	if len(lower) >= 8 {
+		allSame := true
+		for i := 1; i < len(lower); i++ {
+			if lower[i] != lower[0] {
+				allSame = false
+				break
+			}
+		}
+		if allSame {
+			return true
+		}
 	}
 
 	// Common non-secret words that happen to be 8+ chars (matching database_password regex)
@@ -354,6 +373,43 @@ func AdjustConfidence(finding SecretFinding, lineText string, filePath string) S
 	if strings.Contains(lowerLine, "@param") || strings.Contains(lowerLine, "@type") ||
 		strings.Contains(lowerLine, "@returns") || strings.Contains(lowerLine, "@example") {
 		finding.Confidence *= 0.3
+	}
+
+	// Python docstring content indicators (lines inside """ blocks that don't start with #)
+	pythonDocIndicators := []string{":param ", ":type ", ":returns:", ":rtype:", ">>> ", "raises:", "yields:"}
+	for _, ind := range pythonDocIndicators {
+		if strings.Contains(lowerLine, ind) {
+			finding.Confidence *= 0.2
+			return finding
+		}
+	}
+
+	// Documentation section headers and example markers
+	docHeaders := []string{"example:", "usage:", "note:", "notes:", "warning:", "e.g.", "such as:", ".. code-block"}
+	for _, hdr := range docHeaders {
+		if strings.Contains(lowerLine, hdr) {
+			finding.Confidence *= 0.3
+			return finding
+		}
+	}
+
+	// Variable name awareness: non-secret variable names reduce confidence heavily
+	// But NOT if the variable name also contains credential keywords (e.g., AWS_ACCESS_KEY_ID has _ID but is a real key)
+	varName := extractAssignmentVariable(lineText)
+	if varName != "" && isNonSecretVariableName(varName) {
+		varLower := strings.ToLower(varName)
+		credKeywords := []string{"key", "secret", "token", "password", "passwd", "credential", "auth"}
+		hasCredKeyword := false
+		for _, kw := range credKeywords {
+			if strings.Contains(varLower, kw) {
+				hasCredKeyword = true
+				break
+			}
+		}
+		if !hasCredKeyword {
+			finding.Confidence *= 0.2
+			return finding
+		}
 	}
 
 	// Environment variable reference (not actual value): os.environ, process.env, os.getenv

@@ -874,3 +874,90 @@ func TestEntropy_RealSecretsStillDetected(t *testing.T) {
 		})
 	}
 }
+
+// =============================================================================
+// V6 FP REDUCTION TESTS — Docstring/documentation awareness
+// =============================================================================
+
+func TestAdjustConfidence_PythonDocstringContent(t *testing.T) {
+	// Lines inside Python docstrings with :param, :returns:, >>> markers
+	cases := []struct {
+		name     string
+		line     string
+		wantLow  bool
+	}{
+		{"param marker", `:param api_key: The API key to use`, true},
+		{"returns marker", `:returns: api_key value from config`, true},
+		{"doctest example", `>>> api_key = "sk_test_example1234567890"`, true},
+		{"yields marker", `yields: secret value from vault`, true},
+		{"example header", `Example: api_key = "test_key_1234567890abcdef"`, true},
+		{"usage header", `Usage: set api_key in environment`, true},
+		{"normal code line", `api_key = "sk_live_real1234567890abcdef"`, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := SecretFinding{Confidence: 0.95}
+			f = AdjustConfidence(f, tc.line, "module.py")
+			if tc.wantLow && f.Confidence >= 0.4 {
+				t.Errorf("Expected low confidence for %q, got %.2f", tc.line, f.Confidence)
+			}
+			if !tc.wantLow && f.Confidence < 0.4 {
+				t.Errorf("Expected normal confidence for %q, got %.2f", tc.line, f.Confidence)
+			}
+		})
+	}
+}
+
+func TestAdjustConfidence_NonSecretVariableName(t *testing.T) {
+	cases := []struct {
+		name    string
+		line    string
+		wantLow bool
+	}{
+		{"spreadsheet ID", `SPREADSHEET_ID = "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms"`, true},
+		{"model ID", `model_id = "accounts/fireworks/models/llama-v3p1-8b-instruct"`, true},
+		{"doc ID", `doc_id = "aB3cD4eF5gH6iJ7kL8mN9oP0qR1sT2u"`, true},
+		{"template version", `template_version = "v2.1.0-beta-rc1-final-release"`, true},
+		{"real API key", `api_key = "sk_live_abcdef1234567890abcd"`, false},
+		{"real password", `password = "supersecretpassword123"`, false},
+		{"AWS key ID", `AWS_ACCESS_KEY_ID = "AKIA1234567890123456"`, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := SecretFinding{Confidence: 0.95}
+			f = AdjustConfidence(f, tc.line, "config.py")
+			if tc.wantLow && f.Confidence >= 0.4 {
+				t.Errorf("Expected low confidence for %q, got %.2f", tc.line, f.Confidence)
+			}
+			if !tc.wantLow && f.Confidence < 0.4 {
+				t.Errorf("Expected normal confidence for %q, got %.2f", tc.line, f.Confidence)
+			}
+		})
+	}
+}
+
+func TestIsPlaceholderValue_SameCharRepetition(t *testing.T) {
+	if !IsPlaceholderValue("aaaaaaaa") {
+		t.Error("Should detect same-character repetition as placeholder")
+	}
+	if !IsPlaceholderValue("00000000") {
+		t.Error("Should detect all-zeros as placeholder")
+	}
+	if !IsPlaceholderValue("change-me") {
+		t.Error("Should detect change-me as placeholder")
+	}
+	// Short repetition shouldn't match (below 8-char threshold)
+	if IsPlaceholderValue("aaaa") {
+		t.Error("Should NOT detect short repetition as placeholder")
+	}
+}
+
+func TestIsPlaceholderValue_DoesNotBlockRealSecrets(t *testing.T) {
+	// Real secrets should not be caught by same-char repetition
+	if IsPlaceholderValue("sk_live_1234567890abcdef") {
+		t.Error("Real Stripe key should NOT be placeholder")
+	}
+	if IsPlaceholderValue("AKIA1234567890123456") {
+		t.Error("Real AWS key should NOT be placeholder")
+	}
+}
