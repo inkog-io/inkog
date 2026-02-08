@@ -204,6 +204,14 @@ func DetectSecrets(filePath string, content []byte) []SecretFinding {
 			continue
 		}
 
+		// Layer 2.7: Adjacent-line context for private_key/PEM — check if preceding lines
+		// contain "placeholder", "description", or "example" keywords (credential form fields)
+		if f.Type == "private_key" {
+			if isAdjacentLineContext(f.Line-1, lines, []string{"placeholder", "description", "example", "format"}) {
+				continue
+			}
+		}
+
 		// Layer 3: Context-aware confidence adjustment
 		lineText := ""
 		if f.Line > 0 && f.Line <= len(lines) {
@@ -261,13 +269,14 @@ func detectByRegex(content []byte) []SecretFinding {
 			for _, pattern := range patternDef.Patterns {
 				matches := pattern.FindAllStringSubmatchIndex(line, -1)
 				for _, match := range matches {
-					// match[0:2] is the full match, match[2:4] is group 1, etc.
+					// match[0:2] is the full match, match[2:4] is group 1, match[4:6] is group 2, etc.
 					if len(match) >= 2 {
 						secret := line[match[0]:match[1]]
-						// Try to extract just the secret value (last capture group)
+						// Extract the LAST capture group (the actual secret value, not the key name)
 						value := secret
 						if len(match) >= 4 {
-							value = line[match[2]:match[3]]
+							lastGroupIdx := len(match) - 2
+							value = line[match[lastGroupIdx]:match[lastGroupIdx+1]]
 						}
 
 						// Filter api_key FPs: skip if the matched value is an ALL_CAPS env var name
@@ -426,6 +435,24 @@ func isInsideDocstring(lineIndex int, lines []string) bool {
 	}
 
 	return insideDouble || insideSingle
+}
+
+// isAdjacentLineContext checks if any of the preceding 1-3 lines contain any of the given keywords.
+// Used for multi-line structures where context (placeholder:, description:) is on a previous line.
+func isAdjacentLineContext(lineIndex int, lines []string, keywords []string) bool {
+	for offset := 1; offset <= 3; offset++ {
+		checkIdx := lineIndex - offset
+		if checkIdx < 0 || checkIdx >= len(lines) {
+			continue
+		}
+		lowerLine := strings.ToLower(lines[checkIdx])
+		for _, kw := range keywords {
+			if strings.Contains(lowerLine, kw) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // RedactSecrets replaces detected secrets in content with [REDACTED]
