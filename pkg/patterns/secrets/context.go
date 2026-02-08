@@ -71,8 +71,17 @@ func ShouldSkipFile(filePath string) bool {
 
 	// Swagger/OpenAPI documentation files
 	if base == "swagger.yml" || base == "swagger.yaml" ||
-		base == "openapi.yml" || base == "openapi.yaml" {
+		base == "openapi.yml" || base == "openapi.yaml" ||
+		base == "openapi.json" || base == "swagger.json" {
 		return true
+	}
+
+	// Workflow/chatflow definition directories (Flowise, n8n exports)
+	workflowPatterns := []string{"/workflows/", "/chatflows/"}
+	for _, pattern := range workflowPatterns {
+		if strings.Contains(lower, pattern) {
+			return true
+		}
 	}
 
 	// CI/CD config files by name (passwords are pipeline defaults)
@@ -218,8 +227,9 @@ var placeholderValues = map[string]bool{
 	"testpassword":       true,
 	"mysecret":           true,
 	"mypassword":         true,
-	"not-needed":         true,
-	"nopassword":         true,
+	"not-needed":                      true,
+	"not_required_for_auto_router":    true,
+	"nopassword":                      true,
 	"passw0rd":           true,
 	"qwerty":             true,
 	"letmein":            true,
@@ -415,6 +425,40 @@ func AdjustConfidence(finding SecretFinding, lineText string, filePath string) S
 	// Environment variable reference (not actual value): os.environ, process.env, os.getenv
 	if strings.Contains(lowerLine, "os.environ") || strings.Contains(lowerLine, "process.env") ||
 		strings.Contains(lowerLine, "os.getenv") {
+		finding.Confidence *= 0.2
+	}
+
+	// HTML placeholder attributes — form placeholder text, not actual secrets
+	if strings.Contains(lowerLine, "placeholder:") || strings.Contains(lowerLine, "placeholder=") {
+		finding.Confidence *= 0.1
+	}
+
+	// Route/view name constants: variable names ending with _VIEW, _ROUTE, _PATH
+	// but NOT if the variable also contains credential keywords (key, secret, token, password)
+	if varName != "" {
+		varUpper := strings.ToUpper(varName)
+		routeSuffixes := []string{"_VIEW", "_ROUTE", "_PATH"}
+		for _, suffix := range routeSuffixes {
+			if strings.HasSuffix(varUpper, suffix) {
+				varLower := strings.ToLower(varName)
+				credWords := []string{"key", "secret", "token", "password"}
+				hasCred := false
+				for _, cw := range credWords {
+					if strings.Contains(varLower, cw) {
+						hasCred = true
+						break
+					}
+				}
+				if !hasCred {
+					finding.Confidence *= 0.1
+					return finding
+				}
+			}
+		}
+	}
+
+	// Form field definitions in JSON: "description": or "label": context
+	if strings.Contains(lowerLine, `"description":`) || strings.Contains(lowerLine, `"label":`) {
 		finding.Confidence *= 0.2
 	}
 
