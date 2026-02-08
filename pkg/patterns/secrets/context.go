@@ -26,9 +26,11 @@ func ShouldSkipFile(filePath string) bool {
 
 	// Test files by path pattern
 	testPathPatterns := []string{
-		"/tests/", "/__tests__/", "/test_", "/_test/",
+		"/test/", "/tests/", "/__tests__/", "/test_", "/_test/",
 		"/fixtures/", "/mocks/", "/testdata/", "/test-data/",
 		"/mock_", "/__mocks__/", "/__fixtures__/",
+		// Load test directories
+		"/load-tests/", "/load-test/", "/loadtests/",
 		// Benchmark & mock data (eliminates n8n mockApiData FPs)
 		"/benchmark/", "/benchmarks/", "/mock-api/", "/mappings/",
 		// Documentation example directories
@@ -462,5 +464,44 @@ func AdjustConfidence(finding SecretFinding, lineText string, filePath string) S
 		finding.Confidence *= 0.2
 	}
 
+	// CamelCase view/route/controller names in password values
+	// e.g., FORGOT_PASSWORD = 'ForgotMyPasswordView' — the VALUE looks like a class name, not a secret
+	if finding.Type == "database_password" {
+		if isCamelCaseClassName(finding.Value) {
+			finding.Confidence *= 0.05
+		}
+	}
+
 	return finding
+}
+
+// isCamelCaseClassName checks if a value looks like a CamelCase class/view name rather than a secret.
+// Examples: "ForgotMyPasswordView", "ChangePasswordController", "ResetPasswordRoute"
+func isCamelCaseClassName(value string) bool {
+	if len(value) < 8 {
+		return false
+	}
+	// Must start with uppercase letter
+	if value[0] < 'A' || value[0] > 'Z' {
+		return false
+	}
+	// Count uppercase transitions (CamelCase indicator)
+	upperCount := 0
+	for i := 1; i < len(value); i++ {
+		if value[i] >= 'A' && value[i] <= 'Z' {
+			upperCount++
+		}
+	}
+	// CamelCase names have multiple uppercase letters (at least 2 after the first)
+	if upperCount < 2 {
+		return false
+	}
+	// Must contain a known class/view suffix
+	classSuffixes := []string{"View", "Controller", "Route", "Handler", "Page", "Screen", "Dialog", "Modal", "Component", "Service", "Manager"}
+	for _, suffix := range classSuffixes {
+		if strings.HasSuffix(value, suffix) {
+			return true
+		}
+	}
+	return false
 }
