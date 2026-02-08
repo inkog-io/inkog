@@ -199,6 +199,11 @@ func DetectSecrets(filePath string, content []byte) []SecretFinding {
 			continue
 		}
 
+		// Layer 2.5: Docstring check (applies to all finding types)
+		if f.Line > 0 && isInsideDocstring(f.Line-1, lines) {
+			continue
+		}
+
 		// Layer 3: Context-aware confidence adjustment
 		lineText := ""
 		if f.Line > 0 && f.Line <= len(lines) {
@@ -275,6 +280,26 @@ func detectByRegex(content []byte) []SecretFinding {
 							continue
 						}
 
+						// Filter api_key FPs: skip public/publishable key prefixes (not secrets)
+						if patternName == "api_key" && hasPublicKeyPrefix(value) {
+							continue
+						}
+
+						// Filter api_key FPs: skip Algolia/DocSearch search-only key contexts
+						if patternName == "api_key" && isAlgoliaSearchContext(line) {
+							continue
+						}
+
+						// Filter stripe_key FPs: pk_ prefixes are publishable (public) keys, not secrets
+						if patternName == "stripe_key" && (strings.HasPrefix(value, "pk_live_") || strings.HasPrefix(value, "pk_test_")) {
+							continue
+						}
+
+						// Filter FPs: skip lines inside Python docstring blocks
+						if isInsideDocstring(lineNum, lines) {
+							continue
+						}
+
 						// Filter private_key FPs: skip if the line is a comment/docstring
 						if patternName == "private_key" && isCommentLine(line) {
 							continue
@@ -335,6 +360,72 @@ func isCommentLine(line string) bool {
 		strings.HasPrefix(trimmed, "\"\"\"") ||
 		strings.HasPrefix(trimmed, "'''") ||
 		strings.HasPrefix(trimmed, "<!--")
+}
+
+// publicKeyPrefixes are key prefixes that indicate public/publishable keys, not secrets.
+var publicKeyPrefixes = []string{
+	"phc_",              // PostHog (public analytics key)
+	"pk_live_",          // Stripe publishable key (live)
+	"pk_test_",          // Stripe publishable key (test)
+	"ALGOLIASEARCH_",    // Algolia search-only key
+	"DOCSEARCH_",        // Algolia DocSearch key
+}
+
+// hasPublicKeyPrefix returns true if the value starts with a known public key prefix.
+// These are not secrets — they are designed to be embedded in client-side code.
+func hasPublicKeyPrefix(value string) bool {
+	for _, prefix := range publicKeyPrefixes {
+		if strings.HasPrefix(value, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// isAlgoliaSearchContext returns true if the line looks like an Algolia/DocSearch config
+// where apiKey is a search-only key (not a secret).
+func isAlgoliaSearchContext(line string) bool {
+	lower := strings.ToLower(line)
+	// DocSearch/Algolia configs pair appId with apiKey
+	if (strings.Contains(lower, "appid") || strings.Contains(lower, "app_id")) &&
+		(strings.Contains(lower, "apikey") || strings.Contains(lower, "api_key")) {
+		return true
+	}
+	// Algolia search config context
+	if strings.Contains(lower, "docsearch") || strings.Contains(lower, "algolia") {
+		if strings.Contains(lower, "apikey") || strings.Contains(lower, "api_key") {
+			return true
+		}
+	}
+	return false
+}
+
+// isInsideDocstring returns true if the line at lineIndex is inside a Python docstring block.
+// It scans from the beginning of the file tracking triple-quote open/close state.
+func isInsideDocstring(lineIndex int, lines []string) bool {
+	insideDouble := false // tracking """ blocks
+	insideSingle := false // tracking ''' blocks
+
+	for i := 0; i < lineIndex; i++ {
+		if i >= len(lines) {
+			break
+		}
+		line := lines[i]
+		// Count triple quotes on this line
+		// A line can open AND close a docstring (single-line docstring like: """description""")
+		doubleCount := strings.Count(line, `"""`)
+		singleCount := strings.Count(line, `'''`)
+
+		// Each triple-quote toggles state
+		if doubleCount%2 == 1 {
+			insideDouble = !insideDouble
+		}
+		if singleCount%2 == 1 {
+			insideSingle = !insideSingle
+		}
+	}
+
+	return insideDouble || insideSingle
 }
 
 // RedactSecrets replaces detected secrets in content with [REDACTED]

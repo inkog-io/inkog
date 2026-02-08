@@ -237,12 +237,28 @@ func isNonSecretVariableName(varName string) bool {
 		"project_id", "account_id", "resource_id",
 		"spreadsheet", "document", "worksheet",
 		"model_id", "workflow_id", "node_id", "template_id",
+		// Route/view/path suffixes
+		"_view", "_route",
+		// Model name suffixes
+		"_model_id", "_model_name",
 	}
 	for _, indicator := range nonSecretIndicators {
 		if strings.HasSuffix(lower, indicator) || strings.Contains(lower, indicator) {
 			return true
 		}
 	}
+
+	// Exact name matches for common non-secret identifiers
+	exactNonSecretNames := map[string]bool{
+		"client_id":    true,
+		"app_id":       true,
+		"project_id":   true,
+		"workspace_id": true,
+	}
+	if exactNonSecretNames[lower] {
+		return true
+	}
+
 	return false
 }
 
@@ -409,6 +425,26 @@ func isLikelyNonSecret(value string, lineContext ...string) bool {
 	// n8n-style sentinel/constant values — workflow node IDs with predictable patterns
 	if strings.HasPrefix(lower, "n8n_") || strings.HasPrefix(lower, "workflow_") {
 		return true
+	}
+
+	// __n8n_ sentinel values (internal n8n markers)
+	if strings.HasPrefix(lower, "__n8n_") {
+		return true
+	}
+
+	// OAuth client IDs: start with "client_" followed by 25+ alphanumeric chars
+	// These are identifiers, not secrets
+	if strings.HasPrefix(lower, "client_") && len(value) >= 32 {
+		isAlphaNum := true
+		for _, c := range value[7:] {
+			if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-') {
+				isAlphaNum = false
+				break
+			}
+		}
+		if isAlphaNum {
+			return true
+		}
 	}
 
 	// Base64-padded content (ends with = or ==, common in config/data files)
