@@ -295,7 +295,22 @@ func detectByRegex(content []byte) []SecretFinding {
 						}
 
 						// Filter api_key FPs: skip Algolia/DocSearch search-only key contexts
+						// Single-line check first, then multi-line context (appId on different line)
 						if patternName == "api_key" && isAlgoliaSearchContext(line) {
+							continue
+						}
+						if patternName == "api_key" && isAlgoliaSearchContextMultiLine(lineNum, lines) {
+							continue
+						}
+
+						// Filter api_key FPs: skip sentinel/identifier values (not real secrets)
+						// e.g., "data-public-amplitude-api-key" (HTML attr name, not a key value)
+						if patternName == "api_key" && isSentinelOrIdentifierValue(value) {
+							continue
+						}
+
+						// Filter api_key FPs: skip pure hex values (public search keys, hashes)
+						if patternName == "api_key" && isHexOnlyValue(value) {
 							continue
 						}
 
@@ -311,6 +326,14 @@ func detectByRegex(content []byte) []SecretFinding {
 
 						// Filter private_key FPs: skip if the line is a comment/docstring
 						if patternName == "private_key" && isCommentLine(line) {
+							continue
+						}
+
+						// Filter database_password FPs: skip sentinel/identifier values
+						if patternName == "database_password" && isSentinelOrIdentifierValue(value) {
+							continue
+						}
+						if patternName == "database_password" && isHumanReadableIdentifier(value) {
 							continue
 						}
 
@@ -391,22 +414,160 @@ func hasPublicKeyPrefix(value string) bool {
 	return false
 }
 
-// isAlgoliaSearchContext returns true if the line looks like an Algolia/DocSearch config
-// where apiKey is a search-only key (not a secret).
+// isAlgoliaSearchContext returns true if the line (or surrounding lines) looks like an
+// Algolia/DocSearch config where apiKey is a search-only key (not a secret).
+// Supports multi-line detection: in JS objects, appId and apiKey are often on different lines.
 func isAlgoliaSearchContext(line string) bool {
 	lower := strings.ToLower(line)
-	// DocSearch/Algolia configs pair appId with apiKey
+	// DocSearch/Algolia configs pair appId with apiKey on the same line
 	if (strings.Contains(lower, "appid") || strings.Contains(lower, "app_id")) &&
 		(strings.Contains(lower, "apikey") || strings.Contains(lower, "api_key")) {
 		return true
 	}
-	// Algolia search config context
+	// Algolia search config context on same line
 	if strings.Contains(lower, "docsearch") || strings.Contains(lower, "algolia") {
 		if strings.Contains(lower, "apikey") || strings.Contains(lower, "api_key") {
 			return true
 		}
 	}
 	return false
+}
+
+// isAlgoliaSearchContextMultiLine checks if the apiKey line is part of an Algolia/DocSearch
+// config by examining surrounding lines. In JS objects, appId and apiKey are typically
+// within 5 lines of each other.
+func isAlgoliaSearchContextMultiLine(lineIndex int, lines []string) bool {
+	// Check ±5 lines for Algolia/DocSearch indicators
+	for offset := -5; offset <= 5; offset++ {
+		checkIdx := lineIndex + offset
+		if checkIdx < 0 || checkIdx >= len(lines) || checkIdx == lineIndex {
+			continue
+		}
+		lower := strings.ToLower(lines[checkIdx])
+		// Look for Algolia/DocSearch context markers
+		if strings.Contains(lower, "algolia") || strings.Contains(lower, "docsearch") ||
+			strings.Contains(lower, "appid") || strings.Contains(lower, "app_id") ||
+			strings.Contains(lower, "indexname") || strings.Contains(lower, "index_name") {
+			// Verify this is in a search/doc context (not a generic API key)
+			if strings.Contains(lower, "algolia") || strings.Contains(lower, "docsearch") ||
+				strings.Contains(lower, "appid") || strings.Contains(lower, "indexname") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// isSentinelOrIdentifierValue checks if a matched value looks like a sentinel string,
+// identifier, or human-readable placeholder rather than a real secret.
+// Examples: "litellm_proxy_master_key", "reworkd_platform", "data-public-amplitude-api-key"
+func isSentinelOrIdentifierValue(value string) bool {
+	// HTML data attribute names: start with "data-" (these are DOM attribute names, not values)
+	if strings.HasPrefix(value, "data-") {
+		return true
+	}
+
+	// All-lowercase-with-underscores/hyphens that look like identifiers (no entropy)
+	// Real secrets have mixed case, digits, special chars. Pure identifiers don't.
+	if isHumanReadableIdentifier(value) {
+		return true
+	}
+
+	return false
+}
+
+// isHumanReadableIdentifier checks if a value looks like a human-readable identifier
+// (package name, service name, placeholder alias) rather than a real secret.
+// Returns true for values like "litellm_proxy_master_key", "reworkd_platform".
+// Returns false for secret-like values like "sk_live_abcdef1234567890abcd".
+func isHumanReadableIdentifier(value string) bool {
+	if len(value) < 8 {
+		return false
+	}
+
+	// Must be all lowercase letters, digits, underscores, and hyphens
+	hasLetter := false
+	hasSeparator := false
+	for _, c := range value {
+		if c >= 'a' && c <= 'z' {
+			hasLetter = true
+		} else if c == '_' || c == '-' {
+			hasSeparator = true
+		} else if c >= '0' && c <= '9' {
+			// digits OK
+		} else {
+			return false // uppercase, special chars → not a simple identifier
+		}
+	}
+
+	// Must have both letters and separators (to be a compound identifier)
+	if !hasLetter || !hasSeparator {
+		return false
+	}
+
+	// Must have at least 2 word segments separated by _ or -
+	segments := strings.FieldsFunc(value, func(c rune) bool {
+		return c == '_' || c == '-'
+	})
+	if len(segments) < 2 {
+		return false
+	}
+
+	// All segments must be readable words (not random-looking)
+	for _, seg := range segments {
+		if len(seg) < 2 {
+			return false // single-char segments suggest random data
+		}
+		// If any segment is long (>10 chars) and contains mixed letters+digits,
+		// it's likely a random token, not a human-readable word.
+		if len(seg) > 10 && containsMixedAlphaDigit(seg) {
+			return false
+		}
+	}
+
+	// Known secret key prefixes — never treat as identifiers
+	secretPrefixes := []string{"sk_", "pk_", "ghp_", "gho_", "xoxb", "xoxp", "akia"}
+	lowerVal := strings.ToLower(value)
+	for _, prefix := range secretPrefixes {
+		if strings.HasPrefix(lowerVal, prefix) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// containsMixedAlphaDigit checks if a string contains both letters and digits.
+func containsMixedAlphaDigit(s string) bool {
+	hasLetter := false
+	hasDigit := false
+	for _, c := range s {
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') {
+			hasLetter = true
+		}
+		if c >= '0' && c <= '9' {
+			hasDigit = true
+		}
+		if hasLetter && hasDigit {
+			return true
+		}
+	}
+	return false
+}
+
+// isHexOnlyValue checks if a value is a pure hexadecimal string.
+// Pure hex strings from regex matches (like Algolia search keys) are typically
+// not secrets — they're public API keys or hashes.
+func isHexOnlyValue(value string) bool {
+	if len(value) < 20 {
+		return false
+	}
+	for _, c := range value {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return true
 }
 
 // isInsideDocstring returns true if the line at lineIndex is inside a Python docstring block.

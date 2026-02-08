@@ -50,6 +50,10 @@ func ShouldSkipFile(filePath string) bool {
 		"/terraform/", "/ansible/", "/helm/",
 		// Configuration templates
 		"/templates/",
+		// Static JS assets (bundled libraries like algolia.js with public search keys)
+		"/_static/js/", "/_static/javascript/",
+		// Documentation site directories (docusaurus, nextra, sphinx config with public widget keys)
+		"/docs/my-website/", "/docs/docs/",
 	}
 	for _, pattern := range testPathPatterns {
 		if strings.Contains(lower, pattern) {
@@ -155,6 +159,15 @@ func ShouldSkipFile(filePath string) bool {
 	envExampleFiles := []string{".env.example", ".env.template", ".env.sample", ".env.test"}
 	for _, envFile := range envExampleFiles {
 		if base == envFile {
+			return true
+		}
+	}
+
+	// Environment generator/setup scripts (default passwords for local dev)
+	envGenPatterns := []string{"envgenerator", "env_generator", "env-generator", "envsetup", "env_setup", "env-setup"}
+	baseNoExt := strings.TrimSuffix(base, filepath.Ext(base))
+	for _, pattern := range envGenPatterns {
+		if baseNoExt == pattern {
 			return true
 		}
 	}
