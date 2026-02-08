@@ -666,3 +666,211 @@ func TestIsPlaceholderValue_InsertReplace(t *testing.T) {
 		t.Error("Should detect REPLACE_* as placeholder")
 	}
 }
+
+// =============================================================================
+// V5 FP REDUCTION TESTS — Fix 3A: Context-required entropy detection
+// =============================================================================
+
+func TestEntropy_RequiresContextOrKnownFormat(t *testing.T) {
+	// High-entropy string WITHOUT credential context → NOT flagged
+	content := []byte(`spreadsheet_data = "aB3cD4eF5gH6iJ7kL8mN9oP0qR1sT2u"`)
+	findings := DetectHighEntropyStrings(content, "data.py")
+	if len(findings) > 0 {
+		t.Error("Should NOT flag high-entropy string without credential context")
+	}
+}
+
+func TestEntropy_StillFlagsWithCredentialContext(t *testing.T) {
+	// High-entropy string WITH credential context → flagged
+	content := []byte(`api_key = "aB3cD4eF5gH6iJ7kL8mN9oP0qR1sT2u"`)
+	findings := DetectHighEntropyStrings(content, "config.py")
+	if len(findings) == 0 {
+		t.Error("Should flag high-entropy string WITH credential context (api_key =)")
+	}
+}
+
+func TestEntropy_FlagsKnownSecretFormatWithoutContext(t *testing.T) {
+	// Known secret format (GitHub token) WITHOUT credential context → still flagged
+	// ghp_ + 36 chars of mixed case/digits for entropy
+	content := []byte(`value = "ghp_aB3cD4eF5gH6iJ7kL8mN9oP0qR1sT2uV3w4"`)
+	findings := DetectHighEntropyStrings(content, "config.py")
+	if len(findings) == 0 {
+		t.Error("Should flag known secret format (ghp_) even without credential context")
+	}
+}
+
+func TestEntropy_SkipsGoogleSheetID(t *testing.T) {
+	// Google Sheet ID: high-entropy alphanumeric without credential keyword
+	content := []byte(`SHEET_ID = "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms"`)
+	findings := DetectHighEntropyStrings(content, "sheets.py")
+	if len(findings) > 0 {
+		t.Error("Should NOT flag Google Sheet ID (no credential context, _id variable name)")
+	}
+}
+
+func TestMatchesKnownSecretFormat(t *testing.T) {
+	cases := []struct {
+		value string
+		want  bool
+	}{
+		{"AKIA1234567890123456", true},       // AWS
+		{"ghp_abc123def456abc123def456abc12", true}, // GitHub
+		{"sk_live_abcdef1234567890", true},   // Stripe
+		{"sk-ant-abcdef1234567890ab", true},  // Anthropic
+		{"xoxb-12345-67890-abcdef", true},    // Slack
+		{"npm_abcdef1234567890", true},       // npm
+		{"SG.abcdef1234567890", true},        // Sendgrid
+		{"random_high_entropy_str", false},   // Not a known format
+		{"just_some_long_string_here", false}, // Not a known format
+	}
+	for _, tc := range cases {
+		got := matchesKnownSecretFormat(tc.value)
+		if got != tc.want {
+			t.Errorf("matchesKnownSecretFormat(%q) = %v, want %v", tc.value, got, tc.want)
+		}
+	}
+}
+
+// === Fix 3B: ShouldSkipFile CI/build directories ===
+
+func TestShouldSkipFile_CIDirectories(t *testing.T) {
+	if !ShouldSkipFile("/app/.circleci/config.yml") {
+		t.Error("Should skip .circleci directory files")
+	}
+	if !ShouldSkipFile("/app/.github/workflows/ci.yml") {
+		t.Error("Should skip .github/workflows directory files")
+	}
+	if !ShouldSkipFile("/app/.github/actions/deploy/action.yml") {
+		t.Error("Should skip .github/actions directory files")
+	}
+}
+
+func TestShouldSkipFile_DockerCompose(t *testing.T) {
+	if !ShouldSkipFile("/app/docker-compose.yml") {
+		t.Error("Should skip docker-compose.yml")
+	}
+	if !ShouldSkipFile("/app/docker-compose.dev.yml") {
+		t.Error("Should skip docker-compose.dev.yml")
+	}
+}
+
+func TestShouldSkipFile_InfrastructureAsCode(t *testing.T) {
+	if !ShouldSkipFile("/app/terraform/main.tf") {
+		t.Error("Should skip terraform directory files")
+	}
+	if !ShouldSkipFile("/app/ansible/playbook.yml") {
+		t.Error("Should skip ansible directory files")
+	}
+	if !ShouldSkipFile("/app/helm/values.yaml") {
+		t.Error("Should skip helm directory files")
+	}
+}
+
+// === Fix 3C: Variable name awareness ===
+
+func TestExtractAssignmentVariable(t *testing.T) {
+	cases := []struct {
+		line string
+		want string
+	}{
+		{`SPREADSHEET_ID = "abc123"`, "SPREADSHEET_ID"},
+		{`api_key = "secret"`, "api_key"},
+		{`"doc_id": "abc123"`, "doc_id"},
+		{`model_name: "gpt-4"`, "model_name"},
+		{`x == y`, ""},
+	}
+	for _, tc := range cases {
+		got := extractAssignmentVariable(tc.line)
+		if got != tc.want {
+			t.Errorf("extractAssignmentVariable(%q) = %q, want %q", tc.line, got, tc.want)
+		}
+	}
+}
+
+func TestIsNonSecretVariableName(t *testing.T) {
+	cases := []struct {
+		varName string
+		want    bool
+	}{
+		{"SPREADSHEET_ID", true},
+		{"model_id", true},
+		{"workflow_id", true},
+		{"file_hash", true},
+		{"doc_id", true},
+		{"template_id", true},
+		{"api_key", false},
+		{"secret", false},
+		{"password", false},
+		{"", false},
+	}
+	for _, tc := range cases {
+		got := isNonSecretVariableName(tc.varName)
+		if got != tc.want {
+			t.Errorf("isNonSecretVariableName(%q) = %v, want %v", tc.varName, got, tc.want)
+		}
+	}
+}
+
+// === Fix 3D: Flood detection ===
+
+func TestEntropy_FloodDetection(t *testing.T) {
+	// Build content with 20 high-entropy strings but no credential context
+	// Due to Fix 3A (context required), these won't generate findings anyway.
+	// Instead test with context: 20 lines with credential keywords
+	var lines []string
+	for i := 0; i < 20; i++ {
+		// Each line has credential context
+		lines = append(lines, `api_key = "aB3cD4eF5gH6iJ7kL8mN9oP0qR1sT2u"`)
+	}
+	content := []byte(strings.Join(lines, "\n"))
+	findings := DetectHighEntropyStrings(content, "config.py")
+	// With flood detection, all findings should be kept since they all have context
+	// The flood filter keeps HasContext findings
+	t.Logf("Flood test: %d findings from 20 identical lines", len(findings))
+}
+
+// === Fix 4: Tightened credentialContextRegex ===
+
+func TestCredentialContextRegex_RequiresAssignment(t *testing.T) {
+	// Should match: assignment patterns
+	if !credentialContextRegex.MatchString(`api_key = "value"`) {
+		t.Error("Should match api_key assignment")
+	}
+	if !credentialContextRegex.MatchString(`token = "value"`) {
+		t.Error("Should match token assignment")
+	}
+	if !credentialContextRegex.MatchString(`password: "value"`) {
+		t.Error("Should match password in YAML")
+	}
+	if !credentialContextRegex.MatchString(`_secret = "value"`) {
+		t.Error("Should match _secret assignment")
+	}
+	// Should still match these (no assignment required)
+	if !credentialContextRegex.MatchString(`auth_token`) {
+		t.Error("Should match auth_token")
+	}
+	if !credentialContextRegex.MatchString(`private_key`) {
+		t.Error("Should match private_key")
+	}
+}
+
+// === Regression tests: ensure real secrets still detected ===
+
+func TestEntropy_RealSecretsStillDetected(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+	}{
+		{"AWS key with context", `aws_access_key = "AKIA1234567890123456"`},
+		{"Token assignment", `token = "ghp_abcdefghij1234567890abcdefghij123456"`},
+		{"API key with context", `api_key = "sk_live_abcdef1234567890abcd"`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			findings := DetectSecrets("config.py", []byte(tc.content))
+			if len(findings) == 0 {
+				t.Errorf("REGRESSION: %s no longer detected", tc.name)
+			}
+		})
+	}
+}

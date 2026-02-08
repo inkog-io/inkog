@@ -39,6 +39,15 @@ func ShouldSkipFile(filePath string) bool {
 		"/playwright/", "/e2e/", "/cypress/",
 		// Examples dirs (for secret reporting only — redaction still happens)
 		"/examples/",
+		// CI/CD configuration (passwords are pipeline defaults, not real secrets)
+		"/.circleci/", "/.github/workflows/", "/.github/actions/",
+		"/.gitlab-ci/", "/.buildkite/", "/.travis/",
+		// Docker compose files (default passwords for local dev)
+		"/docker/",
+		// Infrastructure as Code (default passwords in templates)
+		"/terraform/", "/ansible/", "/helm/",
+		// Configuration templates
+		"/templates/",
 	}
 	for _, pattern := range testPathPatterns {
 		if strings.Contains(lower, pattern) {
@@ -64,6 +73,20 @@ func ShouldSkipFile(filePath string) bool {
 	if base == "swagger.yml" || base == "swagger.yaml" ||
 		base == "openapi.yml" || base == "openapi.yaml" {
 		return true
+	}
+
+	// CI/CD config files by name (passwords are pipeline defaults)
+	ciFiles := []string{
+		"docker-compose.yml", "docker-compose.yaml",
+		"docker-compose.dev.yml", "docker-compose.test.yml",
+		"docker-compose.override.yml",
+		".travis.yml", "appveyor.yml",
+		"cloudbuild.yaml", "buildspec.yml",
+	}
+	for _, ciFile := range ciFiles {
+		if base == ciFile {
+			return true
+		}
 	}
 
 	// Internationalization/locale data directories

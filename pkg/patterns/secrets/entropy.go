@@ -18,9 +18,9 @@ const (
 // stringLiteralRegex matches quoted string literals
 var stringLiteralRegex = regexp.MustCompile(`["']([a-zA-Z0-9+/=_\-]{16,256})["']`)
 
-// credentialContextRegex matches variable/key names suggesting credentials.
-// Requires more specific patterns than bare "key" to avoid matching any dict key reference.
-var credentialContextRegex = regexp.MustCompile(`(?i)(_key\b|api[_-]?key|token|secret|password|passwd|pwd|auth[_-]?|credential|private[_-]?key|signing[_-]?key|access[_-]?key)`)
+// credentialContextRegex matches variable/key names suggesting credentials in assignment context.
+// Requires assignment operator (= or :) after keyword to ensure we match assignments, not prose.
+var credentialContextRegex = regexp.MustCompile(`(?i)(api[_-]?key\s*[=:]|_key\s*[=:]|token\s*[=:]|_token\s*[=:]|secret\s*[=:]|_secret\s*[=:]|password\s*[=:]|passwd\s*[=:]|pwd\s*[=:]|auth[_-]?token|credential|private[_-]?key|signing[_-]?key|access[_-]?key)`)
 
 // ShannonEntropy calculates the Shannon entropy of a string
 // Returns bits per character (0-8 for byte data)
@@ -101,8 +101,24 @@ func DetectHighEntropyStrings(content []byte, filePath string) []EntropyFinding 
 				continue
 			}
 
+			// Fix 3C: Skip if variable name suggests non-secret (IDs, hashes, models)
+			varName := extractAssignmentVariable(line)
+			if isNonSecretVariableName(varName) {
+				continue
+			}
+
 			// Check for context (nearby credential keywords)
 			hasContext := credentialContextRegex.MatchString(line)
+
+			// Fix 3A: Require credential context for entropy-only findings.
+			// Without a nearby keyword (token, key, secret, password), entropy alone
+			// generates too many FPs (Google IDs, UUIDs, model names, hashes).
+			if !hasContext {
+				// No credential keyword nearby — only flag if value matches known secret format
+				if !matchesKnownSecretFormat(value) {
+					continue
+				}
+			}
 
 			// Adjust confidence based on context
 			confidence := float32(EntropyConfidence)
@@ -124,7 +140,110 @@ func DetectHighEntropyStrings(content []byte, filePath string) []EntropyFinding 
 		}
 	}
 
+	// Fix 3D: File-level entropy flood detection.
+	// If a file has 15+ entropy findings, it's likely documentation/config, not secrets.
+	// Only keep findings with credential context.
+	if len(findings) > 15 {
+		var filtered []EntropyFinding
+		for _, f := range findings {
+			if f.HasContext {
+				filtered = append(filtered, f)
+			}
+		}
+		findings = filtered
+	}
+
 	return findings
+}
+
+// matchesKnownSecretFormat checks if a high-entropy string matches known secret prefixes/formats.
+// This allows flagging secrets even without credential context keywords nearby.
+func matchesKnownSecretFormat(value string) bool {
+	// AWS Access Key (AKIA...)
+	if strings.HasPrefix(value, "AKIA") && len(value) == 20 {
+		return true
+	}
+	// GitHub tokens (ghp_, gho_, ghs_, ghr_, github_pat_)
+	if strings.HasPrefix(value, "ghp_") || strings.HasPrefix(value, "gho_") ||
+		strings.HasPrefix(value, "ghs_") || strings.HasPrefix(value, "ghr_") ||
+		strings.HasPrefix(value, "github_pat_") {
+		return true
+	}
+	// Stripe keys (sk_live_, sk_test_, pk_live_, pk_test_)
+	if strings.HasPrefix(value, "sk_live_") || strings.HasPrefix(value, "sk_test_") ||
+		strings.HasPrefix(value, "pk_live_") || strings.HasPrefix(value, "pk_test_") {
+		return true
+	}
+	// OpenAI keys (sk-...)
+	if strings.HasPrefix(value, "sk-") && len(value) > 20 {
+		return true
+	}
+	// Slack tokens (xoxb-, xoxp-)
+	if strings.HasPrefix(value, "xoxb-") || strings.HasPrefix(value, "xoxp-") {
+		return true
+	}
+	// Anthropic keys (sk-ant-)
+	if strings.HasPrefix(value, "sk-ant-") {
+		return true
+	}
+	// npm tokens (npm_)
+	if strings.HasPrefix(value, "npm_") {
+		return true
+	}
+	// Sendgrid (SG.)
+	if strings.HasPrefix(value, "SG.") {
+		return true
+	}
+	// Twilio (SK + 32 hex chars)
+	if strings.HasPrefix(value, "SK") && len(value) == 34 && isHexString(value[2:]) {
+		return true
+	}
+	return false
+}
+
+// extractAssignmentVariable extracts the variable/key name from an assignment line.
+// Handles: VAR_NAME = "value", var_name: "value", "var_name": "value"
+func extractAssignmentVariable(line string) string {
+	trimmed := strings.TrimSpace(line)
+	// Python/Go assignment: var = "value"
+	if eqIdx := strings.Index(trimmed, "="); eqIdx > 0 {
+		// Skip == comparison
+		if eqIdx+1 < len(trimmed) && trimmed[eqIdx+1] == '=' {
+			return ""
+		}
+		return strings.TrimSpace(trimmed[:eqIdx])
+	}
+	// YAML/JSON key: "var_name": "value" or var_name: "value"
+	if colonIdx := strings.Index(trimmed, ":"); colonIdx > 0 {
+		key := strings.TrimSpace(trimmed[:colonIdx])
+		return strings.Trim(key, "\"'")
+	}
+	return ""
+}
+
+// isNonSecretVariableName checks if a variable name indicates a non-secret value.
+// IDs, hashes, models, endpoints, etc. are not secrets even if high-entropy.
+func isNonSecretVariableName(varName string) bool {
+	if varName == "" {
+		return false
+	}
+	lower := strings.ToLower(varName)
+	nonSecretIndicators := []string{
+		"_id", "_ids", "_hash", "_checksum", "_digest",
+		"_uuid", "_guid", "_model", "_version",
+		"_endpoint", "_url", "_uri", "_path", "_dir",
+		"_name", "_label", "_title", "_description",
+		"sheet_id", "doc_id", "drive_id", "file_id",
+		"project_id", "account_id", "resource_id",
+		"spreadsheet", "document", "worksheet",
+		"model_id", "workflow_id", "node_id", "template_id",
+	}
+	for _, indicator := range nonSecretIndicators {
+		if strings.HasSuffix(lower, indicator) || strings.Contains(lower, indicator) {
+			return true
+		}
+	}
+	return false
 }
 
 // looksLikeCredential checks if a string has characteristics of a credential
