@@ -237,6 +237,8 @@ type ScanRequest struct {
 	LocalSecrets      int    `json:"local_secrets_found"`   // Count of secrets detected
 	RedactedFileCount int    `json:"redacted_file_count"`   // How many files were redacted
 	ScanPolicy        string `json:"scan_policy,omitempty"` // Policy: low-noise, balanced, comprehensive, governance, eu-ai-act
+	AgentName         string `json:"agent_name,omitempty"`  // Agent name derived from source path
+	AgentPath         string `json:"agent_path,omitempty"`  // Original scanned path
 	// File content is sent as multipart form (binary zip)
 }
 
