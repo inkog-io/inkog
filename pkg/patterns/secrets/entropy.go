@@ -255,11 +255,7 @@ func isNonSecretVariableName(varName string) bool {
 		"project_id":   true,
 		"workspace_id": true,
 	}
-	if exactNonSecretNames[lower] {
-		return true
-	}
-
-	return false
+	return exactNonSecretNames[lower]
 }
 
 // looksLikeCredential checks if a string has characteristics of a credential
