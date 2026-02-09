@@ -54,6 +54,12 @@ func ShouldSkipFile(filePath string) bool {
 		"/_static/js/", "/_static/javascript/",
 		// Documentation site directories (docusaurus, nextra, sphinx config with public widget keys)
 		"/docs/my-website/", "/docs/docs/",
+		// Cookbook/tutorial/sample directories (documentation code, not production)
+		"/cookbook/", "/cookbooks/", "/recipes/",
+		"/samples/", "/sample_data/", "/sample/",
+		"/tutorials/", "/tutorial/",
+		"/guides/", "/guide/",
+		"/demos/",
 	}
 	for _, pattern := range testPathPatterns {
 		if strings.Contains(lower, pattern) {
