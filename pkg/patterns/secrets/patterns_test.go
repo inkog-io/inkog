@@ -961,3 +961,60 @@ func TestIsPlaceholderValue_DoesNotBlockRealSecrets(t *testing.T) {
 		t.Error("Real AWS key should NOT be placeholder")
 	}
 }
+
+// =============================================================================
+// V11 TESTS: PEM Parsing Constant Detection
+// =============================================================================
+
+func TestIsPEMParsingConstant_HeaderConstant(t *testing.T) {
+	if !isPEMParsingConstant(`const pemHeader = '-----BEGIN PRIVATE KEY-----'`) {
+		t.Error("Should detect PEM header constant")
+	}
+}
+
+func TestIsPEMParsingConstant_UpperCaseVar(t *testing.T) {
+	if !isPEMParsingConstant(`PEM_HEADER = "-----BEGIN PRIVATE KEY-----"`) {
+		t.Error("Should detect UPPER_CASE PEM constant")
+	}
+}
+
+func TestIsPEMParsingConstant_ReplaceCall(t *testing.T) {
+	if !isPEMParsingConstant(`key.replace("-----BEGIN PRIVATE KEY-----", "")`) {
+		t.Error("Should detect PEM header in replace() call")
+	}
+}
+
+func TestIsPEMParsingConstant_RealKey_NotFiltered(t *testing.T) {
+	// An actual private key (multi-line block) should NOT be filtered
+	if isPEMParsingConstant(`privateKey = "MIIEvQIBADANBgkqhkiG9w0BAQEFAASC..."`) {
+		t.Error("Should NOT filter actual private key data")
+	}
+}
+
+// =============================================================================
+// V11 TESTS: Default Database Password Detection
+// =============================================================================
+
+func TestIsDefaultDatabasePassword_DockerCompose(t *testing.T) {
+	if !isDefaultDatabasePassword(`postgres://postgres:postgres@langgraph-postgres:5432/postgres`) {
+		t.Error("Should detect default postgres password with Docker host")
+	}
+}
+
+func TestIsDefaultDatabasePassword_Localhost(t *testing.T) {
+	if !isDefaultDatabasePassword(`postgresql://user:password@localhost:5432/mydb`) {
+		t.Error("Should detect default password with localhost")
+	}
+}
+
+func TestIsDefaultDatabasePassword_ProductionDB_NotFiltered(t *testing.T) {
+	if isDefaultDatabasePassword(`postgres://admin:r3alS3cret@production-db:5432/app`) {
+		t.Error("Should NOT filter production database with non-default password")
+	}
+}
+
+func TestIsDefaultDatabasePassword_NoDevHost_NotFiltered(t *testing.T) {
+	if isDefaultDatabasePassword(`postgres://user:password@prod-cluster.aws.com:5432/db`) {
+		t.Error("Should NOT filter when host is not a dev/Docker host")
+	}
+}
