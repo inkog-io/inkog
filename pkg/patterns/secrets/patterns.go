@@ -329,6 +329,18 @@ func detectByRegex(content []byte) []SecretFinding {
 							continue
 						}
 
+						// Filter private_key FPs: skip PEM header/footer constants used for parsing
+						// e.g., const pemHeader = '-----BEGIN PRIVATE KEY-----'
+						if patternName == "private_key" && isPEMParsingConstant(line) {
+							continue
+						}
+
+						// Filter database_password FPs: skip default dev/Docker database passwords
+						// e.g., postgres://postgres:postgres@langgraph-postgres:5432/postgres
+						if patternName == "database_password" && isDefaultDatabasePassword(line) {
+							continue
+						}
+
 						// Filter database_password FPs: skip sentinel/identifier values
 						if patternName == "database_password" && isSentinelOrIdentifierValue(value) {
 							continue
@@ -392,6 +404,107 @@ func isCommentLine(line string) bool {
 		strings.HasPrefix(trimmed, "\"\"\"") ||
 		strings.HasPrefix(trimmed, "'''") ||
 		strings.HasPrefix(trimmed, "<!--")
+}
+
+// isPEMParsingConstant checks if a line contains a PEM header/footer constant used for
+// parsing rather than an actual private key. These constants are used in code that parses
+// PEM-encoded certificates/keys, not code that embeds actual secrets.
+// Only matches when the line has a variable assignment or function call context,
+// NOT when the PEM header appears alone (which could be an actual key file).
+func isPEMParsingConstant(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	lower := strings.ToLower(trimmed)
+
+	// Must have an assignment or function call context — a bare PEM header
+	// (e.g., "-----BEGIN RSA PRIVATE KEY-----") is a real key, not parsing code
+	hasAssignment := strings.Contains(trimmed, "=")
+	hasFunctionCall := strings.Contains(lower, "replace(") || strings.Contains(lower, "strip(") ||
+		strings.Contains(lower, "split(") || strings.Contains(lower, "remove(") ||
+		strings.Contains(lower, "index(") || strings.Contains(lower, "find(")
+	if !hasAssignment && !hasFunctionCall {
+		return false
+	}
+
+	// Check if the variable name or context indicates PEM parsing
+	// e.g., PEM_HEADER = '-----BEGIN PRIVATE KEY-----'
+	//        const pemHeader = '-----BEGIN PRIVATE KEY-----';
+	parsingIndicators := []string{
+		"header", "footer", "prefix", "suffix",
+		"marker", "delimiter", "format", "pem",
+	}
+	for _, indicator := range parsingIndicators {
+		if strings.Contains(lower, indicator) {
+			return true
+		}
+	}
+
+	// Function calls that process PEM strings (not store them)
+	if hasFunctionCall {
+		return true
+	}
+
+	// Variable name is UPPER_CASE constant (e.g., PEM_HEADER, KEY_BEGIN)
+	if eqIdx := strings.Index(trimmed, "="); eqIdx > 0 {
+		varPart := strings.TrimSpace(trimmed[:eqIdx])
+		// Remove const/let/var/export keywords
+		for _, kw := range []string{"const ", "let ", "var ", "export "} {
+			varPart = strings.TrimPrefix(varPart, kw)
+		}
+		varPart = strings.TrimSpace(varPart)
+		if len(varPart) > 3 && isAllUpperOrUnderscore(varPart) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// isAllUpperOrUnderscore returns true if the string contains only uppercase letters and underscores.
+func isAllUpperOrUnderscore(s string) bool {
+	for _, c := range s {
+		if c != '_' && (c < 'A' || c > 'Z') {
+			return false
+		}
+	}
+	return true
+}
+
+// isDefaultDatabasePassword checks if a line contains a default dev/Docker database password
+// in a connection string. These are safe to skip because they use well-known default credentials
+// against local/containerized databases, not production secrets.
+func isDefaultDatabasePassword(line string) bool {
+	lower := strings.ToLower(line)
+
+	// Default passwords in connection strings with dev/Docker hosts
+	defaultPasswords := []string{
+		"postgres", "password", "root", "admin", "test",
+		"changeme", "example", "secret", "default", "dev",
+	}
+	devHosts := []string{
+		"localhost", "127.0.0.1", "docker", "container",
+		"langgraph-", "compose", "devcontainer",
+	}
+
+	// Require both a dev host and a default password in the same line
+	hasDevHost := false
+	for _, host := range devHosts {
+		if strings.Contains(lower, host) {
+			hasDevHost = true
+			break
+		}
+	}
+	if !hasDevHost {
+		return false
+	}
+
+	// Check for default password in connection string pattern ":password@"
+	for _, pwd := range defaultPasswords {
+		if strings.Contains(lower, ":"+pwd+"@") {
+			return true
+		}
+	}
+
+	return false
 }
 
 // publicKeyPrefixes are key prefixes that indicate public/publishable keys, not secrets.
