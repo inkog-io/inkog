@@ -58,7 +58,7 @@ Comprehensive detection for:
 
 ## Supported Frameworks
 
-**Code-First:** LangChain · LangGraph · CrewAI · AutoGen · OpenAI Agents · Semantic Kernel · LlamaIndex · Haystack · DSPy · Phidata · Smolagents · PydanticAI · Google ADK
+**Code-First:** LangChain · LangGraph · CrewAI · AutoGen · OpenAI Agents · Semantic Kernel · Azure AI Foundry · LlamaIndex · Haystack · DSPy · Phidata · Smolagents · PydanticAI · Google ADK
 
 **No-Code:** n8n · Flowise · Langflow · Dify · Microsoft Copilot Studio · Salesforce Agentforce
 
