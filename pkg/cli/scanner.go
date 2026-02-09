@@ -479,6 +479,8 @@ func (hs *HybridScanner) sendToServer(redactedFiles map[string][]byte, localSecr
 		LocalSecrets:      localSecretCount,
 		RedactedFileCount: redactedFileCount,
 		ScanPolicy:        hs.Policy,
+		AgentName:         deriveAgentName(hs.SourcePath),
+		AgentPath:         hs.SourcePath,
 	}
 
 	// Create multipart request
@@ -532,6 +534,33 @@ func (hs *HybridScanner) mergeFindings(localSecrets []contract.Finding, serverFi
 }
 
 // Helper functions
+
+// deriveAgentName extracts an agent name from the source path.
+// For a file like "/path/to/customer_service_agent.py", returns "customer_service_agent".
+// For a directory like "/path/to/my-agent/", returns "my-agent".
+func deriveAgentName(sourcePath string) string {
+	if sourcePath == "" {
+		return ""
+	}
+
+	// Clean the path
+	sourcePath = filepath.Clean(sourcePath)
+
+	// Check if it's a file (has an extension)
+	base := filepath.Base(sourcePath)
+	ext := filepath.Ext(base)
+	if ext != "" {
+		// Single file: use filename without extension
+		return strings.TrimSuffix(base, ext)
+	}
+
+	// Directory: use the directory name
+	if base != "." && base != "/" {
+		return base
+	}
+
+	return ""
+}
 
 // shouldScanFile determines if a file should be scanned.
 // Uses package-level constants for easy configuration.
