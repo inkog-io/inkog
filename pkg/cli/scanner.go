@@ -120,6 +120,7 @@ type HybridScanner struct {
 	ServerURL  string
 	SourcePath string
 	Policy     string // Security policy to send to server
+	AgentName  string // Explicit agent name (overrides auto-detection from path)
 	MaxFiles   int    // Maximum files to upload (0 = default 500)
 	Verbose    bool
 	Quiet      bool // Disable spinners/colors (for JSON output or CI)
@@ -479,7 +480,7 @@ func (hs *HybridScanner) sendToServer(redactedFiles map[string][]byte, localSecr
 		LocalSecrets:      localSecretCount,
 		RedactedFileCount: redactedFileCount,
 		ScanPolicy:        hs.Policy,
-		AgentName:         deriveAgentName(hs.SourcePath),
+		AgentName:         hs.resolveAgentName(),
 		AgentPath:         hs.SourcePath,
 	}
 
@@ -534,6 +535,14 @@ func (hs *HybridScanner) mergeFindings(localSecrets []contract.Finding, serverFi
 }
 
 // Helper functions
+
+// resolveAgentName returns the explicit agent name if set, otherwise derives from path.
+func (hs *HybridScanner) resolveAgentName() string {
+	if hs.AgentName != "" {
+		return hs.AgentName
+	}
+	return deriveAgentName(hs.SourcePath)
+}
 
 // deriveAgentName extracts an agent name from the source path.
 // For a file like "/path/to/customer_service_agent.py", returns "customer_service_agent".

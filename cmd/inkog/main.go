@@ -77,6 +77,7 @@ Options:
   -output string      Output format: json, text, html, sarif (default: text)
   -policy string      Security policy (see below, default: balanced)
   -severity string    Minimum severity level: critical, high, medium, low (default: low)
+  -agent-name string  Explicit agent name (overrides auto-detection from path)
   -max-files int      Maximum files to upload (default: 500)
   -diff               Show only new findings since baseline (for CI/CD)
   -baseline string    Path to baseline file (default: .inkog-baseline.json)
@@ -216,6 +217,7 @@ func main() {
 	diffFlag := flag.Bool("diff", false, "Show only new findings since baseline")
 	baselineFlag := flag.String("baseline", ".inkog-baseline.json", "Path to baseline file")
 	updateBaselineFlag := flag.Bool("update-baseline", false, "Update baseline after scanning")
+	agentNameFlag := flag.String("agent-name", "", "Explicit agent name (overrides auto-detection from path)")
 	maxFilesFlag := flag.Int("max-files", cli.DefaultMaxFiles, "Maximum files to upload (default 500)")
 	verboseFlag := flag.Bool("verbose", false, "Enable verbose output")
 	versionFlag := flag.Bool("version", false, "Show version information")
@@ -297,6 +299,7 @@ func main() {
 	}
 
 	scanner := cli.NewHybridScanner(*pathFlag, serverURL, *policyFlag, *verboseFlag, isQuietMode)
+	scanner.AgentName = *agentNameFlag
 	scanner.MaxFiles = *maxFilesFlag
 	result, err = scanner.Scan()
 
