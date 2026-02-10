@@ -49,6 +49,10 @@ inputs:
   api-key:
     description: 'Inkog API key (required - get yours at https://app.inkog.io)'
     required: true
+  agent-name:
+    description: 'Agent name for dashboard identification (default: repository name)'
+    required: false
+    default: ''
   version:
     description: 'Inkog CLI version to use (default: latest)'
     required: false
@@ -148,6 +152,7 @@ runs:
         INKOG_POLICY: ${{ inputs.policy }}
         INKOG_SEVERITY: ${{ inputs.severity }}
         INKOG_OUTPUT: ${{ inputs.output }}
+        INKOG_AGENT_NAME: ${{ inputs.agent-name }}
         INKOG_DIFF: ${{ inputs.diff }}
         INKOG_BASELINE: ${{ inputs.baseline }}
         INKOG_UPDATE_BASELINE: ${{ inputs.update-baseline }}
@@ -157,6 +162,15 @@ runs:
         # Build command
         CMD="${{ steps.download.outputs.inkog_path }}"
         ARGS="-path $INKOG_PATH -policy $INKOG_POLICY -severity $INKOG_SEVERITY"
+
+        # Add agent name (explicit input > repository name fallback)
+        AGENT_NAME="$INKOG_AGENT_NAME"
+        if [ -z "$AGENT_NAME" ]; then
+          AGENT_NAME="${GITHUB_REPOSITORY##*/}"
+        fi
+        if [ -n "$AGENT_NAME" ]; then
+          ARGS="$ARGS -agent-name $AGENT_NAME"
+        fi
 
         # Add diff mode flags
         if [ "$INKOG_DIFF" = "true" ]; then
