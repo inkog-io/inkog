@@ -271,6 +271,76 @@ func APIKeyRequiredMessage() string {
 `
 }
 
+// AnonymousPreviewResponse mirrors the server's AnonymousScanResponse
+type AnonymousPreviewResponse struct {
+	FileName      string                `json:"file_name"`
+	TotalFindings int                   `json:"total_findings"`
+	Counts        map[string]int        `json:"counts"`  // severity -> count
+	Preview       []AnonymousFinding    `json:"preview"` // first 2 findings
+	ScanID        string                `json:"scan_id"`
+}
+
+// AnonymousFinding is a summary of a finding from the anonymous endpoint
+type AnonymousFinding struct {
+	Severity string `json:"severity"`
+	Title    string `json:"title"`
+	Line     int    `json:"line"`
+	Message  string `json:"message"`
+}
+
+// SendAnonymousScan sends a single file to the anonymous scan endpoint.
+// No API key required. Returns a preview with up to 2 findings and severity counts.
+func (c *InkogClient) SendAnonymousScan(fileName, content string) (*AnonymousPreviewResponse, error) {
+	type fileInput struct {
+		Path    string `json:"path"`
+		Content string `json:"content"`
+	}
+	type anonRequest struct {
+		Files []fileInput `json:"files"`
+	}
+
+	reqBody := anonRequest{
+		Files: []fileInput{{Path: fileName, Content: content}},
+	}
+	bodyBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", c.BaseURL+"/api/v1/scan/anonymous", bytes.NewReader(bodyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "inkog-cli/"+CLIVersion)
+	req.Header.Set("X-Inkog-Source", "cli_preview")
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		var serverErr ServerError
+		if json.Unmarshal(body, &serverErr) == nil && serverErr.Message != "" {
+			return nil, fmt.Errorf("%s", serverErr.Message)
+		}
+		return nil, fmt.Errorf("anonymous scan failed (HTTP %d)", resp.StatusCode)
+	}
+
+	var result AnonymousPreviewResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return &result, nil
+}
+
 // humanizeErrorCode converts error codes to human-readable messages
 func (c *InkogClient) humanizeErrorCode(code string) string {
 	switch code {
