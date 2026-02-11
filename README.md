@@ -18,28 +18,29 @@
 
 ---
 
-## Install (30 seconds)
+## Quick Start
+
+Scan your agent code with a single command — no install needed:
 
 ```bash
-curl -fsSL https://inkog.io/install.sh | sh
+npx -y @inkog-io/cli scan .
 ```
 
-**Other methods:**
+Or install permanently:
 
 | Method | Command |
 |--------|---------|
+| **Install script** | `curl -fsSL https://inkog.io/install.sh \| sh` |
 | **Homebrew** | `brew tap inkog-io/inkog && brew install inkog` |
 | **Go** | `go install github.com/inkog-io/inkog/cmd/inkog@latest` |
 | **Binary** | [Download from Releases](https://github.com/inkog-io/inkog/releases) |
 
-## Quick Start
-
 ```bash
-# Get your API key at https://app.inkog.io
+# Get your free API key at https://app.inkog.io
 export INKOG_API_KEY=sk_live_your_key_here
 
 # Scan your agent code
-inkog .
+inkog scan .
 ```
 
 ## What It Detects

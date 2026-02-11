@@ -2,11 +2,24 @@
 
 Complete documentation of command-line options, environment variables, and advanced usage patterns.
 
+## Quick Start
+
+```bash
+# No install needed — run directly with npx
+npx -y @inkog-io/cli scan .
+
+# Or install permanently
+curl -fsSL https://inkog.io/install.sh | sh
+inkog scan .
+```
+
+See the [README](../README.md) for all installation methods (Homebrew, Go, binary download).
+
 ## Command-Line Options
 
 ### Syntax
 ```
-inkog [OPTIONS] [PATH]
+inkog [scan] [OPTIONS] [PATH]
 ```
 
 ### Options
