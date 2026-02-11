@@ -593,6 +593,144 @@ func shouldScanFile(path string) bool {
 	return DefaultScanExtensions[ext]
 }
 
+// anonymousSupportedExtensions are the file types accepted by the anonymous scan endpoint.
+var anonymousSupportedExtensions = map[string]bool{
+	".py": true, ".js": true, ".ts": true, ".jsx": true, ".tsx": true,
+	".yaml": true, ".yml": true, ".json": true,
+}
+
+// agentImportPatterns are import strings that indicate an AI agent framework.
+var agentImportPatterns = []string{
+	"from langchain", "from langgraph", "from crewai", "from autogen",
+	"from openai", "from anthropic", "from llama_index", "from haystack",
+	"from pydantic_ai", "import langchain", "import crewai", "import openai",
+	"require(\"langchain", "require(\"openai", "from \"langchain",
+	"from \"@langchain", "from \"openai", "from \"@anthropic",
+}
+
+// PickBestAgentFile walks the source path and returns the most relevant agent file
+// for anonymous preview scanning. Returns empty path if no suitable file is found.
+// Constraint: file must be < 200KB and have an extension supported by the anonymous endpoint.
+func PickBestAgentFile(sourcePath string) (string, []byte, error) {
+	const maxFileSize = 200 * 1024 // 200KB, matching anonymous endpoint limit
+
+	type scoredFile struct {
+		path  string
+		score int
+	}
+
+	agentKeywords := []string{
+		"agent", "tool", "chain", "crew", "flow", "graph", "prompt",
+		"llm", "model", "openai", "anthropic",
+	}
+
+	var candidates []scoredFile
+
+	err := filepath.Walk(sourcePath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil // skip errors
+		}
+		if info.IsDir() {
+			base := filepath.Base(path)
+			for _, dir := range ExcludedDirectories {
+				if base == dir {
+					return filepath.SkipDir
+				}
+			}
+			return nil
+		}
+
+		// Must have a supported extension
+		ext := filepath.Ext(path)
+		if !anonymousSupportedExtensions[ext] {
+			return nil
+		}
+
+		// Must not be a blocked file
+		if BlockedFiles[filepath.Base(path)] {
+			return nil
+		}
+
+		// Must be under size limit
+		if info.Size() > maxFileSize || info.Size() == 0 {
+			return nil
+		}
+
+		// Score by relevance
+		relPath := path
+		if rel, err := filepath.Rel(sourcePath, path); err == nil {
+			relPath = rel
+		}
+		lower := strings.ToLower(relPath)
+		score := 0
+
+		for _, kw := range agentKeywords {
+			if strings.Contains(lower, kw) {
+				score += 10
+			}
+		}
+
+		// Prioritize Python and TypeScript
+		if ext == ".py" || ext == ".ts" || ext == ".js" {
+			score += 5
+		}
+
+		// Deprioritize config/data files
+		if ext == ".json" || ext == ".yaml" || ext == ".yml" {
+			score -= 2
+		}
+
+		// Prefer shallower files (root/src over deeply nested)
+		depth := strings.Count(relPath, string(filepath.Separator))
+		if depth <= 1 {
+			score += 3
+		}
+
+		candidates = append(candidates, scoredFile{path: path, score: score})
+		return nil
+	})
+	if err != nil {
+		return "", nil, err
+	}
+
+	if len(candidates) == 0 {
+		return "", nil, nil
+	}
+
+	// Sort by score descending, then path alphabetically
+	sort.Slice(candidates, func(i, j int) bool {
+		if candidates[i].score != candidates[j].score {
+			return candidates[i].score > candidates[j].score
+		}
+		return candidates[i].path < candidates[j].path
+	})
+
+	// Read the best candidate; check for agent imports to boost confidence
+	best := candidates[0]
+
+	// If the top candidate has a low score, try to find one with agent imports
+	if best.score < 10 && len(candidates) > 1 {
+		for _, c := range candidates {
+			content, err := os.ReadFile(c.path)
+			if err != nil {
+				continue
+			}
+			contentLower := strings.ToLower(string(content))
+			for _, pattern := range agentImportPatterns {
+				if strings.Contains(contentLower, pattern) {
+					return c.path, content, nil
+				}
+			}
+		}
+	}
+
+	content, err := os.ReadFile(best.path)
+	if err != nil {
+		return "", nil, err
+	}
+	return best.path, content, nil
+}
+
 // sortFindings sorts findings by severity then line number
 func sortFindings(findings []contract.Finding) {
 	// Simple bubble sort (in production, use sort.Slice)

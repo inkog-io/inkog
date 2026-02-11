@@ -249,9 +249,15 @@ func main() {
 		os.Exit(0)
 	}
 
-	// Override path from positional argument if provided
+	// Override path from positional argument if provided.
+	// Supports "inkog scan ." syntax (used by npm wrapper) and "inkog ." (legacy).
 	args := flag.Args()
-	if len(args) > 0 {
+	if len(args) > 0 && args[0] == "scan" {
+		if len(args) > 1 {
+			*pathFlag = args[1]
+		}
+		// "inkog scan" without path defaults to "." (the flag default)
+	} else if len(args) > 0 {
 		*pathFlag = args[0]
 	}
 
@@ -270,23 +276,33 @@ func main() {
 	// Determine quiet mode (disable spinners/colors for JSON output or CI environments)
 	isQuietMode := *outputFlag == "json" || os.Getenv("CI") != ""
 
-	// Check for API key and provide interactive first-run experience
+	// Resolve API key: env var > saved config > interactive flow
 	apiKey := os.Getenv("INKOG_API_KEY")
-	if apiKey == "" && !isQuietMode {
-		// Check if we're in an interactive terminal
-		if isInteractiveTerminal() {
-			apiKey = promptForAPIKey()
-			if apiKey != "" {
-				// Set for this process so the scanner can use it
-				os.Setenv("INKOG_API_KEY", apiKey)
-			}
+	if apiKey == "" {
+		apiKey = cli.GetSavedAPIKey()
+		if apiKey != "" {
+			os.Setenv("INKOG_API_KEY", apiKey)
 		}
 	}
 
-	// If still no API key in interactive mode, show friendly message and exit
-	if apiKey == "" && !isQuietMode {
-		showWelcomeMessage()
-		os.Exit(1)
+	// No API key: run anonymous preview (interactive) or show error (non-interactive)
+	if apiKey == "" {
+		if !isQuietMode && isInteractiveTerminal() {
+			apiKey = runFirstRunExperience(serverURL, *pathFlag)
+			if apiKey != "" {
+				os.Setenv("INKOG_API_KEY", apiKey)
+			}
+		}
+
+		// If still no key after interactive flow, exit
+		if apiKey == "" {
+			if isQuietMode {
+				fmt.Fprintf(os.Stderr, "Error: INKOG_API_KEY not set. Get your free key at https://app.inkog.io\n")
+			} else {
+				showWelcomeMessage()
+			}
+			os.Exit(1)
+		}
 	}
 
 	var result *cli.ScanResult
@@ -3096,43 +3112,195 @@ func isInteractiveTerminal() bool {
 	return term.IsTerminal(int(os.Stdin.Fd()))
 }
 
-// showWelcomeMessage displays a friendly welcome message for first-time users
+// showWelcomeMessage displays a friendly welcome message for first-time users (non-interactive fallback)
 func showWelcomeMessage() {
 	fmt.Println()
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Println("  Welcome to Inkog - Ship Safe Agents")
+	fmt.Println("  Welcome to Inkog - Security Scanner for AI Agents")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	fmt.Println()
-	fmt.Println("  To scan your AI agents, you'll need a free API key:")
+	fmt.Println("  Get your free API key (takes 30 seconds):")
 	fmt.Println()
-	fmt.Println("  1. Sign up at https://app.inkog.io (30 seconds)")
-	fmt.Println("  2. Go to Settings → API Keys")
+	fmt.Println("  1. Sign up at https://app.inkog.io")
+	fmt.Println("  2. Go to Settings > API Keys")
 	fmt.Println("  3. Create a new key")
 	fmt.Println()
-	fmt.Println("  Then set your key:")
+	fmt.Println("  Then run:")
 	fmt.Println()
 	fmt.Println("    export INKOG_API_KEY=sk_live_your_key_here")
-	fmt.Println("    inkog .")
-	fmt.Println()
-	fmt.Println("  Or add to ~/.bashrc or ~/.zshrc for persistence.")
+	fmt.Println("    inkog scan .")
 	fmt.Println()
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	fmt.Println()
 }
 
-// promptForAPIKey displays an interactive prompt for the API key
-func promptForAPIKey() string {
+// runFirstRunExperience handles the interactive no-key experience:
+// 1. Runs an anonymous preview scan on the best agent file
+// 2. Shows results with clear limitations
+// 3. Offers to open browser for signup or accept key input
+// Returns the API key if the user provides one, or "" to exit.
+func runFirstRunExperience(serverURL, sourcePath string) string {
 	fmt.Println()
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Println("  Inkog - Ship Safe Agents")
+	fmt.Println("  Inkog - Security Scanner for AI Agents")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	fmt.Println()
-	fmt.Println("  No API key found.")
-	fmt.Println("  Get your free key: https://app.inkog.io")
+	fmt.Println("  No API key found. Running a free preview scan...")
 	fmt.Println()
-	fmt.Print("  Enter API key (or press Enter to skip): ")
 
+	// Try to find the best agent file and run anonymous scan
+	previewShown := runAnonymousPreview(serverURL, sourcePath)
+
+	if previewShown {
+		fmt.Println()
+		fmt.Println("  ┌──────────────────────────────────────────────────┐")
+		fmt.Println("  │  Preview: 1 file scanned, up to 2 findings shown │")
+		fmt.Println("  │                                                    │")
+		fmt.Println("  │  With a free API key you get:                      │")
+		fmt.Println("  │    - Full directory scans (all files)              │")
+		fmt.Println("  │    - All findings with remediation guidance        │")
+		fmt.Println("  │    - Compliance reports (EU AI Act, OWASP)         │")
+		fmt.Println("  │    - Unlimited scans                               │")
+		fmt.Println("  └──────────────────────────────────────────────────┘")
+	} else {
+		fmt.Println("  Could not run preview scan. A free API key unlocks")
+		fmt.Println("  full directory scans, all findings, and compliance reports.")
+	}
+
+	fmt.Println()
+
+	// Conversion menu
+	return showConversionMenu()
+}
+
+// runAnonymousPreview picks the best file, hits the anonymous endpoint, and displays results.
+// Returns true if a preview was successfully displayed.
+func runAnonymousPreview(serverURL, sourcePath string) bool {
+	filePath, content, err := cli.PickBestAgentFile(sourcePath)
+	if err != nil || filePath == "" {
+		return false
+	}
+
+	// Create a minimal client for the anonymous scan
+	client := cli.NewInkogClient(serverURL, true, nil)
+
+	relPath := filePath
+	if rel, err := filepath.Rel(sourcePath, filePath); err == nil {
+		relPath = rel
+	}
+
+	fmt.Printf("  Scanning: %s\n", relPath)
+	fmt.Println()
+
+	resp, err := client.SendAnonymousScan(filepath.Base(filePath), string(content))
+	if err != nil {
+		// Silently fail — the preview is best-effort
+		return false
+	}
+
+	displayAnonymousPreview(resp)
+	return true
+}
+
+// displayAnonymousPreview renders the anonymous scan results in the terminal
+func displayAnonymousPreview(resp *cli.AnonymousPreviewResponse) {
+	// Show severity counts
+	critical := resp.Counts["critical"]
+	high := resp.Counts["high"]
+	medium := resp.Counts["medium"]
+	low := resp.Counts["low"]
+
+	if resp.TotalFindings == 0 {
+		fmt.Printf("  %s✓ No issues found in %s%s\n", colorCheck, resp.FileName, colorReset)
+		return
+	}
+
+	fmt.Printf("  Found %d issue(s) in %s:\n", resp.TotalFindings, resp.FileName)
+
+	if critical > 0 {
+		fmt.Printf("    %s● %d Critical%s", colorCritical, critical, colorReset)
+	}
+	if high > 0 {
+		fmt.Printf("    %s● %d High%s", colorHigh, high, colorReset)
+	}
+	if medium > 0 {
+		fmt.Printf("    %s● %d Medium%s", colorMedium, medium, colorReset)
+	}
+	if low > 0 {
+		fmt.Printf("    %s● %d Low%s", colorLow, low, colorReset)
+	}
+	fmt.Println()
+
+	// Show preview findings
+	if len(resp.Preview) > 0 {
+		fmt.Println()
+		for _, f := range resp.Preview {
+			sevColor := colorGray
+			switch strings.ToUpper(f.Severity) {
+			case "CRITICAL":
+				sevColor = colorCritical
+			case "HIGH":
+				sevColor = colorHigh
+			case "MEDIUM":
+				sevColor = colorMedium
+			case "LOW":
+				sevColor = colorLow
+			}
+			fmt.Printf("    %s[%s]%s %s (line %d)\n", sevColor, strings.ToUpper(f.Severity), colorReset, f.Title, f.Line)
+			if f.Message != "" {
+				fmt.Printf("           %s\n", f.Message)
+			}
+		}
+		if resp.TotalFindings > len(resp.Preview) {
+			fmt.Printf("\n    ... and %d more finding(s)\n", resp.TotalFindings-len(resp.Preview))
+		}
+	}
+}
+
+// showConversionMenu displays options and returns an API key or empty string
+func showConversionMenu() string {
 	reader := bufio.NewReader(os.Stdin)
+
+	fmt.Println("  What would you like to do?")
+	fmt.Println()
+	fmt.Println("    [1] Get free API key (opens browser, takes 30 seconds)")
+	fmt.Println("    [2] Enter existing API key")
+	fmt.Println("    [3] Exit")
+	fmt.Println()
+	fmt.Print("  Choice [1/2/3]: ")
+
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		return ""
+	}
+	choice := strings.TrimSpace(input)
+
+	switch choice {
+	case "1":
+		// Open browser to sign up
+		fmt.Println()
+		fmt.Println("  Opening browser...")
+		if err := cli.OpenBrowser("https://app.inkog.io/sign-up?source=cli"); err != nil {
+			fmt.Println("  Could not open browser. Visit: https://app.inkog.io/sign-up")
+		}
+		fmt.Println()
+		fmt.Println("  After signing up, go to Settings > API Keys and create a key.")
+		fmt.Println()
+		fmt.Print("  Paste your API key here: ")
+		return readAndValidateKey(reader)
+
+	case "2":
+		fmt.Println()
+		fmt.Print("  Enter API key: ")
+		return readAndValidateKey(reader)
+
+	default:
+		return ""
+	}
+}
+
+// readAndValidateKey reads a key from the reader, validates it, and saves to config
+func readAndValidateKey(reader *bufio.Reader) string {
 	input, err := reader.ReadString('\n')
 	if err != nil {
 		return ""
@@ -3143,18 +3311,22 @@ func promptForAPIKey() string {
 		return ""
 	}
 
-	// Basic validation
 	if !strings.HasPrefix(apiKey, "sk_") {
 		fmt.Println()
-		fmt.Println("  ⚠️  That doesn't look like an Inkog API key.")
-		fmt.Println("     Keys start with 'sk_live_' or 'sk_test_'.")
-		fmt.Println()
+		fmt.Println("  That doesn't look like an Inkog API key.")
+		fmt.Println("  Keys start with 'sk_live_' or 'sk_test_'.")
 		return ""
 	}
 
-	fmt.Println()
-	fmt.Println("  ✓ API key accepted!")
-	fmt.Println("  Tip: Set INKOG_API_KEY in your shell to avoid this prompt.")
+	// Save to config for future sessions
+	if err := cli.SaveAPIKey(apiKey); err != nil {
+		// Non-fatal: config save failed, but key still works for this session
+		fmt.Fprintf(os.Stderr, "  Note: Could not save key to config (%v)\n", err)
+	} else {
+		fmt.Println()
+		fmt.Println("  ✓ API key saved to ~/.inkog/config.json")
+		fmt.Println("    You won't need to enter it again.")
+	}
 	fmt.Println()
 
 	return apiKey
