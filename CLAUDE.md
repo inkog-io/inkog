@@ -62,7 +62,7 @@ User's Machine          Inkog Cloud (Fly.io)
                         JSON Response (Stdout)
 ```
 
-**Key Principle:** The CLI is stateless. It sends redacted code, receives findings, and returns. No persistent state.
+**Key Principle:** The CLI sends redacted code, receives findings, and returns. The only persistent state is an optional API key saved to `~/.inkog/config.json`.
 
 ## Project Structure
 
@@ -238,14 +238,17 @@ go run cmd/server/main.go
 
 ### Distribution Channels
 ```bash
+# npx (no install needed, downloads binary on first run)
+npx -y @inkog-io/cli scan .
+
+# Install script (macOS, Linux, WSL)
+curl -fsSL https://inkog.io/install.sh | sh
+
 # Homebrew (tap setup)
 brew install inkog-io/inkog/inkog
 
 # Docker (from GitHub Container Registry)
 docker run -v $(pwd):/app ghcr.io/inkog-io/inkog:latest /app
-
-# Direct binary download
-curl -L https://releases.inkog.io/inkog-latest-darwin | tar xz
 
 # GitHub Releases
 https://github.com/inkog-io/inkog/releases
@@ -364,7 +367,7 @@ inkog -path /path/to/code -severity critical
 inkog -version
 ```
 
-**Note:** This is a **dumb client**. It has no state, no configuration file, no cache. Every invocation is stateless.
+**Note:** This is a **dumb client**. API keys can be saved to `~/.inkog/config.json` for convenience, but every scan invocation is otherwise stateless.
 
 ## v1.0.0 Release Status
 
