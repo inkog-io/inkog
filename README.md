@@ -3,8 +3,8 @@
 </p>
 
 <p align="center">
-  <strong>Static security scanner for AI agents</strong><br>
-  <em>Catch infinite loops, token bombing, and prompt injection before deployment</em>
+  <strong>The pre-flight check for AI agents</strong><br>
+  <em>Find logic flaws like infinite loops, prompt injection risks, and missing guardrails—before you ship</em>
 </p>
 
 <p align="center">
@@ -43,16 +43,16 @@ export INKOG_API_KEY=sk_live_your_key_here
 inkog scan .
 ```
 
-## What It Detects
+## What It Finds
 
-Comprehensive detection for:
+Static analysis across multiple categories:
 
-- **OWASP LLM Top 10** — Prompt injection, insecure output handling, and more
-- **OWASP Agentic Security** — Tool misuse, identity spoofing, resource overload
-- **EU AI Act** — Article 12, 14, 15 compliance checks
-- **Governance Violations** — AGENTS.md manifest validation
+- **Logic Flaws** — Infinite loops, recursion risks, missing exit conditions
+- **Security Risks** — Prompt injection paths, unconstrained tools, data leakage
+- **Compliance** — EU AI Act (Article 12, 14, 15), OWASP LLM Top 10
+- **Governance** — AGENTS.md manifest validation
 
-[View vulnerability patterns →](https://docs.inkog.io/vulnerabilities)
+[View detection patterns →](https://docs.inkog.io/vulnerabilities)
 
 <img width="2446" height="1316" alt="image" src="https://github.com/user-attachments/assets/fb7c1429-6392-447c-9c1e-612d09c0b58e" />
 
@@ -76,7 +76,7 @@ Comprehensive detection for:
 
 ## Policies
 
-Filter findings by security policy:
+Filter findings by policy:
 
 ```bash
 # Low noise - only proven vulnerabilities
@@ -99,16 +99,16 @@ Native integration for AI coding assistants. Scan agent code directly from Claud
 npx -y @inkog-io/mcp
 ```
 
-**7 Security Tools:**
-- `inkog-scan` - Vulnerability scanning
-- `inkog-explain` - Remediation guidance
+**7 Analysis Tools:**
+- `inkog-scan` - Static analysis for logic flaws and security risks
+- `inkog-explain` - Remediation guidance for findings
 - `inkog-governance` - AGENTS.md verification
 - `inkog-compliance` - EU AI Act, NIST, OWASP reports
 - `inkog-mlbom` - ML Bill of Materials
-- `inkog-mcp-audit` - **First tool to audit MCP servers** for security before installation
-- `inkog-a2a-audit` - **Multi-agent security** - Detect infinite delegation loops, privilege escalation in CrewAI, Swarm, LangGraph
+- `inkog-mcp-audit` - **First tool to audit MCP servers** before installation
+- `inkog-a2a-audit` - **Multi-agent analysis** - Detect infinite delegation loops, privilege escalation in CrewAI, Swarm, LangGraph
 
-> **Multi-Agent Security (A2A):** For topology analysis and agent delegation auditing, use the MCP server integration. Ask your AI assistant: *"Audit my CrewAI agents for security issues"* or *"How many agents are in my LangGraph workflow?"*
+> **Multi-Agent Analysis (A2A):** For topology analysis and agent delegation auditing, use the MCP server integration. Ask your AI assistant: *"Audit my CrewAI agents for issues"* or *"How many agents are in my LangGraph workflow?"*
 
 [MCP Integration Docs →](https://docs.inkog.io/integrations/mcp) | [A2A Security Tutorial →](https://docs.inkog.io/tutorials/securing-multi-agent)
 
