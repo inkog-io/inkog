@@ -310,7 +310,7 @@ func main() {
 
 	// Hybrid mode: local secrets detection + server analysis
 	if *verboseFlag && !isQuietMode {
-		fmt.Println("🔐 Inkog Security Scanner")
+		fmt.Println("🔐 Inkog")
 		fmt.Printf("📍 Scanning: %s\n", *pathFlag)
 	}
 
@@ -3116,7 +3116,7 @@ func isInteractiveTerminal() bool {
 func showWelcomeMessage() {
 	fmt.Println()
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Println("  Welcome to Inkog - Security Scanner for AI Agents")
+	fmt.Println("  Welcome to Inkog - The Pre-Flight Check for AI Agents")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	fmt.Println()
 	fmt.Println("  Get your free API key (takes 30 seconds):")
@@ -3142,7 +3142,7 @@ func showWelcomeMessage() {
 func runFirstRunExperience(serverURL, sourcePath string) string {
 	fmt.Println()
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Println("  Inkog - Security Scanner for AI Agents")
+	fmt.Println("  Inkog - The Pre-Flight Check for AI Agents")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	fmt.Println()
 	fmt.Println("  No API key found. Running a free preview scan...")

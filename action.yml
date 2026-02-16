@@ -1,5 +1,5 @@
-name: 'Inkog - AI Agent Security Scanner'
-description: 'Scan AI agents for security vulnerabilities, compliance gaps, and governance issues. Ship safe agents.'
+name: 'Inkog - AI Agent Pre-Flight Check'
+description: 'Pre-flight check for AI agents. Find logic flaws, security risks, and compliance gaps before deployment.'
 author: 'Inkog'
 branding:
   icon: 'shield'
