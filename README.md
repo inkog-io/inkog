@@ -1,26 +1,45 @@
 <p align="center">
-  <img src="logo.png" width="340" alt="Inkog">
+  <img src="logo.png" width="200" alt="Inkog">
+</p>
+
+<h3 align="center">Find security flaws in AI agents.</h3>
+
+<p align="center">
+  Scan for logic bugs, prompt injection, missing guardrails, and compliance gaps — before they reach production.
 </p>
 
 <p align="center">
-  <strong>The pre-flight check for AI agents</strong><br>
-  <em>Find logic flaws like infinite loops, prompt injection risks, and missing guardrails—before you ship</em>
+  <a href="README.md">English</a> ·
+  <a href="docs/i18n/README.zh-CN.md">简体中文</a> ·
+  <a href="docs/i18n/README.ja.md">日本語</a> ·
+  <a href="docs/i18n/README.ko.md">한국어</a> ·
+  <a href="docs/i18n/README.es.md">Español</a> ·
+  <a href="docs/i18n/README.pt-BR.md">Português</a> ·
+  <a href="docs/i18n/README.de.md">Deutsch</a> ·
+  <a href="docs/i18n/README.fr.md">Français</a>
 </p>
 
 <p align="center">
+  <a href="https://github.com/inkog-io/inkog/releases"><img src="https://img.shields.io/github/v/release/inkog-io/inkog?label=release" alt="Release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License"></a>
   <a href="https://goreportcard.com/report/github.com/inkog-io/inkog"><img src="https://goreportcard.com/badge/github.com/inkog-io/inkog" alt="Go Report Card"></a>
+  <a href="https://github.com/inkog-io/inkog/actions/workflows/ci.yml"><img src="https://github.com/inkog-io/inkog/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://join.slack.com/t/inkog-io/shared_invite/zt-3jrzztm28-cXyokCXO8KjKC6nBI0l4Gw"><img src="https://img.shields.io/badge/Slack-Join%20us-4A154B?logo=slack&logoColor=white" alt="Slack"></a>
 </p>
 
 <p align="center">
-  <img src="demo.gif" width="800" alt="Inkog Demo">
+  <img src="demo.gif" width="800" alt="Inkog scanning AI agent code for vulnerabilities">
 </p>
 
 ---
 
+AI agents can loop forever, drain your API budget in minutes, execute arbitrary code from user input, or make high-stakes decisions with zero human oversight. Most of these flaws pass code review because they look like normal code — the danger is in the runtime behavior.
+
+Inkog scans your agent code statically and catches these problems before deployment. One command, works across 20+ frameworks, maps findings to EU AI Act and OWASP LLM Top 10.
+
 ## Quick Start
 
-Scan your agent code with a single command — no install needed:
+No install needed:
 
 ```bash
 npx -y @inkog-io/cli scan .
@@ -37,100 +56,81 @@ Or install permanently:
 
 ```bash
 # Get your free API key at https://app.inkog.io
-export INKOG_API_KEY=sk_live_your_key_here
+export INKOG_API_KEY=sk_live_...
 
-# Scan your agent code
-inkog scan .
+inkog .
 ```
 
-## What It Finds
+## What It Catches
 
-Static analysis across multiple categories:
+| Category | Examples | Why it matters |
+|----------|----------|----------------|
+| **Infinite loops** | Agent re-calls itself with no exit condition, LLM output fed back as input without a cap | Your agent runs forever and racks up API costs |
+| **Prompt injection** | User input flows into system prompt unsanitized, tainted data reaches tool calls | Attackers can hijack your agent's behavior |
+| **Missing guardrails** | No human-in-the-loop for destructive actions, no rate limits on LLM calls, unconstrained tool access | One bad decision and your agent goes rogue |
+| **Hardcoded secrets** | API keys, tokens, and passwords in source code (detected locally, never uploaded) | Credentials leak when you push to GitHub |
+| **Compliance gaps** | Missing human oversight (EU AI Act Article 14), no audit logging, missing authorization checks | You're legally required to have these controls by August 2026 |
 
-- **Logic Flaws** — Infinite loops, recursion risks, missing exit conditions
-- **Security Risks** — Prompt injection paths, unconstrained tools, data leakage
-- **Compliance** — EU AI Act (Article 12, 14, 15), OWASP LLM Top 10
-- **Governance** — AGENTS.md manifest validation
-
-[View detection patterns →](https://docs.inkog.io/vulnerabilities)
-
-<img width="2446" height="1316" alt="image" src="https://github.com/user-attachments/assets/fb7c1429-6392-447c-9c1e-612d09c0b58e" />
-
+[Full detection catalog →](https://docs.inkog.io/vulnerabilities)
 
 ## Supported Frameworks
 
-**Code-First:** LangChain · LangGraph · CrewAI · AutoGen · OpenAI Agents · Semantic Kernel · Azure AI Foundry · LlamaIndex · Haystack · DSPy · Phidata · Smolagents · PydanticAI · Google ADK
+**Code-first:** LangChain · LangGraph · CrewAI · AutoGen · OpenAI Agents · Semantic Kernel · Azure AI Foundry · LlamaIndex · Haystack · DSPy · Phidata · Smolagents · PydanticAI · Google ADK
 
-**No-Code:** n8n · Flowise · Langflow · Dify · Microsoft Copilot Studio · Salesforce Agentforce
+**No-code:** n8n · Flowise · Langflow · Dify · Microsoft Copilot Studio · Salesforce Agentforce
 
-## CI/CD Integration
+## GitHub Actions
 
 ```yaml
 - uses: inkog-io/inkog@v1
   with:
     api-key: ${{ secrets.INKOG_API_KEY }}
-    sarif-upload: true
+    sarif-upload: true   # Shows findings in GitHub Security tab
 ```
 
-[Full GitHub Action docs →](https://docs.inkog.io/ci-cd/github-action)
+[Full CI/CD docs →](https://docs.inkog.io/ci-cd/github-action)
 
-## Policies
-
-Filter findings by policy:
+<details>
+<summary><strong>Scan policies</strong></summary>
 
 ```bash
-# Low noise - only proven vulnerabilities
-inkog . --policy low-noise
-
-# Governance-focused (Article 14 controls)
-inkog . --policy governance
-
-# EU AI Act compliance
-inkog . --policy eu-ai-act
+inkog . --policy low-noise        # Only proven vulnerabilities
+inkog . --policy balanced          # Vulnerabilities + risk patterns (default)
+inkog . --policy comprehensive     # Everything including hardening tips
+inkog . --policy governance        # Article 14 controls, authorization, audit trails
+inkog . --policy eu-ai-act         # EU AI Act compliance report
 ```
 
-[Learn more about policies →](https://docs.inkog.io/cli/policies)
+[Policy reference →](https://docs.inkog.io/cli/policies)
 
-## MCP Server (Claude, ChatGPT, Cursor)
+</details>
 
-Native integration for AI coding assistants. Scan agent code directly from Claude, ChatGPT, or Cursor.
+## MCP Server
+
+Scan agent code directly from Claude, ChatGPT, or Cursor:
 
 ```bash
 npx -y @inkog-io/mcp
 ```
 
-**7 Analysis Tools:**
-- `inkog-scan` - Static analysis for logic flaws and security risks
-- `inkog-explain` - Remediation guidance for findings
-- `inkog-governance` - AGENTS.md verification
-- `inkog-compliance` - EU AI Act, NIST, OWASP reports
-- `inkog-mlbom` - ML Bill of Materials
-- `inkog-mcp-audit` - **First tool to audit MCP servers** before installation
-- `inkog-a2a-audit` - **Multi-agent analysis** - Detect infinite delegation loops, privilege escalation in CrewAI, Swarm, LangGraph
+7 tools including MCP server auditing and multi-agent topology analysis. [MCP docs →](https://docs.inkog.io/integrations/mcp)
 
-> **Multi-Agent Analysis (A2A):** For topology analysis and agent delegation auditing, use the MCP server integration. Ask your AI assistant: *"Audit my CrewAI agents for issues"* or *"How many agents are in my LangGraph workflow?"*
+## Community
 
-[MCP Integration Docs →](https://docs.inkog.io/integrations/mcp) | [A2A Security Tutorial →](https://docs.inkog.io/tutorials/securing-multi-agent)
+- [Documentation](https://docs.inkog.io) — CLI reference, detection patterns, integrations
+- [Slack](https://join.slack.com/t/inkog-io/shared_invite/zt-3jrzztm28-cXyokCXO8KjKC6nBI0l4Gw) — Questions, feedback, feature requests
+- [Issues](https://github.com/inkog-io/inkog/issues) — Bug reports and feature requests
+- [Contributing](CONTRIBUTING.md) — We welcome PRs
 
-## Roadmap
+## Star History
 
-| Feature | Status |
-|---------|--------|
-| IDE Extensions (VS Code) | Planned |
-| Python SDK | Planned |
-| JavaScript SDK | Planned |
-
-## Documentation
-
-- [CLI Reference](https://docs.inkog.io/cli/commands)
-- [MCP Server Integration](https://docs.inkog.io/integrations/mcp)
-- [Vulnerability Patterns](https://docs.inkog.io/vulnerabilities)
-- [GitHub Action](https://docs.inkog.io/ci-cd/github-action)
-- [AGENTS.md Governance](https://docs.inkog.io/governance/agents-md)
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md)
+<a href="https://star-history.com/#inkog-io/inkog&Date">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=inkog-io/inkog&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=inkog-io/inkog&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=inkog-io/inkog&type=Date" />
+ </picture>
+</a>
 
 ## License
 
