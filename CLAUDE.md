@@ -1,403 +1,121 @@
-# Inkog Public CLI: `inkog-io/inkog`
+# CLAUDE.md
 
-## Repository Identity
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-- **GitHub:** `github.com/inkog-io/inkog` (Public)
-- **Role:** The Official Inkog CLI - Agent Governance Verifier
-- **Status:** Production (v1.0.0+)
-- **License:** Apache 2.0
-- **Tagline:** Ship compliant agents. Every PR.
+## Overview
 
-## Vision
+Inkog CLI (`github.com/inkog-io/inkog`) is the open-source **dumb client** for the Inkog AI Agent Security Platform. It detects hardcoded secrets locally, redacts them, uploads clean code to the Inkog backend API for vulnerability analysis, and displays merged results. All detection logic lives server-side — the CLI has zero analysis intelligence.
 
-The Inkog CLI is the **primary entry point** for developers verifying AI agent governance controls. It's a **dumb client** that communicates with the Inkog backend on Fly.io. It prioritizes four pillars:
-
-1. **Governance:** Verify human oversight, authorization checks, and audit trails before deployment
-2. **User Experience:** Beautiful, fast, intuitive output
-3. **Speed:** Instant feedback. Secrets detected in <500ms locally
-4. **Privacy:** Secrets redacted *before* upload. Never send raw credentials to the server
-
-The CLI supports both **pro-code** (LangChain, CrewAI, LangGraph) and **no-code** (Microsoft Copilot Studio, Salesforce Agentforce) agent platforms.
-
-**EU AI Act Article 14 Deadline: August 2, 2026** - The CLI helps generate compliance evidence.
-
-## Architectural Constraint: Strict Isolation
-
-```
-✅ ALLOWED:
-├── Standard library (fmt, io, os, net/http)
-├── pkg/patterns/secrets (Local regex patterns)
-├── pkg/contract (Request/response types)
-└── Third-party: JSON, CLI parsing, table rendering
-
-❌ FORBIDDEN:
-├── tree-sitter imports
-├── AST engine imports
-├── Backend internal engine
-└── CGO dependencies
-```
-
-**Why:** The CLI is distribution-focused. It must remain Pure Go (CGO_ENABLED=0) for maximum portability across Linux, macOS, Windows.
-
-## Tech Stack
-
-- **Language:** Go 1.21+ (Pure Go, no CGO)
-- **Distribution:** Binary (curl install), Homebrew, Docker
-- **Dependencies:** Minimal. No tree-sitter, no heavy external libraries
-
-## Architecture: Dumb Client → Fly.io API
-
-```
-User's Machine          Inkog Cloud (Fly.io)
-┌─────────────────┐     ┌──────────────────────┐
-│  Local Scan     │────→│  REST API Server     │
-│  (Secrets)      │     │  (Pure Go, Port 8080)│
-│                 │     │                      │
-│  • Detect       │────→│  Analysis Engine     │
-│  • Redact       │     │  (Worker subprocess) │
-│  • Upload       │     │                      │
-└─────────────────┘     └──────────────────────┘
-                              ↓
-                        Structured Logs (Stderr)
-                        JSON Response (Stdout)
-```
-
-**Key Principle:** The CLI sends redacted code, receives findings, and returns. The only persistent state is an optional API key saved to `~/.inkog/config.json`.
-
-## Project Structure
-
-```
-inkog/ (inkog-io/inkog on GitHub)
-├── cmd/
-│   └── cli/              Main CLI entry point (cmd/inkog/main.go)
-├── pkg/
-│   ├── cli/              Core CLI logic
-│   │   ├── scanner.go    Hybrid scanning (local + remote)
-│   │   ├── output.go     Rich text output formatting
-│   │   └── uploader.go   Secure file upload
-│   ├── patterns/
-│   │   └── secrets/      **LOCAL ONLY** regex patterns for secrets
-│   │                     (API keys, passwords, tokens, etc.)
-│   └── contract/         Shared request/response types (from backend)
-├── docs/
-│   └── CLI_REFERENCE.md  Complete CLI documentation
-├── README.md             Public-facing documentation
-├── LICENSE               Apache 2.0
-├── go.mod
-└── CLAUDE.md             This file
-```
-
-## Development Rules
-
-### Rule 1: Strict Isolation
-- Zero imports from `inkog-backend/cmd` or `inkog-backend/pkg/ast_engine`
-- If you need something from backend, define it in `pkg/contract` and import it
-
-### Rule 2: Privacy First
-
-**Secret Redaction Pipeline:**
-
-```go
-Step 1: Walk filesystem locally
-Step 2: Detect secrets (regex) in each file
-Step 3: Redact found secrets BEFORE upload
-Step 4: Send only redacted content to server
-Step 5: Server performs logic analysis on clean code
-```
-
-**Code Example:**
-```go
-// ✅ CORRECT: Redact before upload
-secrets := DetectSecrets(filePath, content)
-redacted := RedactSecrets(content, secrets)
-uploader.SendToServer(redacted)  // secrets NOT in upload
-
-// ❌ WRONG: Sending secrets to server
-uploader.SendToServer(content)   // Could expose secrets!
-```
-
-### Rule 3: Output Quality
-
-Output must be **"Screenshot Ready"** for social media and documentation:
-
-- Use ASCII tables (not JSON in default output)
-- Rich formatting (colors, icons, box-drawing)
-- **Three-tier risk classification** (Vulnerability → Risk Pattern → Hardening)
-- Show taint source for exploitable vulnerabilities
-- Include CWE/CVSS metadata
-
-**Example (Tiered Output):**
-```
-╔══════════════════════════════════════════════════════╗
-║           🔍 AI Agent Risk Assessment                ║
-╚══════════════════════════════════════════════════════╝
-
-🔴 EXPLOITABLE VULNERABILITIES (2)
-  └─ [VULN] SQL Injection via LLM [database.py:89] - CRITICAL
-     LLM output used directly in SQL query without parameterization
-     Taint source: user_request (user input)
-  └─ [VULN] Prompt Injection [agent.py:42] - CRITICAL
-     User input flows to system prompt without sanitization
-     Taint source: customer_data (user input)
-
-🟠 RISK PATTERNS (3)
-  └─ Unbounded Loop in Agentic System [agent.py:95] - CRITICAL
-     Loop lacks termination guards (max_iterations, timeout)
-  └─ Token Bombing Attack [agent.py:156] - HIGH
-     Loop depends on LLM output but lacks termination guards
-
-🟡 HARDENING RECOMMENDATIONS (1)
-  └─ Missing Rate Limits on LLM Calls [client.py:12] - LOW
-     LLM API calls lack rate limiting
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-AI Agent Risk Assessment: 6 findings (policy: balanced)
-  ● 2 Exploitable Vulnerabilities (require immediate fix)
-  ● 3 Risk Patterns (structural issues)
-  ● 1 Hardening Recommendations (best practices)
-```
-
-**Security Policies:** Use `--policy` flag to control output noise level:
-- `--policy low-noise`: Only Tier 1 (proven vulnerabilities)
-- `--policy balanced`: Tier 1 + 2 (default)
-- `--policy comprehensive`: All tiers
-- `--policy governance`: Governance-focused (Article 14, authorization, audit trails)
-- `--policy eu-ai-act`: EU AI Act compliance (Articles 12, 14, 15)
-
-### Rule 4: Contract Alignment
-
-The CLI output must match `pkg/contract` structs exactly:
-
-```go
-type Finding struct {
-    ID         string
-    PatternID  string
-    File       string
-    Line       int
-    Column     int
-    Severity   string  // "CRITICAL", "HIGH", "MEDIUM", "LOW"
-    Confidence float32
-    CWE        string
-    Message    string
-
-    // Risk Classification (NEW)
-    Category     string // injection, resource_exhaustion, governance, etc.
-    RiskTier     string // vulnerability, risk_pattern, hardening
-    InputTainted bool   // True if user input flows to dangerous operation
-    TaintSource  string // e.g., "user_data", "customer_input"
-}
-
-// Risk Tier Constants
-const (
-    TierVulnerability = "vulnerability"  // Tier 1: Exploitable with proof
-    TierRiskPattern   = "risk_pattern"   // Tier 2: Structural risk
-    TierHardening     = "hardening"      // Tier 3: Best practice
-)
-
-// Security Policy Constants
-const (
-    PolicyLowNoise      = "low-noise"      // Only Tier 1
-    PolicyBalanced      = "balanced"       // Tier 1 + 2 (default)
-    PolicyComprehensive = "comprehensive"  // All tiers
-    PolicyGovernance    = "governance"     // Governance-focused (Article 14)
-    PolicyEUAIAct       = "eu-ai-act"      // EU AI Act compliance
-)
-```
-
-Validate every Finding before displaying. If a field is missing, don't crash—show a placeholder.
-
-## Development Workflow
-
-### Test Locally (No Server)
-```bash
-# Detects secrets locally, no server upload
-go run cmd/inkog/main.go -path ../demo_agent
-```
-
-### Build Binary
-```bash
-# Pure Go, no CGO
-CGO_ENABLED=0 go build -o inkog cmd/inkog/main.go
-```
-
-### Test Against Local Server
-```bash
-# Terminal 1: Start backend server locally
-cd ../inkog-backend
-go run cmd/server/main.go
-
-# Terminal 2: Run CLI against local server
-./inkog -path ../demo_agent -server http://localhost:8080
-```
-
-### Test Against Fly.io Production
-```bash
-# Uses default endpoint (https://api.inkog.io)
-./inkog -path ../demo_agent
-```
-
-### Distribution Channels
-```bash
-# npx (no install needed, downloads binary on first run)
-npx -y @inkog-io/cli scan .
-
-# Install script (macOS, Linux, WSL)
-curl -fsSL https://inkog.io/install.sh | sh
-
-# Homebrew (tap setup)
-brew install inkog-io/inkog/inkog
-
-# Docker (from GitHub Container Registry)
-docker run -v $(pwd):/app ghcr.io/inkog-io/inkog:latest /app
-
-# GitHub Releases
-https://github.com/inkog-io/inkog/releases
-```
-
-## Secret Patterns (pkg/patterns/secrets)
-
-These are **client-side only**. Never send raw patterns to server.
-
-Supported patterns:
-- ✅ API Keys (AWS, GitHub, OpenAI, Stripe)
-- ✅ Passwords (hardcoded in code)
-- ✅ Tokens (JWT, OAuth, bearer)
-- ✅ Database URLs (connection strings)
-- ✅ SSH Private Keys
-- ✅ Certificates (PEM format)
-
-**Adding a new pattern:**
-```go
-// patterns/secrets/newpattern.go
-var NewPatternRegex = regexp.MustCompile(`regex_here`)
-
-func DetectNewPattern(content []byte) []Finding {
-    // Detection logic
-}
-```
-
-## Hybrid Scanning Architecture
-
-```
-┌─────────────────────────────────────────────────┐
-│          CLI Hybrid Scanner Flow                 │
-├─────────────────────────────────────────────────┤
-│ 1. Scan for secrets locally (REGEX)             │
-│ 2. Redact secrets from files                    │
-│ 3. Upload REDACTED content to server            │
-│ 4. Server analyzes redacted code (AST + logic)  │
-│ 5. Merge local + remote results                 │
-│ 6. Display unified report                       │
-└─────────────────────────────────────────────────┘
-```
-
-## Error Handling
-
-Graceful degradation where possible:
-
-- Parse error on file? → Log warning, continue scanning
-- Invalid response from server? → Show error with details
-- Redaction failed? → Block upload (privacy first!)
-- Server unreachable or API error? → Fail with clear error message and signup CTA
-
-**Note:** The CLI requires server connectivity for full analysis. Local-only mode is not supported.
-
-All errors logged to stderr. Findings always logged to stdout (JSON or text).
-
-## Public vs. Private: The Dual Codebase
-
-This repository (`inkog-io/inkog`) is **100% open source** (Apache 2.0). It contains:
-- ✅ CLI logic (scanning, output, communication)
-- ✅ Client-side secret detection (local regex patterns)
-- ✅ API contract types (request/response schemas)
-
-The **core vulnerability detection logic** lives in the private `inkog-backend` repository:
-- Private: AST analysis engine, vulnerability patterns, machine learning models
-- Private: Compliance mappings, remediation guidance, pattern metadata
-
-**Key:** The CLI is a thin, dumb client. It sends redacted code to the backend API, which returns findings. The CLI never knows _how_ the backend works, only the contract.
-
-## Contributing
-
-**Before adding a feature to the CLI:**
-
-1. ✅ Does it depend on tree-sitter? → REJECT (client-only)
-2. ✅ Does it export secrets? → REJECT (privacy first)
-3. ✅ Is output "screenshot ready"? → ACCEPT
-4. ✅ Does it align with `pkg/contract`? → ACCEPT
-5. ✅ Does it maintain Pure Go (no CGO)? → ACCEPT
-
-**For backend features:** These belong in `inkog-backend` (private repo). File a GitHub issue in this repo if you have a feature request.
+**Hard constraints**: Pure Go (CGO_ENABLED=0), no tree-sitter, no backend imports. The CLI must cross-compile to darwin/linux/windows without native dependencies.
 
 ## Commands
 
 ```bash
-# Scan local directory (secrets only, no upload)
-inkog -path /path/to/code
+make build           # Build binary (CGO_ENABLED=0, version from git tags)
+make build-prod      # Stripped production binary (-ldflags="-s -w")
+make build-all       # Cross-platform builds (darwin/linux/windows, amd64/arm64)
+make test            # Run all tests: go test -v ./...
+make lint            # go vet + golangci-lint (if installed)
+make fmt             # go fmt ./...
+make install         # Install to $GOPATH/bin
 
-# Full hybrid scan with Fly.io API (default)
-inkog -path /path/to/code
-# Uses: https://api.inkog.io
+# Run a single test
+go test -v -run TestShouldScanFile_SupportedExtensions ./pkg/cli/
+go test -v -run TestDetectSecrets ./pkg/patterns/secrets/
 
-# EU AI Act compliance scan
-inkog -path /path/to/code --policy eu-ai-act
+# Run CLI locally without building
+go run cmd/inkog/main.go -path ../demo_agent
 
-# Governance-focused scan (Article 14 controls)
-inkog -path /path/to/code --policy governance
+# Test against local backend server
+INKOG_API_KEY="sk_live_..." ./inkog -path ../demo_agent -server http://localhost:8080
 
-# Full hybrid scan (explicit)
-inkog -path /path/to/code -server https://api.inkog.io
-
-# Self-hosted server
-inkog -path /path/to/code -server https://inkog.company.internal
-
-# Verbose output (see request/response details)
-inkog -path /path/to/code -verbose
-
-# Output as JSON (for CI/CD parsing)
-inkog -path /path/to/code -output json > results.json
-
-# SARIF output for GitHub Security tab
-inkog -path /path/to/code -output sarif > results.sarif
-
-# Filter by severity
-inkog -path /path/to/code -severity critical
-
-# Show version
-inkog -version
+# Test against production
+INKOG_API_KEY="sk_live_..." ./inkog -path ../demo_agent
 ```
 
-**Note:** This is a **dumb client**. API keys can be saved to `~/.inkog/config.json` for convenience, but every scan invocation is otherwise stateless.
+## Architecture
 
-## v1.0.0 Release Status
+```
+CLI Flow:
+1. Parse flags, resolve API key (env > ~/.inkog/config.json > interactive first-run)
+2. Walk filesystem → detect secrets locally (regex + Shannon entropy)
+3. Redact ALL detected secrets from file contents (privacy-first: redact even FPs)
+4. Upload redacted files as multipart form to POST /api/v1/scan
+5. Receive findings from server, merge with local secret findings
+6. Output merged results (text/json/sarif/html) to stdout, progress to stderr
+```
 
-✅ **STABLE** - Ready for production use.
+API key resolution order: `INKOG_API_KEY` env var → `~/.inkog/config.json` → interactive first-run experience (anonymous preview + key prompt). Without a key, non-interactive mode exits with error.
 
-Core features:
-- ✅ Local secret detection (pre-redaction)
-- ✅ Hybrid scanning (local secrets + remote analysis)
-- ✅ Multiple output formats (text, JSON, HTML, SARIF)
-- ✅ Structured logging (stderr)
-- ✅ API key authentication (required for all scans)
-- ✅ Clear error messages with signup CTA
-- ✅ Docker distribution
+Server URL priority: `-server` flag → `INKOG_SERVER_URL` env var → `https://api.inkog.io` default.
 
-## Future Roadmap
+## Key Files
 
-**CLI Features (This Repository):**
-- [ ] **Pre-commit hook** for local-only scanning
-- [ ] **GitHub Action** for automated PR scans
-- [ ] **SARIF output** for GitHub Security tab integration
-- [ ] **Performance:** Parallel file scanning
-- [ ] **UX:** Interactive severity filtering in terminal
+**`cmd/inkog/main.go` (3300+ lines)** — This is a monolith containing:
+- Flag parsing and `main()` (lines ~210-400)
+- All four output formatters: `outputText`, `outputJSON`, `outputSARIF`, `outputHTML`
+- Tiered display logic (`displayTierSection`, `displayTieredCodeFrame`, etc.)
+- HTML report generation with embedded CSS/JS (~1200 lines of HTML templates)
+- SARIF report builder
+- Baseline save/load and diff output
+- First-run experience: anonymous preview → conversion menu → key saving
+- Agent report grouping and framework detection
 
-**Backend Features (Private Repository):**
-- [ ] Extended language support (Go, Rust, Java)
-- [ ] Taint tracking across function boundaries
-- [ ] LLM-powered remediation suggestions
-- [ ] Custom rule engine
+**`pkg/cli/scanner.go`** — `HybridScanner`: the core scan orchestrator.
+- `Scan()` drives the 5-step pipeline (detect → redact → upload → merge → return)
+- `scanLocalSecretsAndCollectFiles()` walks the filesystem respecting gitignore, excluded dirs, blocked files, and file extensions
+- `redactSecretsFromFiles()` runs `DetectSecretsForRedaction` (unfiltered) to redact ALL potential secrets before upload
+- `truncateFileMap()` enforces max-files limit, prioritizing agent-relevant files by keyword scoring
+- `PickBestAgentFile()` selects the single best file for anonymous preview scanning
 
-**Ecosystem (Future Products):**
-- [ ] **VS Code Extension:** Real-time scanning
-- [ ] **Python/JavaScript SDK:** Programmatic API
-- [ ] **Inkog Cloud Dashboard:** Team reporting & trends
+**`pkg/cli/client.go`** — `InkogClient`: HTTP client with retry logic.
+- `SendScan()` sends multipart form to `/api/v1/scan` with exponential backoff (3 retries)
+- `SendAnonymousScan()` sends single file to `/api/v1/scan/anonymous` (no API key)
+- Handles 429/409 rate limits with `Retry-After`, 5xx with backoff, 4xx without retry
+- Auth errors return formatted signup CTA message
+
+**`pkg/contract/contract.go`** — Shared types between CLI and server.
+- `Finding` struct with risk tier, taint tracking, compliance mapping, governance fields
+- `ScanRequest`/`ScanResponse` for the API contract
+- `FilterByPolicy()` implements all 5 security policies (low-noise/balanced/comprehensive/governance/eu-ai-act)
+- `ComputeDiff()` for baseline comparison
+- `SeverityLevels` map: CRITICAL=40, HIGH=30, MEDIUM=20, LOW=10
+
+**`pkg/patterns/secrets/`** — Client-side secret detection (regex + entropy).
+- `patterns.go`: `PatternDefinitions` map with 11 pattern types (api_key, aws_access_key, private_key, stripe_key, etc.). Extensive FP filtering: env var references, public key prefixes, docstrings, Algolia search keys, human-readable identifiers, hex-only values.
+- `entropy.go`: Shannon entropy detection (threshold 4.5, 5.0 for JSON). Requires credential context keywords OR known secret format prefixes. File-level flood detection (>15 findings → keep only context-backed ones).
+- `context.go`: `ShouldSkipFile()` suppresses findings (not redaction) for test files, fixtures, docs, migrations, CI configs, lock files, etc. `IsPlaceholderValue()` filters common FP values. `AdjustConfidence()` lowers confidence for comments, notebooks, marketplace configs, field names, etc.
+
+**Two detection paths**: `DetectSecrets()` (for reporting — applies FP filtering) vs `DetectSecretsForRedaction()` (for privacy — returns ALL raw findings, no filtering). Redaction always uses the unfiltered path.
+
+**`pkg/cli/gitignore.go`** — Custom `.gitignore` parser with glob matching (supports `*`, `?`, `**`, negation `!`, directory-only `/`).
+
+**`pkg/cli/progress.go`** — Terminal spinner (briandowns/spinner) for interactive output. Writes to stderr. Disabled in quiet mode (JSON output or CI).
+
+**`pkg/cli/config.go`** — Reads/writes API key to `~/.inkog/config.json`.
+
+## Gotchas
+
+- **JSON output key**: Server findings are under `server_findings` (not `findings`) in JSON output. Top-level keys: `local_secrets`, `server_findings`, `all_findings`, `compliance_report`, `topology_map`.
+- **main.go is huge**: At 3300+ lines, `cmd/inkog/main.go` contains all output formatting, HTML templates, SARIF generation, and the first-run flow. Any output change likely requires editing this file.
+- **Two secret detection paths**: `DetectSecrets()` (filtered, for user-facing findings) and `DetectSecretsForRedaction()` (unfiltered, for privacy). Redaction MUST use the unfiltered path — otherwise secrets that look like FPs could leak to the server.
+- **File extension allow-list**: Only files matching `DefaultScanExtensions` in `scanner.go` are scanned. Adding language support requires updating this map.
+- **Max files limit**: Default 500 files (`DefaultMaxFiles`). Files are prioritized by agent-relevance keywords when truncated.
+- **Quiet mode**: Triggered by `-output json` or `CI` env var. Suppresses spinners, colors, and progress messages.
+- **Exit codes**: `0` = no findings, `1` = findings found (or regression in diff mode). Used by CI to gate PRs.
+- **Version injection**: `AppVersion`, `BuildTime`, `GitCommit` are set via `-ldflags` at build time. Without ldflags, version shows as `1.0.0-dev`.
+
+## CI
+
+GitHub Actions (`.github/workflows/ci.yml`): builds with `CGO_ENABLED=0` and runs `go test -v ./...` on Go 1.21. Lint job runs `golangci-lint`.
+
+The monorepo also has integration tests in `.github/workflows/inkog-test.yml` (in the parent) that test policy modes, SARIF output, diff mode, and vulnerable code detection against the live API.
+
+## Security Policies
+
+Policies filter findings client-side via `contract.FilterByPolicy()`:
+- `low-noise`: Only tier 1 (vulnerability)
+- `balanced` (default): Tier 1 + 2 (vulnerability + risk_pattern)
+- `comprehensive`: All tiers
+- `governance`: Only findings with governance category/compliance mapping
+- `eu-ai-act`: Governance + EU AI Act compliance mappings + high-severity findings
