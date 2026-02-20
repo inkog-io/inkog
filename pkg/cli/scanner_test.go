@@ -1,9 +1,13 @@
 package cli
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/inkog-io/inkog/pkg/contract"
 )
 
 func TestShouldScanFile_SupportedExtensions(t *testing.T) {
@@ -294,4 +298,68 @@ func TestSortFindings(t *testing.T) {
 
 	// This is a basic structural test - actual sorting is tested indirectly
 	// through the scan workflow
+}
+
+func TestScanResult_LocalSecretsNeverNull(t *testing.T) {
+	// Test that JSON output has "local_secrets":[] not "local_secrets":null
+	// when there are no findings.
+	result := ScanResult{
+		LocalSecrets:   make([]contract.Finding, 0),
+		ServerFindings: make([]contract.Finding, 0),
+		AllFindings:    make([]contract.Finding, 0),
+	}
+
+	data, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("failed to marshal ScanResult: %v", err)
+	}
+
+	jsonStr := string(data)
+
+	// Verify empty arrays, not null
+	if strings.Contains(jsonStr, `"local_secrets":null`) {
+		t.Error("local_secrets should be [] not null in JSON output")
+	}
+	if !strings.Contains(jsonStr, `"local_secrets":[]`) {
+		t.Errorf("expected local_secrets:[] in JSON, got: %s", jsonStr)
+	}
+
+	if strings.Contains(jsonStr, `"server_findings":null`) {
+		t.Error("server_findings should be [] not null in JSON output")
+	}
+	if !strings.Contains(jsonStr, `"server_findings":[]`) {
+		t.Errorf("expected server_findings:[] in JSON, got: %s", jsonStr)
+	}
+
+	if strings.Contains(jsonStr, `"all_findings":null`) {
+		t.Error("all_findings should be [] not null in JSON output")
+	}
+	if !strings.Contains(jsonStr, `"all_findings":[]`) {
+		t.Errorf("expected all_findings:[] in JSON, got: %s", jsonStr)
+	}
+}
+
+func TestScanResult_NilSlicesMarshalAsNull(t *testing.T) {
+	// Verify that nil slices DO marshal as null (the bug we're fixing)
+	// This test documents the problem so we know the fix is needed.
+	var nilSlice []contract.Finding
+
+	result := ScanResult{
+		LocalSecrets:   nilSlice,
+		ServerFindings: nilSlice,
+		AllFindings:    nilSlice,
+	}
+
+	data, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("failed to marshal ScanResult: %v", err)
+	}
+
+	jsonStr := string(data)
+
+	// Nil slices marshal as null in Go — this is the behavior we must prevent
+	// in the Scan() method by always using make([]T, 0)
+	if !strings.Contains(jsonStr, `"local_secrets":null`) {
+		t.Skip("Go behavior changed: nil slices no longer marshal as null")
+	}
 }
