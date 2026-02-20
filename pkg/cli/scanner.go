@@ -225,9 +225,18 @@ func (hs *HybridScanner) Scan() (*ScanResult, error) {
 		serverResult.FindingsCount++
 	}
 
+	// Ensure no nil slices (nil marshals to JSON null; empty slice marshals to [])
+	serverFindings := serverResult.Findings
+	if serverFindings == nil {
+		serverFindings = make([]contract.Finding, 0)
+	}
+	if allFindings == nil {
+		allFindings = make([]contract.Finding, 0)
+	}
+
 	return &ScanResult{
 		LocalSecrets:     localSecrets,
-		ServerFindings:   serverResult.Findings,
+		ServerFindings:   serverFindings,
 		AllFindings:      allFindings,
 		ComplianceReport: serverResult.ComplianceReport,
 
@@ -242,7 +251,7 @@ func (hs *HybridScanner) Scan() (*ScanResult, error) {
 
 // scanLocalSecretsAndCollectFiles detects secrets and collects all source files for server analysis
 func (hs *HybridScanner) scanLocalSecretsAndCollectFiles() ([]contract.Finding, map[string]bool, error) {
-	var localFindings []contract.Finding
+	localFindings := make([]contract.Finding, 0)
 	allFiles := make(map[string]bool)
 
 	// Load .gitignore patterns from root directory
