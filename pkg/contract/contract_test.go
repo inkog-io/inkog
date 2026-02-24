@@ -1,6 +1,9 @@
 package contract
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
 func TestFilterByPolicy(t *testing.T) {
 	findings := []Finding{
@@ -603,5 +606,169 @@ func TestTierConstants(t *testing.T) {
 	}
 	if TierHardening == "" {
 		t.Error("TierHardening should not be empty")
+	}
+}
+
+func TestFindingEnrichedFields_Serialize(t *testing.T) {
+	finding := Finding{
+		ID:               "test-enriched",
+		PatternID:        "sql_injection",
+		Pattern:          "SQL Injection",
+		Severity:         "CRITICAL",
+		DisplayTitle:     "SQL Injection Through LLM Output",
+		ShortDescription: "Unsanitized LLM output used in SQL query",
+		RemediationCode:  "cursor.execute(query, (sanitized_input,))",
+		RemediationSteps: []string{"Use parameterized queries", "Validate LLM output"},
+		ExplanationTrace: []string{
+			"User input enters via request.body at line 12",
+			"Flows through process_query() without sanitization",
+			"LLM output concatenated into SQL at line 45",
+		},
+		FixDifficulty: "medium",
+	}
+
+	data, err := json.Marshal(finding)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+
+	var decoded Finding
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	if decoded.DisplayTitle != "SQL Injection Through LLM Output" {
+		t.Errorf("DisplayTitle = %q, want %q", decoded.DisplayTitle, "SQL Injection Through LLM Output")
+	}
+	if decoded.ShortDescription != "Unsanitized LLM output used in SQL query" {
+		t.Errorf("ShortDescription = %q, want %q", decoded.ShortDescription, "Unsanitized LLM output used in SQL query")
+	}
+	if decoded.RemediationCode != "cursor.execute(query, (sanitized_input,))" {
+		t.Errorf("RemediationCode = %q", decoded.RemediationCode)
+	}
+	if len(decoded.RemediationSteps) != 2 {
+		t.Errorf("RemediationSteps length = %d, want 2", len(decoded.RemediationSteps))
+	}
+	if len(decoded.ExplanationTrace) != 3 {
+		t.Errorf("ExplanationTrace length = %d, want 3", len(decoded.ExplanationTrace))
+	}
+	if decoded.FixDifficulty != "medium" {
+		t.Errorf("FixDifficulty = %q, want %q", decoded.FixDifficulty, "medium")
+	}
+}
+
+func TestFindingEnrichedFields_BackwardCompatibility(t *testing.T) {
+	// Simulate an old server response without enriched fields
+	oldJSON := `{"id":"old-1","pattern_id":"sql_injection","pattern":"SQL Injection","severity":"HIGH","message":"SQL injection detected"}`
+
+	var finding Finding
+	if err := json.Unmarshal([]byte(oldJSON), &finding); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	// All enriched fields should be zero values
+	if finding.DisplayTitle != "" {
+		t.Errorf("DisplayTitle should be empty, got %q", finding.DisplayTitle)
+	}
+	if finding.ShortDescription != "" {
+		t.Errorf("ShortDescription should be empty, got %q", finding.ShortDescription)
+	}
+	if finding.RemediationCode != "" {
+		t.Errorf("RemediationCode should be empty, got %q", finding.RemediationCode)
+	}
+	if finding.RemediationSteps != nil {
+		t.Errorf("RemediationSteps should be nil, got %v", finding.RemediationSteps)
+	}
+	if finding.ExplanationTrace != nil {
+		t.Errorf("ExplanationTrace should be nil, got %v", finding.ExplanationTrace)
+	}
+	if finding.FixDifficulty != "" {
+		t.Errorf("FixDifficulty should be empty, got %q", finding.FixDifficulty)
+	}
+
+	// Original fields should be populated
+	if finding.ID != "old-1" {
+		t.Errorf("ID = %q, want %q", finding.ID, "old-1")
+	}
+	if finding.Message != "SQL injection detected" {
+		t.Errorf("Message = %q, want %q", finding.Message, "SQL injection detected")
+	}
+}
+
+func TestFindingEnrichedFields_OmitEmpty(t *testing.T) {
+	// A finding without enriched fields should not include them in JSON
+	finding := Finding{
+		ID:       "minimal",
+		Severity: "LOW",
+	}
+
+	data, err := json.Marshal(finding)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+
+	jsonStr := string(data)
+	for _, field := range []string{"display_title", "short_description", "remediation_code", "remediation_steps", "explanation_trace", "fix_difficulty"} {
+		if contains := json.Valid(data); contains && len(jsonStr) > 0 {
+			// Check the field is not present in the JSON
+			var m map[string]interface{}
+			json.Unmarshal(data, &m)
+			if _, exists := m[field]; exists {
+				t.Errorf("field %q should be omitted from JSON when empty", field)
+			}
+		}
+	}
+}
+
+func TestScanResultStrengths_Serialize(t *testing.T) {
+	result := ScanResult{
+		RiskScore: 42,
+		Strengths: []string{"Uses parameterized queries", "Has rate limiting"},
+	}
+
+	data, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+
+	var decoded ScanResult
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	if len(decoded.Strengths) != 2 {
+		t.Fatalf("Strengths length = %d, want 2", len(decoded.Strengths))
+	}
+	if decoded.Strengths[0] != "Uses parameterized queries" {
+		t.Errorf("Strengths[0] = %q", decoded.Strengths[0])
+	}
+	if decoded.Strengths[1] != "Has rate limiting" {
+		t.Errorf("Strengths[1] = %q", decoded.Strengths[1])
+	}
+}
+
+func TestScanResultStrengths_Nil(t *testing.T) {
+	// Strengths should be omitted from JSON when nil
+	result := ScanResult{RiskScore: 10}
+
+	data, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+
+	var m map[string]interface{}
+	json.Unmarshal(data, &m)
+	if _, exists := m["strengths"]; exists {
+		t.Error("strengths should be omitted from JSON when nil")
+	}
+
+	// Should deserialize fine from old server response without strengths
+	oldJSON := `{"risk_score":10,"findings_count":0}`
+	var decoded ScanResult
+	if err := json.Unmarshal([]byte(oldJSON), &decoded); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+	if decoded.Strengths != nil {
+		t.Errorf("Strengths should be nil, got %v", decoded.Strengths)
 	}
 }

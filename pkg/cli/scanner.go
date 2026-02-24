@@ -147,6 +147,7 @@ type ScanResult struct {
 	ArticleMapping   map[string]contract.ArticleStatus `json:"article_mapping,omitempty"`
 	FrameworkMapping map[string]contract.FrameworkStatus `json:"framework_mapping,omitempty"`
 	TopologyMap      *contract.TopologyMap             `json:"topology_map,omitempty"`
+	Strengths        []string                          `json:"strengths,omitempty"`
 }
 
 // NewHybridScanner creates a new scanner instance
@@ -246,6 +247,7 @@ func (hs *HybridScanner) Scan() (*ScanResult, error) {
 		ArticleMapping:   serverResult.ArticleMapping,
 		FrameworkMapping: serverResult.FrameworkMapping,
 		TopologyMap:      serverResult.TopologyMap,
+		Strengths:        serverResult.Strengths,
 	}, nil
 }
 
