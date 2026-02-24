@@ -457,6 +457,9 @@ func outputText(result *cli.ScanResult, minSeverity, policy string, verbose bool
 	// Display governance status (if available)
 	displayGovernanceStatus(result)
 
+	// Display strengths (if available)
+	displayStrengths(result)
+
 	return nil
 }
 
@@ -494,24 +497,47 @@ func displayTieredCodeFrame(f contract.Finding) {
 		tierIndicator = "[VULN] "
 	}
 
-	fmt.Printf("  └─ %s%s%s [%s:%d] - %s%s%s\n",
-		severityColor, tierIndicator, f.Pattern,
-		filepath.Base(f.File), f.Line,
-		severityColor, f.Severity, colorReset)
+	// Use DisplayTitle with fallback to Pattern
+	title := f.Pattern
+	if f.DisplayTitle != "" {
+		title = f.DisplayTitle
+	}
 
-	// 2. Show message
-	if f.Message != "" {
-		// Truncate long messages
-		msg := f.Message
-		if len(msg) > 70 {
-			msg = msg[:67] + "..."
+	// Show fix difficulty inline if available
+	fixTag := ""
+	if f.FixDifficulty != "" {
+		fixTag = fmt.Sprintf(" [%s fix]", f.FixDifficulty)
+	}
+
+	fmt.Printf("  └─ %s%s%s [%s:%d] - %s%s%s%s\n",
+		severityColor, tierIndicator, title,
+		filepath.Base(f.File), f.Line,
+		severityColor, f.Severity, colorReset, fixTag)
+
+	// 2. Show description (ShortDescription with fallback to Message)
+	desc := f.Message
+	if f.ShortDescription != "" {
+		desc = f.ShortDescription
+	}
+	if desc != "" {
+		// Truncate long descriptions
+		if len(desc) > 100 {
+			desc = desc[:97] + "..."
 		}
-		fmt.Printf("     %s%s%s\n", colorGray, msg, colorReset)
+		fmt.Printf("     %s%s%s\n", colorGray, desc, colorReset)
 	}
 
 	// 3. Show taint source if present (key differentiator for Tier 1)
 	if f.InputTainted && f.TaintSource != "" {
 		fmt.Printf("     %sTaint source: %s (user input)%s\n", colorCyan, f.TaintSource, colorReset)
+	}
+
+	// 4. Show explanation trace if present
+	if len(f.ExplanationTrace) > 0 {
+		fmt.Printf("     %sTrace:%s\n", colorGray, colorReset)
+		for i, step := range f.ExplanationTrace {
+			fmt.Printf("     %s%d. %s%s\n", colorGray, i+1, step, colorReset)
+		}
 	}
 }
 
@@ -614,6 +640,18 @@ func displayGovernanceStatus(result *cli.ScanResult) {
 			statusIcon = "~"
 		}
 		fmt.Printf("Compliance Status: %s%s %s%s\n", statusColor, statusIcon, result.EUAIActReadiness, colorReset)
+	}
+}
+
+// displayStrengths shows detected strengths in the codebase
+func displayStrengths(result *cli.ScanResult) {
+	if len(result.Strengths) == 0 {
+		return
+	}
+	fmt.Println()
+	fmt.Println("Strengths:")
+	for _, s := range result.Strengths {
+		fmt.Printf("  %s✓%s %s\n", colorCheck, colorReset, s)
 	}
 }
 
@@ -3346,6 +3384,15 @@ func showSuccessMessage(result *cli.ScanResult, policy string) {
 	}
 	if result.EUAIActReadiness != "" {
 		fmt.Printf("  EU AI Act Status: %s\n", result.EUAIActReadiness)
+	}
+
+	// Show strengths if available
+	if len(result.Strengths) > 0 {
+		fmt.Println()
+		fmt.Println("  Strengths:")
+		for _, s := range result.Strengths {
+			fmt.Printf("    %s✓%s %s\n", colorCheck, colorReset, s)
+		}
 	}
 
 	// Show policy used

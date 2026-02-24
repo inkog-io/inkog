@@ -95,6 +95,14 @@ type Finding struct {
 	// Governance fields (EU AI Act compliance)
 	GovernanceCategory string             `json:"governance_category,omitempty"` // "oversight", "authorization", "audit", "privacy"
 	ComplianceMapping  *ComplianceMapping `json:"compliance_mapping,omitempty"`
+
+	// Enriched display fields (from server)
+	DisplayTitle     string   `json:"display_title,omitempty"`
+	ShortDescription string   `json:"short_description,omitempty"`
+	RemediationCode  string   `json:"remediation_code,omitempty"`
+	RemediationSteps []string `json:"remediation_steps,omitempty"`
+	ExplanationTrace []string `json:"explanation_trace,omitempty"`
+	FixDifficulty    string   `json:"fix_difficulty,omitempty"`
 }
 
 // ComplianceMapping maps a finding to compliance frameworks
@@ -145,6 +153,9 @@ type ScanResult struct {
 
 	// Agent topology visualization
 	TopologyMap *TopologyMap `json:"topology_map,omitempty"` // Visual topology of agent structure
+
+	// Strengths detected in the codebase
+	Strengths []string `json:"strengths,omitempty"`
 }
 
 // ArticleStatus represents compliance status for a specific EU AI Act article
