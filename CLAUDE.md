@@ -105,9 +105,13 @@ Server URL priority: `-server` flag → `INKOG_SERVER_URL` env var → `https://
 - **Exit codes**: `0` = no findings, `1` = findings found (or regression in diff mode). Used by CI to gate PRs.
 - **Version injection**: `AppVersion`, `BuildTime`, `GitCommit` are set via `-ldflags` at build time. Without ldflags, version shows as `1.0.0-dev`.
 
+## GitHub Action
+
+`action.yml` — Composite GitHub Action (`inkog-io/inkog@v1`) for CI integration. Builds CLI from source, runs JSON + text + SARIF scans, uploads SARIF to GitHub Security tab, and posts PR comments with findings summary. Supports diff mode (only fail on regressions) and baseline management. Key inputs: `api-key` (required), `policy`, `diff`, `baseline`, `fail-on-findings`, `comment-on-pr`, `sarif-upload`.
+
 ## CI
 
-GitHub Actions (`.github/workflows/ci.yml`): builds with `CGO_ENABLED=0` and runs `go test -v ./...` on Go 1.21. Lint job runs `golangci-lint`.
+GitHub Actions (`.github/workflows/ci.yml`): builds with `CGO_ENABLED=0` and runs `go test -v ./...` on Go 1.21. Lint job runs `golangci-lint`. Release workflow (`.github/workflows/release.yml`) triggers on version tags (`v*`) and builds cross-platform binaries for GitHub Releases with checksums.
 
 The monorepo also has integration tests in `.github/workflows/inkog-test.yml` (in the parent) that test policy modes, SARIF output, diff mode, and vulnerable code detection against the live API.
 

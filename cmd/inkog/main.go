@@ -651,7 +651,7 @@ func displayStrengths(result *cli.ScanResult) {
 	fmt.Println()
 	fmt.Println("Strengths:")
 	for _, s := range result.Strengths {
-		fmt.Printf("  %s✓%s %s\n", colorCheck, colorReset, s)
+		fmt.Printf("  %s✓%s %s — %s\n", colorCheck, colorReset, s.Title, s.Message)
 	}
 }
 
@@ -3391,7 +3391,7 @@ func showSuccessMessage(result *cli.ScanResult, policy string) {
 		fmt.Println()
 		fmt.Println("  Strengths:")
 		for _, s := range result.Strengths {
-			fmt.Printf("    %s✓%s %s\n", colorCheck, colorReset, s)
+			fmt.Printf("    %s✓%s %s — %s\n", colorCheck, colorReset, s.Title, s.Message)
 		}
 	}
 

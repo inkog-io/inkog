@@ -147,7 +147,7 @@ type ScanResult struct {
 	ArticleMapping   map[string]contract.ArticleStatus `json:"article_mapping,omitempty"`
 	FrameworkMapping map[string]contract.FrameworkStatus `json:"framework_mapping,omitempty"`
 	TopologyMap      *contract.TopologyMap             `json:"topology_map,omitempty"`
-	Strengths        []string                          `json:"strengths,omitempty"`
+	Strengths        []contract.SecurityStrength        `json:"strengths,omitempty"`
 }
 
 // NewHybridScanner creates a new scanner instance

@@ -723,7 +723,10 @@ func TestFindingEnrichedFields_OmitEmpty(t *testing.T) {
 func TestScanResultStrengths_Serialize(t *testing.T) {
 	result := ScanResult{
 		RiskScore: 42,
-		Strengths: []string{"Uses parameterized queries", "Has rate limiting"},
+		Strengths: []SecurityStrength{
+			{Title: "Parameterized Queries", Message: "Uses parameterized queries"},
+			{Title: "Rate Limiting", Message: "Has rate limiting"},
+		},
 	}
 
 	data, err := json.Marshal(result)
@@ -739,11 +742,11 @@ func TestScanResultStrengths_Serialize(t *testing.T) {
 	if len(decoded.Strengths) != 2 {
 		t.Fatalf("Strengths length = %d, want 2", len(decoded.Strengths))
 	}
-	if decoded.Strengths[0] != "Uses parameterized queries" {
-		t.Errorf("Strengths[0] = %q", decoded.Strengths[0])
+	if decoded.Strengths[0].Title != "Parameterized Queries" {
+		t.Errorf("Strengths[0].Title = %q", decoded.Strengths[0].Title)
 	}
-	if decoded.Strengths[1] != "Has rate limiting" {
-		t.Errorf("Strengths[1] = %q", decoded.Strengths[1])
+	if decoded.Strengths[1].Message != "Has rate limiting" {
+		t.Errorf("Strengths[1].Message = %q", decoded.Strengths[1].Message)
 	}
 }
 
