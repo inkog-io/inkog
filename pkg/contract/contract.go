@@ -155,7 +155,13 @@ type ScanResult struct {
 	TopologyMap *TopologyMap `json:"topology_map,omitempty"` // Visual topology of agent structure
 
 	// Strengths detected in the codebase
-	Strengths []string `json:"strengths,omitempty"`
+	Strengths []SecurityStrength `json:"strengths,omitempty"`
+}
+
+// SecurityStrength represents a positive security signal detected during scanning
+type SecurityStrength struct {
+	Title   string `json:"title"`
+	Message string `json:"message"`
 }
 
 // ArticleStatus represents compliance status for a specific EU AI Act article
