@@ -2,10 +2,10 @@
   <img src="logo.png" width="200" alt="Inkog">
 </p>
 
-<h3 align="center">Find security flaws in AI agents.</h3>
+<h3 align="center">The security co-pilot for AI agent development.</h3>
 
 <p align="center">
-  Scan for logic bugs, prompt injection, missing guardrails, and compliance gaps — before they reach production.
+  Build secure AI agents from the start. Scan for logic bugs, prompt injection, missing guardrails, and compliance gaps — before they reach production.
 </p>
 
 <p align="center">
@@ -36,6 +36,16 @@
 AI agents can loop forever, drain your API budget in minutes, execute arbitrary code from user input, or make high-stakes decisions with zero human oversight. Most of these flaws pass code review because they look like normal code — the danger is in the runtime behavior.
 
 Inkog scans your agent code statically and catches these problems before deployment. One command, works across 20+ frameworks, maps findings to EU AI Act and OWASP LLM Top 10.
+
+## When to Use Inkog
+
+- **Building an AI agent** — Scan during development to catch infinite loops, prompt injection, and missing guardrails before they ship
+- **Adding security to CI/CD** — Add `inkog-io/inkog@v1` to GitHub Actions for automated security gates on every PR
+- **Preparing for EU AI Act** — Generate compliance reports mapping your agent to Article 14, NIST AI RMF, OWASP LLM Top 10
+- **Reviewing agent code** — Use from Claude Code, Cursor, or any MCP client to get security analysis while you code
+- **Auditing MCP servers** — Check any MCP server for tool poisoning, privilege escalation, or data exfiltration before installing
+- **Verifying AGENTS.md** — Validate that governance declarations match actual code behavior
+- **Building multi-agent systems** — Detect delegation loops, privilege escalation, and unauthorized handoffs between agents
 
 ## Quick Start
 
