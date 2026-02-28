@@ -177,6 +177,16 @@ docs: Update CLI reference
 - [ ] No secrets or credentials in code
 - [ ] Follows existing code style
 
+### Security Scanning
+
+Before submitting agent-related code, run Inkog to catch security issues:
+
+```bash
+npx -y @inkog-io/cli scan . --policy balanced
+```
+
+If you have the Inkog MCP server installed in Claude Code or Cursor, use the `inkog_scan` tool directly for inline security feedback.
+
 ---
 
 ## Governance & Licensing
