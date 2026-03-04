@@ -10,13 +10,14 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/inkog-io/inkog/pkg/contract"
 	"github.com/inkog-io/inkog/pkg/patterns/secrets"
 )
 
 const (
-	CLIVersion       = "1.0.0"
+	CLIVersion       = "1.0.1"
 	ContractVersion  = "v1"
 	DefaultServerURL = "https://api.inkog.io"
 )
@@ -148,6 +149,64 @@ type ScanResult struct {
 	FrameworkMapping map[string]contract.FrameworkStatus `json:"framework_mapping,omitempty"`
 	TopologyMap      *contract.TopologyMap             `json:"topology_map,omitempty"`
 	Strengths        []contract.SecurityStrength        `json:"strengths,omitempty"`
+	DeepReport       *DeepReport                        `json:"deep_report,omitempty"`
+}
+
+// DeepReport contains orchestrator metadata from a deep scan.
+type DeepReport struct {
+	AgentProfile      *DeepAgentProfile      `json:"agent_profile,omitempty"`
+	CleanDetections   []DeepCleanDetection   `json:"clean_detections,omitempty"`
+	ComplianceSummary []DeepComplianceEntry  `json:"compliance_summary,omitempty"`
+	Methodology       *DeepMethodology       `json:"methodology,omitempty"`
+	ReportMeta        *DeepReportMeta        `json:"report,omitempty"`
+	SeveritySummary   *DeepSeveritySummary   `json:"severity_summary,omitempty"`
+}
+
+type DeepAgentProfile struct {
+	ArchitectureSummary string   `json:"architecture_summary"`
+	Framework           string   `json:"framework"`
+	Language            string   `json:"language"`
+	Purpose             string   `json:"purpose"`
+	HighRiskOperations  []string `json:"high_risk_operations,omitempty"`
+	DataSources         []string `json:"data_sources,omitempty"`
+	DataSinks           []string `json:"data_sinks,omitempty"`
+	Integrations        []string `json:"integrations,omitempty"`
+	TrustBoundaries     []string `json:"trust_boundaries,omitempty"`
+}
+
+type DeepCleanDetection struct {
+	DetectionID string `json:"detection_id"`
+	Reason      string `json:"reason"`
+}
+
+type DeepComplianceEntry struct {
+	Framework        string `json:"framework"`
+	RelevantFindings []int  `json:"relevant_findings,omitempty"`
+}
+
+type DeepMethodology struct {
+	Approach              string `json:"approach"`
+	ConfidenceCalibration string `json:"confidence_calibration"`
+}
+
+type DeepReportMeta struct {
+	AgentName             string `json:"agent_name"`
+	Date                  string `json:"date"`
+	DetectionRulesApplied int    `json:"detection_rules_applied"`
+	DetectionRulesNA      int    `json:"detection_rules_na"`
+	DetectionRulesTotal   int    `json:"detection_rules_total"`
+	FilesAudited          int    `json:"files_audited"`
+	TotalClean            int    `json:"total_clean"`
+	TotalFindings         int    `json:"total_findings"`
+}
+
+type DeepSeveritySummary struct {
+	Clean    int `json:"clean"`
+	Critical int `json:"critical"`
+	High     int `json:"high"`
+	Medium   int `json:"medium"`
+	Low      int `json:"low"`
+	NA       int `json:"na"`
 }
 
 // NewHybridScanner creates a new scanner instance
@@ -755,4 +814,144 @@ func sortFindings(findings []contract.Finding) {
 			}
 		}
 	}
+}
+
+type DeepScanResult struct {
+	ScanID string                 `json:"scan_id"`
+	Status string                 `json:"status"`
+	Scan   map[string]interface{} `json:"scan"`
+}
+
+func (hs *HybridScanner) DeepScan() (*DeepScanResult, error) {
+	if !hs.Quiet {
+		fmt.Fprintf(os.Stderr, "\n🔬 Inkog Deep Scan\n")
+		fmt.Fprintf(os.Stderr, "   Deep scans perform advanced analysis and typically take around 10 minutes depending on codebase size.\n")
+		fmt.Fprintf(os.Stderr, "   You can safely leave this running — results will appear when ready.\n\n")
+	}
+	if hs.Verbose && !hs.Quiet {
+		fmt.Fprintf(os.Stderr, "   Source: %s\n", hs.SourcePath)
+		fmt.Fprintf(os.Stderr, "   Server: %s\n", hs.ServerURL)
+	}
+
+	hs.progress.Start("Scanning local files...")
+	_, allFiles, err := hs.scanLocalSecretsAndCollectFiles()
+	if err != nil {
+		hs.progress.Fail("Local scan failed")
+		return nil, fmt.Errorf("local scan failed: %w", err)
+	}
+	hs.progress.Success(fmt.Sprintf("Collected %d files", len(allFiles)))
+
+	hs.progress.Start("Redacting sensitive data...")
+	redactedFiles, _, err := hs.redactSecretsFromFiles(allFiles)
+	if err != nil {
+		hs.progress.Fail("Redaction failed")
+		return nil, fmt.Errorf("redaction failed: %w", err)
+	}
+	hs.progress.Success(fmt.Sprintf("Redacted secrets from %d files", len(allFiles)))
+
+	hs.progress.Start("Uploading to Inkog Deep...")
+	request := contract.ScanRequest{
+		ContractVersion: ContractVersion,
+		CLIVersion:      CLIVersion,
+		SecretsVersion:  secrets.SecretsVersionHash(),
+		AgentName:       hs.resolveAgentName(),
+		AgentPath:       hs.SourcePath,
+	}
+
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+
+	jsonData, _ := json.Marshal(request)
+	part, _ := writer.CreateFormField("request")
+	part.Write(jsonData)
+
+	for fieldName, content := range redactedFiles {
+		part, _ := writer.CreateFormField(fieldName)
+		part.Write(content)
+	}
+
+	writer.Close()
+
+	triggerResp, err := hs.client.TriggerDeepScan(writer.FormDataContentType(), &buf)
+	if err != nil {
+		hs.progress.Fail("Deep scan trigger failed")
+		return nil, err
+	}
+	hs.progress.Success(fmt.Sprintf("Deep scan queued (ID: %s)", triggerResp.ScanID))
+
+	result, err := hs.pollDeepScan(triggerResp.ScanID)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func (hs *HybridScanner) pollDeepScan(scanID string) (*DeepScanResult, error) {
+	const pollInterval = 5 * time.Second
+	const maxPollDuration = 30 * time.Minute
+
+	hs.progress.Start("Deep scan in progress — this typically takes around 10 minutes...")
+	startTime := time.Now()
+	deadline := startTime.Add(maxPollDuration)
+
+	phases := []struct {
+		after   time.Duration
+		message string
+	}{
+		{30 * time.Second, "Analyzing your code..."},
+		{2 * time.Minute, "Deep analysis in progress — checking for complex vulnerability patterns..."},
+		{5 * time.Minute, "Still working — analyzing control flow and data dependencies..."},
+		{8 * time.Minute, "Almost there — generating report..."},
+		{12 * time.Minute, "This scan is taking longer than usual — still processing..."},
+		{18 * time.Minute, "Still waiting for orchestrator response..."},
+		{25 * time.Minute, "Approaching timeout..."},
+	}
+	lastPhase := -1
+
+	for time.Now().Before(deadline) {
+		time.Sleep(pollInterval)
+
+		elapsed := time.Since(startTime)
+
+		for i := len(phases) - 1; i >= 0; i-- {
+			if elapsed >= phases[i].after && i > lastPhase {
+				lastPhase = i
+				break
+			}
+		}
+		if lastPhase >= 0 {
+			mins := int(elapsed.Minutes())
+			secs := int(elapsed.Seconds()) % 60
+			hs.progress.Update(fmt.Sprintf("%s (%dm%02ds)", phases[lastPhase].message, mins, secs))
+		}
+
+		resp, err := hs.client.PollDeepScanStatus(scanID)
+		if err != nil {
+			continue
+		}
+
+		switch resp.Status {
+		case "completed":
+			elapsed := time.Since(startTime).Truncate(time.Second)
+			hs.progress.Success(fmt.Sprintf("Deep scan completed in %s", elapsed))
+			return &DeepScanResult{
+				ScanID: resp.ScanID,
+				Status: resp.Status,
+				Scan:   resp.Scan,
+			}, nil
+		case "failed":
+			hs.progress.Fail("Deep scan failed")
+			errMsg := "Deep scan failed"
+			if resp.Scan != nil {
+				if e, ok := resp.Scan["error"].(string); ok {
+					errMsg = "Deep scan failed: " + e
+				}
+			}
+			return nil, fmt.Errorf(errMsg)
+		}
+	}
+
+	hs.progress.Fail("Deep scan timed out after 30 minutes")
+	return nil, fmt.Errorf("Deep scan timed out after %s. Check results at https://app.inkog.io/scans/%s", maxPollDuration, scanID)
 }
