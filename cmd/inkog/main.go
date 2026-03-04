@@ -588,7 +588,7 @@ func extractAffectedFile(f map[string]interface{}) (filePath string, lineNum int
 			}
 		}
 		if numStr != "" {
-			fmt.Sscanf(numStr, "%d", &lineNum)
+			_, _ = fmt.Sscanf(numStr, "%d", &lineNum)
 		}
 	}
 	return
