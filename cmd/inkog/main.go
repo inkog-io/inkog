@@ -95,7 +95,7 @@ Security Policies:
   eu-ai-act           EU AI Act compliance: Articles 12, 14, 15
 
 Supported Platforms:
-  Pro-Code:    LangChain | LangGraph | CrewAI | Phidata | AutoGen | LlamaIndex
+  Pro-Code:    LangChain | LangGraph | CrewAI | Phidata | AG2 | AutoGen | LlamaIndex
   No-Code:     Microsoft Copilot Studio | Salesforce Agentforce | n8n | Flowise
 
 Examples:
@@ -1547,6 +1547,7 @@ func detectFramework(findings []contract.Finding) string {
 		"langchain":      "LangChain",
 		"langgraph":      "LangGraph",
 		"autogen":        "AutoGen",
+		"ag2":            "AG2",
 		"smolagents":     "Smolagents",
 		"phidata":        "Phidata",
 		"haystack":       "Haystack",
@@ -1563,13 +1564,19 @@ func detectFramework(findings []contract.Finding) string {
 		"einsteinbot":    "Einstein Bots",
 	}
 
-	// Code import patterns
+	// Code import patterns.
+	// Note: "from autogen_agentchat" / "from autogen_core" are Microsoft AutoGen 0.4 namespaces
+	// and must be checked before the general "from autogen" prefix (handled below the map).
+	// "from autogen" maps to AG2 — the autogen/ag2/pyautogen PyPI packages all install AG2,
+	// the community fork led by original AutoGen creators Chi Wang & Qingyun Wu.
 	codePatterns := map[string]string{
 		"from crewai":          "CrewAI",
 		"import crewai":        "CrewAI",
 		"from langchain":       "LangChain",
 		"from langgraph":       "LangGraph",
-		"from autogen":         "AutoGen",
+		"from autogen":         "AG2",
+		"from ag2":             "AG2",
+		"import ag2":           "AG2",
 		"from smolagents":      "Smolagents",
 		"from phidata":         "Phidata",
 		"from haystack":        "Haystack",
@@ -1590,6 +1597,17 @@ func detectFramework(findings []contract.Finding) string {
 			if strings.Contains(file, pattern) {
 				return name
 			}
+		}
+
+		// Microsoft AutoGen 0.4 uses distinct sub-package namespaces (autogen_agentchat,
+		// autogen_core, autogen_ext). Check these before the general "from autogen" prefix
+		// to avoid misidentifying AutoGen 0.4 projects as AG2.
+		if strings.Contains(code, "from autogen_agentchat") ||
+			strings.Contains(code, "from autogen_core") ||
+			strings.Contains(code, "from autogen_ext") ||
+			strings.Contains(code, "import autogen_agentchat") ||
+			strings.Contains(code, "import autogen_core") {
+			return "AutoGen"
 		}
 
 		// Check code import patterns
@@ -1773,8 +1791,8 @@ var (
 	// Phidata agent: Agent(name="Finance Agent")
 	phidataAgentPattern = regexp.MustCompile(`Agent\s*\([^)]*name\s*=\s*["']([^"']+)["']`)
 
-	// AutoGen agent: AssistantAgent(name="analyst")
-	autogenAgentPattern = regexp.MustCompile(`(?:Assistant|User)Agent\s*\([^)]*name\s*=\s*["']([^"']+)["']`)
+	// AG2/AutoGen agent: AssistantAgent(name="analyst"), ConversableAgent(name="researcher")
+	autogenAgentPattern = regexp.MustCompile(`(?:Assistant|User|Conversable)Agent\s*\([^)]*name\s*=\s*["']([^"']+)["']`)
 
 	// CamelCase word boundary pattern
 	camelCaseSplit = regexp.MustCompile(`([a-z])([A-Z])|([A-Z]+)([A-Z][a-z])`)

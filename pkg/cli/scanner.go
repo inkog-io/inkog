@@ -23,7 +23,7 @@ const (
 )
 
 // DefaultScanExtensions defines file types to scan for security analysis.
-// Supports: Python (CrewAI, AutoGen, LangChain), No-Code (n8n, Flowise), and more.
+// Supports: Python (CrewAI, AG2, AutoGen, LangChain), No-Code (n8n, Flowise), and more.
 var DefaultScanExtensions = map[string]bool{
 	// Python ecosystem
 	".py":    true,
