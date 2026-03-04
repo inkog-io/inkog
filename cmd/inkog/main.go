@@ -1029,9 +1029,14 @@ func outputText(result *cli.ScanResult, minSeverity, policy string, verbose bool
 	tierGroups := contract.GroupByTier(filtered)
 
 	// Display header
+	isDeep := result.DeepReport != nil
 	fmt.Println()
 	fmt.Println("╔══════════════════════════════════════════════════════╗")
-	fmt.Println("║           🔍 AI Agent Risk Assessment                ║")
+	if isDeep {
+		fmt.Println("║           🔬 Inkog Deep Scan Results                 ║")
+	} else {
+		fmt.Println("║           🔍 Inkog Core Scan Results                 ║")
+	}
 	fmt.Println("╚══════════════════════════════════════════════════════╝")
 	fmt.Println()
 
@@ -1041,7 +1046,7 @@ func outputText(result *cli.ScanResult, minSeverity, policy string, verbose bool
 	displayTierSection(tierGroups[contract.TierHardening], "🟡 HARDENING RECOMMENDATIONS", colorTierHardening)
 
 	// Display tiered summary
-	displayTieredSummary(filtered, policy)
+	displayTieredSummary(filtered, policy, isDeep)
 
 	// Display governance status (if available)
 	displayGovernanceStatus(result)
@@ -1155,11 +1160,15 @@ func displayTieredCodeFrame(f contract.Finding) {
 }
 
 // displayTieredSummary shows a tier-based summary
-func displayTieredSummary(findings []contract.Finding, policy string) {
+func displayTieredSummary(findings []contract.Finding, policy string, isDeep bool) {
 	counts := contract.CountByTier(findings)
 
+	label := "Inkog Core"
+	if isDeep {
+		label = "Inkog Deep"
+	}
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Printf("AI Agent Risk Assessment: %d findings (policy: %s)\n", len(findings), policy)
+	fmt.Printf("%s: %d findings (policy: %s)\n", label, len(findings), policy)
 
 	if counts[contract.TierVulnerability] > 0 {
 		fmt.Printf("  %s● %d Exploitable Vulnerabilities%s (require immediate fix)\n",
