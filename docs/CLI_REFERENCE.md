@@ -309,7 +309,7 @@ Human-readable report with **tiered risk classification**:
 
 ```
 ╔══════════════════════════════════════════════════════╗
-║           🔍 AI Agent Risk Assessment                ║
+║           🔍 Inkog Core Scan Results                 ║
 ╚══════════════════════════════════════════════════════╝
 
 🔴 EXPLOITABLE VULNERABILITIES (2)
@@ -335,7 +335,7 @@ Human-readable report with **tiered risk classification**:
      Agent performs autonomous actions without approval workflow
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-AI Agent Risk Assessment: 7 findings (policy: balanced)
+Inkog Core: 7 findings (policy: balanced)
   ● 2 Exploitable Vulnerabilities (require immediate fix)
   ● 3 Risk Patterns (structural issues)
   ● 2 Hardening Recommendations (best practices)
