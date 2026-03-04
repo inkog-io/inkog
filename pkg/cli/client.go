@@ -367,6 +367,100 @@ func (c *InkogClient) humanizeErrorCode(code string) string {
 	}
 }
 
+type DeepScanTriggerResponse struct {
+	ScanID  string `json:"scan_id"`
+	Status  string `json:"status"`
+	Message string `json:"message"`
+}
+
+type DeepScanStatusResponse struct {
+	ScanID string                 `json:"scan_id"`
+	Status string                 `json:"status"`
+	Scan   map[string]interface{} `json:"scan"`
+}
+
+func (c *InkogClient) TriggerDeepScan(contentType string, body *bytes.Buffer) (*DeepScanTriggerResponse, error) {
+	bodyBytes := body.Bytes()
+	reqBody := bytes.NewBuffer(bodyBytes)
+
+	req, err := http.NewRequest("POST", c.BaseURL+"/v1/scan/deep", reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", contentType)
+	req.Header.Set("User-Agent", "inkog-cli/"+CLIVersion)
+
+	if c.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	}
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("network error: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode == http.StatusForbidden {
+		return nil, fmt.Errorf("Deep scan requires the Inkog Deep role. Contact your admin to enable it at https://app.inkog.io")
+	}
+
+	if resp.StatusCode == http.StatusUnauthorized {
+		return nil, fmt.Errorf(APIKeyRequiredMessage())
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		var serverErr ServerError
+		if json.Unmarshal(respBody, &serverErr) == nil && serverErr.Message != "" {
+			return nil, fmt.Errorf("Deep scan failed: %s", serverErr.Message)
+		}
+		return nil, fmt.Errorf("Deep scan failed (HTTP %d)", resp.StatusCode)
+	}
+
+	var result DeepScanTriggerResponse
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse deep scan response: %w", err)
+	}
+	return &result, nil
+}
+
+func (c *InkogClient) PollDeepScanStatus(scanID string) (*DeepScanStatusResponse, error) {
+	req, err := http.NewRequest("GET", c.BaseURL+"/v1/scan/deep/"+scanID, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("User-Agent", "inkog-cli/"+CLIVersion)
+
+	if c.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	}
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("network error: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("status check failed (HTTP %d)", resp.StatusCode)
+	}
+
+	var result DeepScanStatusResponse
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse status response: %w", err)
+	}
+	return &result, nil
+}
+
 // logRetry logs retry attempts (respects quiet mode)
 func (c *InkogClient) logRetry(attempt int, message string) {
 	if c.Quiet {

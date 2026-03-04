@@ -35,7 +35,7 @@ const AppName = "inkog"
 
 // AppVersion can be set at build time via:
 // go build -ldflags "-X main.AppVersion=1.2.3"
-var AppVersion = "1.0.0-dev"
+var AppVersion = "1.0.1"
 
 const (
 	// ANSI color codes for terminal output
@@ -79,6 +79,7 @@ Options:
   -severity string    Minimum severity level: critical, high, medium, low (default: low)
   -agent-name string  Explicit agent name (overrides auto-detection from path)
   -max-files int      Maximum files to upload (default: 500)
+  -deep               Inkog Deep scan — advanced security analysis (requires Inkog Deep role)
   -diff               Show only new findings since baseline (for CI/CD)
   -baseline string    Path to baseline file (default: .inkog-baseline.json)
   -update-baseline    Update the baseline after scanning
@@ -127,6 +128,9 @@ Examples:
 
   # Use custom baseline file
   inkog -path . --diff --baseline ./ci/security-baseline.json
+
+  # Inkog Deep scan — advanced security analysis (requires Inkog Deep role)
+  inkog --deep ./my-agent
 
 Environment Variables:
   INKOG_SERVER_URL     Override default server URL (highest priority)
@@ -217,6 +221,7 @@ func main() {
 	diffFlag := flag.Bool("diff", false, "Show only new findings since baseline")
 	baselineFlag := flag.String("baseline", ".inkog-baseline.json", "Path to baseline file")
 	updateBaselineFlag := flag.Bool("update-baseline", false, "Update baseline after scanning")
+	deepFlag := flag.Bool("deep", false, "Inkog Deep scan — advanced security analysis (requires Inkog Deep role)")
 	agentNameFlag := flag.String("agent-name", "", "Explicit agent name (overrides auto-detection from path)")
 	maxFilesFlag := flag.Int("max-files", cli.DefaultMaxFiles, "Maximum files to upload (default 500)")
 	verboseFlag := flag.Bool("verbose", false, "Enable verbose output")
@@ -317,6 +322,91 @@ func main() {
 	scanner := cli.NewHybridScanner(*pathFlag, serverURL, *policyFlag, *verboseFlag, isQuietMode)
 	scanner.AgentName = *agentNameFlag
 	scanner.MaxFiles = *maxFilesFlag
+
+	if *deepFlag {
+		deepResult, deepErr := scanner.DeepScan()
+		if deepErr != nil {
+			log.Fatalf("❌ Deep scan failed: %v\n", deepErr)
+		}
+
+		// Convert deep scan findings to contract.Finding for full flag support
+		findings := convertDeepFindings(deepResult)
+		deepReport := extractDeepReport(deepResult.Scan)
+		if deepReport == nil {
+			deepReport = &cli.DeepReport{} // Ensure non-nil so Deep HTML template is always used
+		}
+
+		// Map clean detections to strengths for text output
+		var strengths []contract.SecurityStrength
+		if len(deepReport.CleanDetections) > 0 {
+			for _, cd := range deepReport.CleanDetections {
+				strengths = append(strengths, contract.SecurityStrength{
+					Title:   humanizeDetectionID(cd.DetectionID),
+					Message: cd.Reason,
+				})
+			}
+		}
+
+		// Build ScanResult compatible with all output formats
+		scanResult := &cli.ScanResult{
+			AllFindings:     findings,
+			ServerFindings:  findings,
+			GovernanceScore: deepScanInt(deepResult.Scan, "governance_score"),
+			Strengths:       strengths,
+			DeepReport:      deepReport,
+		}
+
+		// Handle baseline update (same as normal scan)
+		if *updateBaselineFlag {
+			if err := saveBaseline(*baselineFlag, *pathFlag, scanResult.AllFindings); err != nil {
+				log.Fatalf("❌ Failed to update baseline: %v\n", err)
+			}
+			if *verboseFlag && !isQuietMode {
+				fmt.Printf("📝 Baseline updated: %s (%d findings)\n", *baselineFlag, len(scanResult.AllFindings))
+			}
+		}
+
+		// Handle diff mode (same as normal scan)
+		if *diffFlag {
+			baseline, err := loadBaseline(*baselineFlag)
+			if err != nil {
+				if os.IsNotExist(err) {
+					if !isQuietMode {
+						fmt.Printf("⚠️  No baseline found at %s. Showing all findings as new.\n", *baselineFlag)
+						fmt.Println("   Run with --update-baseline to create a baseline.")
+					}
+					diffResult := contract.ComputeDiff([]contract.Finding{}, scanResult.AllFindings)
+					if outErr := outputDiffResults(diffResult, *outputFlag, *severityFlag, *policyFlag, *verboseFlag, isQuietMode); outErr != nil {
+						log.Fatalf("❌ Output failed: %v\n", outErr)
+					}
+					if diffResult.IsRegression() {
+						os.Exit(1)
+					}
+					os.Exit(0)
+				}
+				log.Fatalf("❌ Failed to load baseline: %v\n", err)
+			}
+			diffResult := contract.ComputeDiff(baseline.Findings, scanResult.AllFindings)
+			if outErr := outputDiffResults(diffResult, *outputFlag, *severityFlag, *policyFlag, *verboseFlag, isQuietMode); outErr != nil {
+				log.Fatalf("❌ Output failed: %v\n", outErr)
+			}
+			if diffResult.IsRegression() {
+				os.Exit(1)
+			}
+			os.Exit(0)
+		}
+
+		// Output using existing formatters (text, json, html, sarif all work)
+		if err := outputResults(scanResult, *outputFlag, *severityFlag, *policyFlag, *verboseFlag, isQuietMode); err != nil {
+			log.Fatalf("❌ Output failed: %v\n", err)
+		}
+
+		if len(findings) > 0 {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
 	result, err = scanner.Scan()
 
 	if err != nil {
@@ -400,6 +490,505 @@ func main() {
 		showSuccessMessage(result, *policyFlag)
 	}
 	os.Exit(0)
+}
+
+// convertDeepFindings converts raw deep scan findings into contract.Finding structs,
+// enabling full flag compatibility (--policy, --severity, --diff, --output html/sarif).
+func convertDeepFindings(aiResult *cli.DeepScanResult) []contract.Finding {
+	if aiResult.Scan == nil {
+		return nil
+	}
+	raw := extractDeepFindings(aiResult.Scan)
+	var findings []contract.Finding
+	for _, f := range raw {
+		severity := strings.ToUpper(deepStr(f, "severity"))
+		category := deepStr(f, "category")
+		title := deepStr(f, "title")
+
+		// Extract file/line from orchestrator's affected_files array
+		// Format: [{"file_path": "main.py", "line_numbers": "61-65, 117-118"}]
+		filePath, lineNum, lineDisplay := extractAffectedFile(f)
+
+		// Map orchestrator confidence string ("HIGH", "MEDIUM", "LOW") to numeric
+		confidence := confidenceToFloat(deepStr(f, "confidence"))
+
+		patternID := deepStr(f, "detection_id")
+		if patternID == "" {
+			patternID = slugify(title)
+		}
+
+		// Build explanation trace from proof array
+		// Format: [{"code_snippet": "...", ...}]
+		explanationTrace := extractProofTrace(f)
+
+		finding := contract.Finding{
+			PatternID:        patternID,
+			Pattern:          title,
+			DisplayTitle:     title,
+			Message:          deepStr(f, "explanation"),
+			ShortDescription: deepStr(f, "explanation"),
+			Severity:         severity,
+			File:             filePath,
+			Line:             lineNum,
+			Category:         category,
+			Confidence:       confidence,
+			Source:           contract.SourceServerLogic,
+			RiskTier:         severityToRiskTier(severity),
+			RemediationSteps: splitRemediation(deepStr(f, "recommended_action")),
+			ExplanationTrace: explanationTrace,
+		}
+
+		// Store full line display (e.g. "61-65, 117-118") in Code field for rendering
+		if lineDisplay != "" && filePath != "" {
+			finding.Code = fmt.Sprintf("%s:%s", filePath, lineDisplay)
+		}
+
+		if isGovernanceCategory(category) {
+			finding.GovernanceCategory = category
+		}
+
+		if cm := extractComplianceMapping(f); cm != nil {
+			finding.ComplianceMapping = cm
+		}
+
+		// False positive assessment from orchestrator
+		if fpRisk := deepStr(f, "false_positive_risk"); fpRisk != "" {
+			finding.FPRisk = fpRisk
+		}
+		if fpRationale := deepStr(f, "false_positive_rationale"); fpRationale != "" {
+			finding.FPRationale = fpRationale
+		}
+
+		findings = append(findings, finding)
+	}
+	return findings
+}
+
+// extractAffectedFile extracts file path and line info from the orchestrator's affected_files array.
+func extractAffectedFile(f map[string]interface{}) (filePath string, lineNum int, lineDisplay string) {
+	arr, ok := f["affected_files"].([]interface{})
+	if !ok || len(arr) == 0 {
+		return "", 0, ""
+	}
+	first, ok := arr[0].(map[string]interface{})
+	if !ok {
+		return "", 0, ""
+	}
+	filePath = deepStr(first, "file_path")
+	lineDisplay = deepStr(first, "line_numbers")
+
+	// Parse first line number from display string (e.g., "61-65, 117-118" → 61)
+	if lineDisplay != "" {
+		numStr := ""
+		for _, c := range lineDisplay {
+			if c >= '0' && c <= '9' {
+				numStr += string(c)
+			} else {
+				break
+			}
+		}
+		if numStr != "" {
+			fmt.Sscanf(numStr, "%d", &lineNum)
+		}
+	}
+	return
+}
+
+// extractProofTrace builds explanation trace strings from the orchestrator's proof array.
+func extractProofTrace(f map[string]interface{}) []string {
+	arr, ok := f["proof"].([]interface{})
+	if !ok || len(arr) == 0 {
+		return nil
+	}
+	var traces []string
+	for _, item := range arr {
+		m, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		snippet := deepStr(m, "code_snippet")
+		if snippet != "" {
+			// Truncate long snippets for trace display
+			if len(snippet) > 150 {
+				snippet = snippet[:147] + "..."
+			}
+			traces = append(traces, snippet)
+		}
+	}
+	return traces
+}
+
+// confidenceToFloat converts orchestrator confidence string to numeric value.
+func confidenceToFloat(s string) float32 {
+	switch strings.ToUpper(s) {
+	case "HIGH":
+		return 0.9
+	case "MEDIUM":
+		return 0.7
+	case "LOW":
+		return 0.5
+	default:
+		return 0.85
+	}
+}
+
+func severityToRiskTier(severity string) string {
+	switch severity {
+	case "CRITICAL", "HIGH":
+		return contract.TierVulnerability
+	case "MEDIUM":
+		return contract.TierRiskPattern
+	default:
+		return contract.TierHardening
+	}
+}
+
+func slugify(title string) string {
+	s := strings.ToLower(title)
+	s = regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(s, "_")
+	s = strings.Trim(s, "_")
+	if len(s) > 80 {
+		s = s[:80]
+	}
+	return s
+}
+
+func isGovernanceCategory(cat string) bool {
+	switch strings.ToLower(cat) {
+	case "governance", "oversight", "authorization", "audit", "privacy", "transparency", "accountability":
+		return true
+	}
+	return false
+}
+
+func extractComplianceMapping(f map[string]interface{}) *contract.ComplianceMapping {
+	mappingsRaw, ok := f["compliance_mappings"]
+	if !ok || mappingsRaw == nil {
+		return nil
+	}
+	arr, ok := mappingsRaw.([]interface{})
+	if !ok || len(arr) == 0 {
+		return nil
+	}
+
+	var euArticles, nistCats []string
+	for _, item := range arr {
+		m, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		framework := deepStr(m, "framework")
+		reference := deepStr(m, "reference")
+		if reference == "" {
+			continue
+		}
+		if strings.Contains(framework, "EU AI Act") {
+			euArticles = append(euArticles, reference)
+		} else if strings.Contains(framework, "NIST") {
+			nistCats = append(nistCats, reference)
+		}
+	}
+
+	if len(euArticles) == 0 && len(nistCats) == 0 {
+		return nil
+	}
+	return &contract.ComplianceMapping{
+		EUAIActArticles: euArticles,
+		NISTCategories:  nistCats,
+	}
+}
+
+func splitRemediation(s string) []string {
+	if s == "" {
+		return nil
+	}
+	return []string{s}
+}
+
+func extractDeepFindings(scan map[string]interface{}) []map[string]interface{} {
+	findingsRaw, ok := scan["findings"]
+	if !ok || findingsRaw == nil {
+		return nil
+	}
+
+	var reportData interface{}
+	if s, ok := findingsRaw.(string); ok {
+		if err := json.Unmarshal([]byte(s), &reportData); err != nil {
+			return nil
+		}
+	} else {
+		reportData = findingsRaw
+	}
+
+	if report, ok := reportData.(map[string]interface{}); ok {
+		if arr, ok := report["findings"].([]interface{}); ok {
+			return toFindingMaps(arr)
+		}
+		return nil
+	}
+
+	if arr, ok := reportData.([]interface{}); ok {
+		return toFindingMaps(arr)
+	}
+
+	return nil
+}
+
+func toFindingMaps(arr []interface{}) []map[string]interface{} {
+	var result []map[string]interface{}
+	for _, item := range arr {
+		if m, ok := item.(map[string]interface{}); ok {
+			result = append(result, m)
+		}
+	}
+	return result
+}
+
+func deepScanInt(m map[string]interface{}, key string) int {
+	v, ok := m[key]
+	if !ok || v == nil {
+		return 0
+	}
+	switch n := v.(type) {
+	case float64:
+		return int(n)
+	case int:
+		return n
+	case int64:
+		return int(n)
+	default:
+		return 0
+	}
+}
+
+func deepStr(m map[string]interface{}, key string) string {
+	v, ok := m[key]
+	if !ok || v == nil {
+		return ""
+	}
+	s, _ := v.(string)
+	return s
+}
+
+func deepFloat(m map[string]interface{}, key string, fallback float32) float32 {
+	v, ok := m[key]
+	if !ok || v == nil {
+		return fallback
+	}
+	switch n := v.(type) {
+	case float64:
+		return float32(n)
+	case float32:
+		return n
+	default:
+		return fallback
+	}
+}
+
+func deepStrSlice(m map[string]interface{}, key string) []string {
+	v, ok := m[key]
+	if !ok || v == nil {
+		return nil
+	}
+	arr, ok := v.([]interface{})
+	if !ok {
+		return nil
+	}
+	var result []string
+	for _, item := range arr {
+		if s, ok := item.(string); ok {
+			result = append(result, s)
+		}
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
+func deepBool(m map[string]interface{}, key string) bool {
+	v, ok := m[key]
+	if !ok || v == nil {
+		return false
+	}
+	b, _ := v.(bool)
+	return b
+}
+
+// humanizeDetectionID converts "prompt_injection_via_tool_args" → "Prompt Injection Via Tool Args".
+func humanizeDetectionID(id string) string {
+	words := strings.Split(id, "_")
+	for i, w := range words {
+		if len(w) > 0 {
+			words[i] = strings.ToUpper(w[:1]) + w[1:]
+		}
+	}
+	return strings.Join(words, " ")
+}
+
+// extractDeepReport parses orchestrator metadata from a deep scan result into typed structs.
+// The orchestrator bundles all metadata (agent_profile, clean_detections, etc.) inside
+// scan["findings"] alongside the findings array. This function resolves that wrapper
+// first, then extracts each metadata key from the resolved report map.
+func extractDeepReport(scan map[string]interface{}) *cli.DeepReport {
+	if scan == nil {
+		return nil
+	}
+
+	// The orchestrator nests everything under scan["findings"] which may be a JSON
+	// string or a map like {"findings": [...], "agent_profile": {...}, ...}.
+	// Resolve this wrapper to get the report map containing all metadata.
+	reportMap := scan // fallback: look at top level
+	if findingsRaw, ok := scan["findings"]; ok && findingsRaw != nil {
+		var parsed interface{}
+		if s, ok := findingsRaw.(string); ok {
+			if err := json.Unmarshal([]byte(s), &parsed); err == nil {
+				if m, ok := parsed.(map[string]interface{}); ok {
+					reportMap = m
+				}
+			}
+		} else if m, ok := findingsRaw.(map[string]interface{}); ok {
+			reportMap = m
+		}
+	}
+
+	// Helper: resolve a key as map (handles JSON string or map)
+	resolve := func(key string) map[string]interface{} {
+		v, ok := reportMap[key]
+		if !ok || v == nil {
+			return nil
+		}
+		if m, ok := v.(map[string]interface{}); ok {
+			return m
+		}
+		if s, ok := v.(string); ok {
+			var m map[string]interface{}
+			if err := json.Unmarshal([]byte(s), &m); err == nil {
+				return m
+			}
+		}
+		return nil
+	}
+
+	// Helper: resolve a key as slice (handles JSON string or slice)
+	resolveSlice := func(key string) []interface{} {
+		v, ok := reportMap[key]
+		if !ok || v == nil {
+			return nil
+		}
+		if arr, ok := v.([]interface{}); ok {
+			return arr
+		}
+		if s, ok := v.(string); ok {
+			var arr []interface{}
+			if err := json.Unmarshal([]byte(s), &arr); err == nil {
+				return arr
+			}
+		}
+		return nil
+	}
+
+	report := &cli.DeepReport{}
+	hasData := false
+
+	// agent_profile
+	if m := resolve("agent_profile"); m != nil {
+		hasData = true
+		report.AgentProfile = &cli.DeepAgentProfile{
+			ArchitectureSummary: deepStr(m, "architecture_summary"),
+			Framework:           deepStr(m, "framework"),
+			Language:            deepStr(m, "language"),
+			Purpose:             deepStr(m, "purpose"),
+			HighRiskOperations:  deepStrSlice(m, "high_risk_operations"),
+			DataSources:         deepStrSlice(m, "data_sources"),
+			DataSinks:           deepStrSlice(m, "data_sinks"),
+			Integrations:        deepStrSlice(m, "integrations"),
+			TrustBoundaries:     deepStrSlice(m, "trust_boundaries"),
+		}
+	}
+
+	// clean_detections
+	if arr := resolveSlice("clean_detections"); len(arr) > 0 {
+		hasData = true
+		for _, item := range arr {
+			m, ok := item.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			report.CleanDetections = append(report.CleanDetections, cli.DeepCleanDetection{
+				DetectionID: deepStr(m, "detection_id"),
+				Reason:      deepStr(m, "reason"),
+			})
+		}
+	}
+
+	// compliance_summary
+	if arr := resolveSlice("compliance_summary"); len(arr) > 0 {
+		hasData = true
+		for _, item := range arr {
+			m, ok := item.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			entry := cli.DeepComplianceEntry{
+				Framework: deepStr(m, "framework"),
+			}
+			// relevant_findings are integers
+			if rf, ok := m["relevant_findings"].([]interface{}); ok {
+				for _, v := range rf {
+					switch n := v.(type) {
+					case float64:
+						entry.RelevantFindings = append(entry.RelevantFindings, int(n))
+					case int:
+						entry.RelevantFindings = append(entry.RelevantFindings, n)
+					}
+				}
+			}
+			report.ComplianceSummary = append(report.ComplianceSummary, entry)
+		}
+	}
+
+	// methodology
+	if m := resolve("methodology"); m != nil {
+		hasData = true
+		report.Methodology = &cli.DeepMethodology{
+			Approach:              deepStr(m, "approach"),
+			ConfidenceCalibration: deepStr(m, "confidence_calibration"),
+		}
+	}
+
+	// report (meta)
+	if m := resolve("report"); m != nil {
+		hasData = true
+		report.ReportMeta = &cli.DeepReportMeta{
+			AgentName:             deepStr(m, "agent_name"),
+			Date:                  deepStr(m, "date"),
+			DetectionRulesApplied: deepScanInt(m, "detection_rules_applied"),
+			DetectionRulesNA:      deepScanInt(m, "detection_rules_na"),
+			DetectionRulesTotal:   deepScanInt(m, "detection_rules_total"),
+			FilesAudited:          deepScanInt(m, "files_audited"),
+			TotalClean:            deepScanInt(m, "total_clean"),
+			TotalFindings:         deepScanInt(m, "total_findings"),
+		}
+	}
+
+	// severity_summary
+	if m := resolve("severity_summary"); m != nil {
+		hasData = true
+		report.SeveritySummary = &cli.DeepSeveritySummary{
+			Clean:    deepScanInt(m, "clean"),
+			Critical: deepScanInt(m, "critical"),
+			High:     deepScanInt(m, "high"),
+			Medium:   deepScanInt(m, "medium"),
+			Low:      deepScanInt(m, "low"),
+			NA:       deepScanInt(m, "na"),
+		}
+	}
+
+	if !hasData {
+		return nil
+	}
+	return report
 }
 
 // outputResults formats and displays scan results
@@ -509,35 +1098,59 @@ func displayTieredCodeFrame(f contract.Finding) {
 		fixTag = fmt.Sprintf(" [%s fix]", f.FixDifficulty)
 	}
 
-	fmt.Printf("  └─ %s%s%s [%s:%d] - %s%s%s%s\n",
+	// Build location string, suppressing meaningless ".:0" values
+	location := ""
+	baseFile := filepath.Base(f.File)
+	if f.File != "" && f.File != "." && baseFile != "." {
+		if f.Line > 0 {
+			location = fmt.Sprintf(" [%s:%d]", baseFile, f.Line)
+		} else {
+			location = fmt.Sprintf(" [%s]", baseFile)
+		}
+	}
+
+	fmt.Printf("  └─ %s%s%s%s - %s%s%s%s\n",
 		severityColor, tierIndicator, title,
-		filepath.Base(f.File), f.Line,
+		location,
 		severityColor, f.Severity, colorReset, fixTag)
 
-	// 2. Show description (ShortDescription with fallback to Message)
+	// 2. Show description (truncated for terminal — full details in json/html/sarif)
 	desc := f.Message
 	if f.ShortDescription != "" {
 		desc = f.ShortDescription
 	}
 	if desc != "" {
-		// Truncate long descriptions
-		if len(desc) > 100 {
-			desc = desc[:97] + "..."
+		if len(desc) > 120 {
+			desc = desc[:117] + "..."
 		}
 		fmt.Printf("     %s%s%s\n", colorGray, desc, colorReset)
 	}
 
-	// 3. Show taint source if present (key differentiator for Tier 1)
-	if f.InputTainted && f.TaintSource != "" {
-		fmt.Printf("     %sTaint source: %s (user input)%s\n", colorCyan, f.TaintSource, colorReset)
+	// 3. Show CWE/OWASP references if present
+	if f.CWE != "" || f.OWASP != "" {
+		refs := []string{}
+		if f.CWE != "" {
+			refs = append(refs, f.CWE)
+		}
+		if f.OWASP != "" {
+			refs = append(refs, f.OWASP)
+		}
+		fmt.Printf("     %sRef: %s%s\n", colorGray, strings.Join(refs, " | "), colorReset)
 	}
 
-	// 4. Show explanation trace if present
-	if len(f.ExplanationTrace) > 0 {
-		fmt.Printf("     %sTrace:%s\n", colorGray, colorReset)
-		for i, step := range f.ExplanationTrace {
-			fmt.Printf("     %s%d. %s%s\n", colorGray, i+1, step, colorReset)
+	// 4. Show compliance mappings if present
+	if f.ComplianceMapping != nil {
+		if len(f.ComplianceMapping.EUAIActArticles) > 0 {
+			fmt.Printf("     %sEU AI Act: %s%s\n", colorGray, strings.Join(f.ComplianceMapping.EUAIActArticles, ", "), colorReset)
 		}
+		if len(f.ComplianceMapping.NISTCategories) > 0 {
+			fmt.Printf("     %sNIST: %s%s\n", colorGray, strings.Join(f.ComplianceMapping.NISTCategories, ", "), colorReset)
+		}
+	}
+
+	// 5. Show taint source if present (key differentiator for Tier 1)
+	if f.InputTainted && f.TaintSource != "" {
+		fmt.Printf("     %sTaint source: %s (user input)%s\n", colorCyan, f.TaintSource, colorReset)
 	}
 }
 
@@ -729,7 +1342,12 @@ func displayCodeFrame(f contract.Finding) {
 // sortFindingsByLocation sorts findings by file path, then by line number
 func sortFindingsByLocation(findings []contract.Finding) {
 	sort.Slice(findings, func(i, j int) bool {
-		// Compare by file first, then by line
+		// Sort by severity first (CRITICAL > HIGH > MEDIUM > LOW), then by file/line
+		si := contract.SeverityLevels[findings[i].Severity]
+		sj := contract.SeverityLevels[findings[j].Severity]
+		if si != sj {
+			return si > sj
+		}
 		if findings[i].File != findings[j].File {
 			return findings[i].File < findings[j].File
 		}
@@ -2486,6 +3104,11 @@ document.querySelectorAll('.pill').forEach(pill => {
 
 // outputHTML provides enterprise HTML dashboard report
 func outputHTML(result *cli.ScanResult, minSeverity string) error {
+	// Deep scan-specific HTML report
+	if result.DeepReport != nil {
+		return outputDeepHTML(result, minSeverity)
+	}
+
 	// Filter findings by minimum severity level
 	filtered := contract.GetBySeverity(result.AllFindings, strings.ToUpper(minSeverity))
 
@@ -2723,6 +3346,9 @@ func generateAgentFindingsHTML(findings []contract.Finding) string {
 	if len(findings) == 0 {
 		return `<div class="empty-state"><p>No findings for this agent</p></div>`
 	}
+
+	// Sort by severity (CRITICAL first)
+	sortFindingsByLocation(findings)
 
 	var sb strings.Builder
 	for _, f := range findings {
@@ -3085,6 +3711,7 @@ func outputDiffText(diff *contract.DiffResult, minSeverity, policy string, verbo
 
 	// New findings
 	if len(diff.NewFindings) > 0 {
+		sortFindingsByLocation(diff.NewFindings)
 		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 		fmt.Printf("%s🔴 NEW FINDINGS (%d)%s\n", colorCritical, len(diff.NewFindings), colorReset)
 		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
@@ -3097,6 +3724,7 @@ func outputDiffText(diff *contract.DiffResult, minSeverity, policy string, verbo
 
 	// Fixed findings
 	if len(diff.FixedFindings) > 0 && verbose {
+		sortFindingsByLocation(diff.FixedFindings)
 		fmt.Println()
 		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 		fmt.Printf("%s🟢 FIXED FINDINGS (%d)%s\n", colorCheck, len(diff.FixedFindings), colorReset)
@@ -3410,4 +4038,1553 @@ func showFrameworkFeedback(result *cli.ScanResult) {
 	if framework != "" {
 		fmt.Printf("🔍 Detected: %s framework\n", framework)
 	}
+}
+
+// ─── Deep HTML Report ───────────────────────────────────────────────────────
+
+const htmlDeepReportCSS = `
+/* Deep Report — Additional Classes */
+
+.deep-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(59, 130, 246, 0.2));
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    border-radius: 999px;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--primary-light);
+    letter-spacing: 0.05em;
+}
+
+.deep-badge::before {
+    content: '✦';
+    font-size: 0.625rem;
+}
+
+/* Profile Hero Card */
+.profile-hero {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    margin-bottom: 1.5rem;
+    position: relative;
+}
+
+.profile-hero::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--primary), #3b82f6, var(--primary-light));
+}
+
+.profile-hero-header {
+    padding: 1.5rem 1.5rem 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+}
+
+.profile-hero-info {
+    flex: 1;
+}
+
+.profile-hero-name {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-heading);
+    letter-spacing: -0.025em;
+    margin-bottom: 0.375rem;
+}
+
+.profile-hero-date {
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+}
+
+.profile-hero-stats {
+    display: flex;
+    gap: 1.25rem;
+    flex-shrink: 0;
+}
+
+.profile-hero-stat {
+    text-align: center;
+}
+
+.profile-hero-stat .stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-heading);
+    line-height: 1;
+}
+
+.profile-hero-stat .stat-label {
+    font-size: 0.6875rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-top: 0.25rem;
+}
+
+.profile-hero-body {
+    padding: 0 1.5rem 1.5rem;
+}
+
+.profile-tags {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+}
+
+.profile-tag {
+    background: var(--primary-bg);
+    border: 1px solid rgba(139, 92, 246, 0.2);
+    border-radius: var(--radius-sm);
+    padding: 0.25rem 0.625rem;
+    font-size: 0.8125rem;
+    color: var(--primary-light);
+    font-weight: 500;
+}
+
+.profile-tag.lang {
+    background: rgba(59, 130, 246, 0.1);
+    border-color: rgba(59, 130, 246, 0.2);
+    color: #60a5fa;
+}
+
+.profile-section-label {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    margin-bottom: 0.375rem;
+    margin-top: 1rem;
+}
+
+.profile-section-label:first-child {
+    margin-top: 0;
+}
+
+.profile-text {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    line-height: 1.7;
+    margin-bottom: 0.5rem;
+}
+
+/* Profile Sub-cards Grid */
+.profile-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.profile-subcard {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 1rem;
+    position: relative;
+    overflow: hidden;
+}
+
+.profile-subcard::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+}
+
+.profile-subcard.risk::before    { background: var(--critical); }
+.profile-subcard.sources::before { background: #3b82f6; }
+.profile-subcard.sinks::before   { background: #3b82f6; }
+.profile-subcard.integrations::before { background: var(--primary); }
+.profile-subcard.boundaries::before   { background: #eab308; }
+
+.profile-subcard h4 {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+}
+
+.profile-subcard ul {
+    list-style: none;
+    padding: 0;
+}
+
+.profile-subcard ul li {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    padding: 0.25rem 0;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.profile-subcard ul li:last-child {
+    border-bottom: none;
+}
+
+/* Severity Metric Cards */
+.severity-metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+
+.severity-metric {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 1rem;
+    text-align: center;
+}
+
+.severity-metric .metric-value {
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 0.25rem;
+}
+
+.severity-metric .metric-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+}
+
+.severity-metric.clean .metric-value    { color: var(--low); }
+.severity-metric.critical .metric-value { color: var(--critical); }
+.severity-metric.high .metric-value     { color: var(--high); }
+.severity-metric.medium .metric-value   { color: var(--medium); }
+.severity-metric.low .metric-value      { color: #60a5fa; }
+.severity-metric.na .metric-value       { color: var(--text-muted); }
+
+/* Stacked Severity Bar */
+.stacked-bar {
+    display: flex;
+    height: 8px;
+    border-radius: 4px;
+    overflow: hidden;
+    background: var(--bg-elevated);
+    margin-bottom: 1rem;
+}
+
+.stacked-bar .bar-segment {
+    transition: width var(--transition-normal);
+}
+
+.stacked-bar .bar-critical { background: var(--critical); }
+.stacked-bar .bar-high     { background: var(--high); }
+.stacked-bar .bar-medium   { background: var(--medium); }
+.stacked-bar .bar-low      { background: #60a5fa; }
+.stacked-bar .bar-clean    { background: var(--low); }
+
+/* Detection Rules Stats */
+.detection-stats {
+    display: flex;
+    gap: 1.5rem;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    margin-bottom: 0.5rem;
+}
+
+.detection-stats strong {
+    color: var(--text-primary);
+}
+
+/* Clean Detection Cards */
+.clean-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 1rem;
+}
+
+.clean-card {
+    background: rgba(34, 197, 94, 0.05);
+    border: 1px solid rgba(34, 197, 94, 0.2);
+    border-radius: var(--radius-md);
+    padding: 1rem 1.25rem;
+}
+
+.clean-card .clean-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+    color: var(--low);
+    margin-bottom: 0.375rem;
+    font-size: 0.9375rem;
+}
+
+.clean-card .clean-title::before {
+    content: '✓';
+    font-weight: 700;
+}
+
+.clean-card .clean-reason {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    line-height: 1.6;
+}
+
+/* Compliance Cards */
+.compliance-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1rem;
+}
+
+.compliance-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 1rem 1.25rem;
+}
+
+.compliance-card h4 {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--text-heading);
+    margin-bottom: 0.5rem;
+}
+
+.compliance-card .finding-indices {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+}
+
+.compliance-card .finding-indices span {
+    display: inline-block;
+    background: var(--primary-bg);
+    border-radius: var(--radius-sm);
+    padding: 0.125rem 0.5rem;
+    margin: 0.125rem 0.25rem 0.125rem 0;
+    font-weight: 500;
+    color: var(--primary-light);
+}
+
+/* Methodology Card */
+.methodology-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+}
+
+.methodology-card h4 {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+}
+
+.methodology-card p {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    line-height: 1.7;
+    margin-bottom: 0.75rem;
+}
+
+.methodology-card p:last-child {
+    margin-bottom: 0;
+}
+
+/* Deep Finding Enhanced Body */
+.deep-finding-body {
+    display: none;
+    padding: 1.25rem;
+    border-top: 1px solid var(--border);
+    background: var(--bg-secondary);
+}
+
+.finding.open .deep-finding-body {
+    display: block;
+}
+
+.deep-finding-meta-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+    padding: 1rem;
+    background: var(--bg-elevated);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+}
+
+.deep-finding-meta-grid .meta-item {
+    font-size: 0.8125rem;
+}
+
+.deep-finding-meta-grid .meta-label {
+    color: var(--text-muted);
+    font-weight: 500;
+    display: block;
+    font-size: 0.6875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.075em;
+    margin-bottom: 0.25rem;
+}
+
+.deep-finding-meta-grid .meta-value {
+    color: var(--text-primary);
+}
+
+/* Category + Risk Tier Tags */
+.deep-finding-tags {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+}
+
+.deep-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.1875rem 0.5rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.deep-tag.category {
+    background: var(--primary-bg);
+    color: var(--primary-light);
+    border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+.deep-tag.tier-vulnerability {
+    background: var(--critical-bg);
+    color: var(--critical);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.deep-tag.tier-risk_pattern {
+    background: var(--high-bg);
+    color: var(--high);
+    border: 1px solid rgba(249, 115, 22, 0.3);
+}
+
+.deep-tag.tier-hardening {
+    background: var(--medium-bg);
+    color: var(--medium);
+    border: 1px solid rgba(234, 179, 8, 0.3);
+}
+
+.deep-tag.governance {
+    background: rgba(168, 85, 247, 0.1);
+    color: #c084fc;
+    border: 1px solid rgba(168, 85, 247, 0.3);
+}
+
+/* Compliance Mapping in Finding */
+.deep-compliance-tags {
+    display: flex;
+    gap: 0.375rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.25rem;
+}
+
+.deep-compliance-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.625rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.deep-compliance-tag.eu {
+    background: rgba(59, 130, 246, 0.1);
+    color: #60a5fa;
+    border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.deep-compliance-tag.nist {
+    background: rgba(34, 197, 94, 0.1);
+    color: #4ade80;
+    border: 1px solid rgba(34, 197, 94, 0.2);
+}
+
+/* Description */
+.deep-finding-description {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    line-height: 1.7;
+    margin-bottom: 1.25rem;
+}
+
+/* Risk Assessment (per-finding) */
+.deep-risk-assessment {
+    background: rgba(168, 85, 247, 0.05);
+    border: 1px solid rgba(168, 85, 247, 0.15);
+    border-radius: var(--radius-md);
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.25rem;
+}
+
+.deep-risk-assessment h5 {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #c084fc;
+    margin-bottom: 0.75rem;
+}
+
+.deep-risk-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.8125rem;
+}
+
+.deep-risk-row:last-child { margin-bottom: 0; }
+
+.deep-risk-label {
+    color: var(--text-muted);
+    min-width: 5.5rem;
+}
+
+.deep-risk-badge {
+    display: inline-flex;
+    padding: 0.125rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.deep-risk-badge.high { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+.deep-risk-badge.medium { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+.deep-risk-badge.low { background: rgba(34, 197, 94, 0.15); color: #4ade80; }
+
+.deep-risk-rationale {
+    color: var(--text-secondary);
+    font-size: 0.8125rem;
+    line-height: 1.6;
+    margin-top: 0.5rem;
+}
+
+/* Remediation Section */
+.deep-remediation {
+    background: rgba(34, 197, 94, 0.05);
+    border: 1px solid rgba(34, 197, 94, 0.15);
+    border-radius: var(--radius-md);
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.25rem;
+}
+
+.deep-remediation h5 {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--low);
+    margin-bottom: 0.5rem;
+}
+
+.deep-remediation p, .deep-remediation li {
+    color: var(--text-secondary);
+    font-size: 0.8125rem;
+    line-height: 1.7;
+}
+
+.deep-remediation ul {
+    padding-left: 1.25rem;
+    margin: 0;
+}
+
+.deep-remediation ul li {
+    margin-bottom: 0.375rem;
+}
+
+/* Explanation Trace / Proof */
+.deep-proof {
+    margin-bottom: 1.25rem;
+}
+
+.deep-proof h5 {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+}
+
+.deep-proof-snippet {
+    background: #000;
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius-sm);
+    font-family: 'SF Mono', 'Fira Code', 'Monaco', monospace;
+    font-size: 0.8125rem;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: #e4e4e7;
+    border: 1px solid var(--border);
+    line-height: 1.5;
+    margin-bottom: 0.5rem;
+}
+
+/* Code location reference */
+.deep-code-ref {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 0.25rem 0.625rem;
+    font-family: 'SF Mono', 'Fira Code', 'Monaco', monospace;
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    margin-bottom: 1.25rem;
+}
+
+/* Risk Assessment Section */
+.risk-assessment-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.risk-tier-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 1.25rem;
+    position: relative;
+    overflow: hidden;
+}
+
+.risk-tier-card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 4px;
+}
+
+.risk-tier-card.tier-vuln::before    { background: var(--critical); }
+.risk-tier-card.tier-risk::before    { background: var(--high); }
+.risk-tier-card.tier-harden::before  { background: var(--medium); }
+.risk-tier-card.tier-gov::before     { background: #c084fc; }
+
+.risk-tier-card .tier-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.risk-tier-card .tier-label {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-heading);
+}
+
+.risk-tier-card .tier-count {
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.risk-tier-card.tier-vuln .tier-count   { color: var(--critical); }
+.risk-tier-card.tier-risk .tier-count   { color: var(--high); }
+.risk-tier-card.tier-harden .tier-count { color: var(--medium); }
+.risk-tier-card.tier-gov .tier-count    { color: #c084fc; }
+
+.risk-tier-card .tier-desc {
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+}
+
+/* Governance Status Section */
+.governance-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+}
+
+.governance-score {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    margin-bottom: 1.25rem;
+    padding-bottom: 1.25rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.governance-score-value {
+    font-size: 2.5rem;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.governance-score-value.score-good   { color: var(--low); }
+.governance-score-value.score-mid    { color: var(--medium); }
+.governance-score-value.score-bad    { color: var(--critical); }
+
+.governance-score-label {
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+}
+
+.governance-score-label strong {
+    display: block;
+    color: var(--text-heading);
+    font-size: 1rem;
+    margin-bottom: 0.125rem;
+}
+
+.governance-controls {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 0.75rem;
+}
+
+.gov-control {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    border-radius: var(--radius-md);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+}
+
+.gov-control-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.gov-control.present .gov-control-icon {
+    background: rgba(34, 197, 94, 0.15);
+    color: var(--low);
+}
+
+.gov-control.missing .gov-control-icon {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--critical);
+}
+
+.gov-control-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.gov-control-name {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-heading);
+}
+
+.gov-control-status {
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.gov-control.present .gov-control-status { color: var(--low); }
+.gov-control.missing .gov-control-status { color: var(--critical); }
+
+.gov-control-ref {
+    font-size: 0.6875rem;
+    color: var(--text-muted);
+}
+`
+
+// generateAgentProfileHTML builds the Agent Profile section.
+func generateAgentProfileHTML(report *cli.DeepReport) string {
+	// Need at least agent profile or report meta to render this section
+	if report.AgentProfile == nil && report.ReportMeta == nil {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString(`<section><h2>Agent Profile</h2><div class="profile-hero">`)
+
+	// ── Hero Header: agent name + stats ──
+	sb.WriteString(`<div class="profile-hero-header">`)
+	sb.WriteString(`<div class="profile-hero-info">`)
+
+	// Agent name (from report meta, or profile framework as fallback)
+	agentName := ""
+	if report.ReportMeta != nil && report.ReportMeta.AgentName != "" {
+		agentName = report.ReportMeta.AgentName
+	} else if report.AgentProfile != nil && report.AgentProfile.Framework != "" {
+		agentName = report.AgentProfile.Framework + " Agent"
+	}
+	if agentName != "" {
+		sb.WriteString(fmt.Sprintf(`<div class="profile-hero-name">%s</div>`, escapeHTML(agentName)))
+	}
+
+	// Scan date
+	if report.ReportMeta != nil && report.ReportMeta.Date != "" {
+		sb.WriteString(fmt.Sprintf(`<div class="profile-hero-date">Scanned %s</div>`, escapeHTML(report.ReportMeta.Date)))
+	}
+	sb.WriteString(`</div>`) // close profile-hero-info
+
+	// Stats badges (from report meta)
+	if report.ReportMeta != nil {
+		rm := report.ReportMeta
+		sb.WriteString(`<div class="profile-hero-stats">`)
+		if rm.FilesAudited > 0 {
+			sb.WriteString(fmt.Sprintf(`<div class="profile-hero-stat"><div class="stat-value">%d</div><div class="stat-label">Files</div></div>`, rm.FilesAudited))
+		}
+		if rm.DetectionRulesApplied > 0 {
+			sb.WriteString(fmt.Sprintf(`<div class="profile-hero-stat"><div class="stat-value">%d</div><div class="stat-label">Rules Applied</div></div>`, rm.DetectionRulesApplied))
+		}
+		if rm.TotalFindings > 0 {
+			sb.WriteString(fmt.Sprintf(`<div class="profile-hero-stat"><div class="stat-value">%d</div><div class="stat-label">Findings</div></div>`, rm.TotalFindings))
+		}
+		if rm.TotalClean > 0 {
+			sb.WriteString(fmt.Sprintf(`<div class="profile-hero-stat"><div class="stat-value">%d</div><div class="stat-label">Clean</div></div>`, rm.TotalClean))
+		}
+		sb.WriteString(`</div>`)
+	}
+	sb.WriteString(`</div>`) // close profile-hero-header
+
+	// ── Hero Body: tags, purpose, architecture, sub-cards ──
+	if report.AgentProfile != nil {
+		ap := report.AgentProfile
+		sb.WriteString(`<div class="profile-hero-body">`)
+
+		// Framework + language tags
+		if ap.Framework != "" || ap.Language != "" {
+			sb.WriteString(`<div class="profile-tags">`)
+			if ap.Framework != "" {
+				sb.WriteString(fmt.Sprintf(`<span class="profile-tag">%s</span>`, escapeHTML(ap.Framework)))
+			}
+			if ap.Language != "" {
+				sb.WriteString(fmt.Sprintf(`<span class="profile-tag lang">%s</span>`, escapeHTML(ap.Language)))
+			}
+			sb.WriteString(`</div>`)
+		}
+
+		// Purpose
+		if ap.Purpose != "" {
+			sb.WriteString(`<div class="profile-section-label">Purpose</div>`)
+			sb.WriteString(fmt.Sprintf(`<p class="profile-text">%s</p>`, escapeHTML(ap.Purpose)))
+		}
+
+		// Architecture summary
+		if ap.ArchitectureSummary != "" {
+			sb.WriteString(`<div class="profile-section-label">Architecture</div>`)
+			sb.WriteString(fmt.Sprintf(`<p class="profile-text">%s</p>`, escapeHTML(ap.ArchitectureSummary)))
+		}
+
+		// Sub-cards grid: high-risk ops, data sources/sinks, integrations, trust boundaries
+		type subcard struct {
+			class string
+			title string
+			items []string
+		}
+		cards := []subcard{
+			{"risk", "High-Risk Operations", ap.HighRiskOperations},
+			{"sources", "Data Sources", ap.DataSources},
+			{"sinks", "Data Sinks", ap.DataSinks},
+			{"integrations", "Integrations", ap.Integrations},
+			{"boundaries", "Trust Boundaries", ap.TrustBoundaries},
+		}
+
+		hasAny := false
+		for _, c := range cards {
+			if len(c.items) > 0 {
+				hasAny = true
+				break
+			}
+		}
+		if hasAny {
+			sb.WriteString(`<div class="profile-grid">`)
+			for _, c := range cards {
+				if len(c.items) == 0 {
+					continue
+				}
+				sb.WriteString(fmt.Sprintf(`<div class="profile-subcard %s"><h4>%s</h4><ul>`, c.class, c.title))
+				for _, item := range c.items {
+					sb.WriteString(fmt.Sprintf(`<li>%s</li>`, escapeHTML(item)))
+				}
+				sb.WriteString(`</ul></div>`)
+			}
+			sb.WriteString(`</div>`)
+		}
+
+		sb.WriteString(`</div>`) // close profile-hero-body
+	}
+
+	sb.WriteString(`</div></section>`) // close profile-hero + section
+	return sb.String()
+}
+
+// generateSeverityOverviewHTML builds the Scan Overview section with metric cards and stacked bar.
+// Falls back to counting from actual findings when orchestrator SeveritySummary is absent.
+func generateSeverityOverviewHTML(report *cli.DeepReport, findings []contract.Finding) string {
+	var sb strings.Builder
+	sb.WriteString(`<section><h2>Scan Overview</h2>`)
+
+	// Use orchestrator severity summary if available, otherwise compute from findings
+	var clean, critical, high, medium, low, na int
+	if report.SeveritySummary != nil {
+		ss := report.SeveritySummary
+		clean = ss.Clean
+		critical = ss.Critical
+		high = ss.High
+		medium = ss.Medium
+		low = ss.Low
+		na = ss.NA
+	} else {
+		critical = len(filterFindingsBySeverity(findings, "CRITICAL"))
+		high = len(filterFindingsBySeverity(findings, "HIGH"))
+		medium = len(filterFindingsBySeverity(findings, "MEDIUM"))
+		low = len(filterFindingsBySeverity(findings, "LOW"))
+	}
+
+	total := clean + critical + high + medium + low + na
+
+	// Metric cards
+	sb.WriteString(`<div class="severity-metrics">`)
+	metrics := []struct {
+		class string
+		value int
+		label string
+	}{
+		{"clean", clean, "Clean"},
+		{"critical", critical, "Critical"},
+		{"high", high, "High"},
+		{"medium", medium, "Medium"},
+		{"low", low, "Low"},
+		{"na", na, "N/A"},
+	}
+	for _, m := range metrics {
+		sb.WriteString(fmt.Sprintf(
+			`<div class="severity-metric %s"><div class="metric-value">%d</div><div class="metric-label">%s</div></div>`,
+			m.class, m.value, m.label))
+	}
+	sb.WriteString(`</div>`)
+
+	// Stacked bar
+	if total > 0 {
+		pct := func(v int) float64 { return float64(v) / float64(total) * 100 }
+		sb.WriteString(`<div class="stacked-bar">`)
+		if critical > 0 {
+			sb.WriteString(fmt.Sprintf(`<div class="bar-segment bar-critical" style="width:%.1f%%"></div>`, pct(critical)))
+		}
+		if high > 0 {
+			sb.WriteString(fmt.Sprintf(`<div class="bar-segment bar-high" style="width:%.1f%%"></div>`, pct(high)))
+		}
+		if medium > 0 {
+			sb.WriteString(fmt.Sprintf(`<div class="bar-segment bar-medium" style="width:%.1f%%"></div>`, pct(medium)))
+		}
+		if low > 0 {
+			sb.WriteString(fmt.Sprintf(`<div class="bar-segment bar-low" style="width:%.1f%%"></div>`, pct(low)))
+		}
+		if clean > 0 {
+			sb.WriteString(fmt.Sprintf(`<div class="bar-segment bar-clean" style="width:%.1f%%"></div>`, pct(clean)))
+		}
+		sb.WriteString(`</div>`)
+	}
+
+	// Detection rules stats (only if orchestrator returned them)
+	if report.ReportMeta != nil && report.ReportMeta.DetectionRulesTotal > 0 {
+		rm := report.ReportMeta
+		sb.WriteString(`<div class="detection-stats">`)
+		sb.WriteString(fmt.Sprintf(`<span>Rules applied: <strong>%d</strong></span>`, rm.DetectionRulesApplied))
+		sb.WriteString(fmt.Sprintf(`<span>N/A: <strong>%d</strong></span>`, rm.DetectionRulesNA))
+		sb.WriteString(fmt.Sprintf(`<span>Total: <strong>%d</strong></span>`, rm.DetectionRulesTotal))
+		sb.WriteString(`</div>`)
+	}
+
+	sb.WriteString(`</section>`)
+	return sb.String()
+}
+
+// generateCleanDetectionsHTML builds the Clean Detections section.
+func generateCleanDetectionsHTML(report *cli.DeepReport) string {
+	if len(report.CleanDetections) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString(`<section><h2>Clean Detections</h2><div class="clean-cards">`)
+	for _, cd := range report.CleanDetections {
+		sb.WriteString(fmt.Sprintf(
+			`<div class="clean-card"><div class="clean-title">%s</div><div class="clean-reason">%s</div></div>`,
+			escapeHTML(humanizeDetectionID(cd.DetectionID)),
+			escapeHTML(cd.Reason)))
+	}
+	sb.WriteString(`</div></section>`)
+	return sb.String()
+}
+
+// generateComplianceSummaryHTML builds the Compliance Coverage section.
+func generateComplianceSummaryHTML(report *cli.DeepReport) string {
+	if len(report.ComplianceSummary) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString(`<section><h2>Compliance Coverage</h2><div class="compliance-cards">`)
+	for _, ce := range report.ComplianceSummary {
+		sb.WriteString(fmt.Sprintf(`<div class="compliance-card"><h4>%s</h4>`, escapeHTML(ce.Framework)))
+		if len(ce.RelevantFindings) > 0 {
+			sb.WriteString(`<div class="finding-indices">Relevant findings: `)
+			for _, idx := range ce.RelevantFindings {
+				sb.WriteString(fmt.Sprintf(`<span>#%d</span>`, idx))
+			}
+			sb.WriteString(`</div>`)
+		} else {
+			sb.WriteString(`<div class="finding-indices">No findings mapped</div>`)
+		}
+		sb.WriteString(`</div>`)
+	}
+	sb.WriteString(`</div></section>`)
+	return sb.String()
+}
+
+// generateMethodologyHTML builds the Methodology section.
+func generateMethodologyHTML(report *cli.DeepReport) string {
+	if report.Methodology == nil {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString(`<section><h2>Methodology</h2><div class="methodology-card">`)
+	if report.Methodology.Approach != "" {
+		sb.WriteString(fmt.Sprintf(`<h4>Approach</h4><p>%s</p>`, escapeHTML(report.Methodology.Approach)))
+	}
+	if report.Methodology.ConfidenceCalibration != "" {
+		sb.WriteString(fmt.Sprintf(`<h4>Confidence Calibration</h4><p>%s</p>`, escapeHTML(report.Methodology.ConfidenceCalibration)))
+	}
+	sb.WriteString(`</div></section>`)
+	return sb.String()
+}
+
+// htmlDeepReportJS provides interactivity for the Deep HTML report.
+const htmlDeepReportJS = `
+// Finding toggle
+document.querySelectorAll('.finding-header').forEach(header => {
+    header.addEventListener('click', (e) => {
+        e.stopPropagation();
+        header.parentElement.classList.toggle('open');
+    });
+});
+
+// Accordion toggle
+document.querySelectorAll('.accordion-header').forEach(header => {
+    header.addEventListener('click', () => {
+        header.parentElement.classList.toggle('open');
+    });
+});
+
+// Severity filter pills
+document.querySelectorAll('.pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+        document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+        const severity = pill.dataset.severity;
+        document.querySelectorAll('.finding').forEach(finding => {
+            if (severity === 'all' || finding.dataset.severity === severity) {
+                finding.style.display = '';
+            } else {
+                finding.style.display = 'none';
+            }
+        });
+    });
+});
+`
+
+// generateRiskAssessmentHTML builds the Risk Assessment section with tier breakdown.
+func generateRiskAssessmentHTML(findings []contract.Finding) string {
+	if len(findings) == 0 {
+		return ""
+	}
+
+	tierCounts := contract.CountByTier(findings)
+	typeCounts := contract.CountByFindingType(findings)
+	govCount := typeCounts[contract.TypeGovernanceViolation]
+
+	var sb strings.Builder
+	sb.WriteString(`<section><h2>Risk Assessment</h2><div class="risk-assessment-grid">`)
+
+	type tierCard struct {
+		class string
+		label string
+		desc  string
+		count int
+	}
+	cards := []tierCard{
+		{"tier-vuln", "Exploitable Vulnerabilities", "Require immediate fix", tierCounts[contract.TierVulnerability]},
+		{"tier-risk", "Risk Patterns", "Structural issues", tierCounts[contract.TierRiskPattern]},
+		{"tier-harden", "Hardening Recommendations", "Best practices", tierCounts[contract.TierHardening]},
+		{"tier-gov", "Governance Gaps", "Compliance issues", govCount},
+	}
+
+	for _, c := range cards {
+		sb.WriteString(fmt.Sprintf(
+			`<div class="risk-tier-card %s"><div class="tier-header"><span class="tier-label">%s</span><span class="tier-count">%d</span></div><span class="tier-desc">%s</span></div>`,
+			c.class, c.label, c.count, c.desc))
+	}
+
+	sb.WriteString(`</div></section>`)
+	return sb.String()
+}
+
+// generateGovernanceStatusHTML builds the Governance Status section.
+// It infers governance control presence from findings: if a "missing_oversight",
+// "missing_audit_logging", etc. finding exists, the control is missing.
+func generateGovernanceStatusHTML(result *cli.ScanResult) string {
+	// Only show if we have governance data (score or topology) or governance findings
+	hasTopology := result.TopologyMap != nil
+	hasScore := result.GovernanceScore > 0
+
+	// Infer control status from findings when topology is not available
+	hasOversight := true
+	hasAuth := true
+	hasRateLimit := true
+	hasAudit := true
+
+	if hasTopology {
+		gov := result.TopologyMap.Governance
+		hasOversight = gov.HasHumanOversight
+		hasAuth = gov.HasAuthChecks
+		hasRateLimit = gov.HasRateLimiting
+		hasAudit = gov.HasAuditLogging
+	} else {
+		// Infer from finding pattern IDs
+		for _, f := range result.AllFindings {
+			switch f.PatternID {
+			case "missing_oversight":
+				hasOversight = false
+			case "missing_authorization", "missing_auth_checks":
+				hasAuth = false
+			case "missing_rate_limiting":
+				hasRateLimit = false
+			case "missing_audit_logging":
+				hasAudit = false
+			}
+		}
+	}
+
+	// Also check governance categories
+	for _, f := range result.AllFindings {
+		cat := strings.ToLower(f.GovernanceCategory)
+		pid := strings.ToLower(f.PatternID)
+		if cat == "governance" || cat == "oversight" {
+			if strings.Contains(pid, "oversight") || strings.Contains(pid, "human") {
+				hasOversight = false
+			}
+			if strings.Contains(pid, "auth") {
+				hasAuth = false
+			}
+			if strings.Contains(pid, "audit") || strings.Contains(pid, "logging") {
+				hasAudit = false
+			}
+			if strings.Contains(pid, "rate") || strings.Contains(pid, "limit") {
+				hasRateLimit = false
+			}
+		}
+	}
+
+	// Skip section if all controls are present and no score
+	if hasOversight && hasAuth && hasRateLimit && hasAudit && !hasScore {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString(`<section><h2>Governance Status</h2><div class="governance-card">`)
+
+	// Governance score
+	if hasScore {
+		scoreClass := "score-bad"
+		if result.GovernanceScore >= 80 {
+			scoreClass = "score-good"
+		} else if result.GovernanceScore >= 50 {
+			scoreClass = "score-mid"
+		}
+		sb.WriteString(fmt.Sprintf(
+			`<div class="governance-score"><span class="governance-score-value %s">%d</span><div class="governance-score-label"><strong>Governance Score</strong>out of 100</div></div>`,
+			scoreClass, result.GovernanceScore))
+	}
+
+	// Control grid
+	type control struct {
+		name    string
+		present bool
+		ref     string
+	}
+	controls := []control{
+		{"Human Oversight", hasOversight, "Article 14.1"},
+		{"Authorization", hasAuth, ""},
+		{"Rate Limiting", hasRateLimit, "OWASP LLM04"},
+		{"Audit Logging", hasAudit, "Article 12.1"},
+	}
+
+	sb.WriteString(`<div class="governance-controls">`)
+	for _, c := range controls {
+		cls := "present"
+		icon := "✓"
+		status := "PRESENT"
+		if !c.present {
+			cls = "missing"
+			icon = "✗"
+			status = "MISSING"
+		}
+		refHTML := ""
+		if c.ref != "" && !c.present {
+			refHTML = fmt.Sprintf(`<span class="gov-control-ref">%s</span>`, escapeHTML(c.ref))
+		}
+		sb.WriteString(fmt.Sprintf(
+			`<div class="gov-control %s"><span class="gov-control-icon">%s</span><div class="gov-control-info"><span class="gov-control-name">%s</span><span class="gov-control-status">%s</span>%s</div></div>`,
+			cls, icon, c.name, status, refHTML))
+	}
+	sb.WriteString(`</div>`)
+
+	sb.WriteString(`</div></section>`)
+	return sb.String()
+}
+
+// generateDeepFindingHTML renders a single finding with all rich deep scan metadata.
+func generateDeepFindingHTML(f contract.Finding) string {
+	var sb strings.Builder
+
+	pattern := escapeHTML(f.Pattern)
+	if f.DisplayTitle != "" {
+		pattern = escapeHTML(f.DisplayTitle)
+	}
+	file := escapeHTML(f.File)
+	shortFile := file
+	if len(file) > 50 {
+		shortFile = "..." + file[len(file)-47:]
+	}
+
+	sb.WriteString(fmt.Sprintf(`
+            <div class="finding" data-severity="%s">
+                <div class="finding-header">
+                    <div class="finding-title">
+                        <span class="icon">▶</span>
+                        <span>%s</span>
+                    </div>
+                    <div class="finding-meta">
+                        <span>%s:%d</span>
+                        <span class="severity-badge severity-%s">%s</span>
+                    </div>
+                </div>
+                <div class="deep-finding-body">`,
+		f.Severity,
+		pattern,
+		shortFile, f.Line,
+		strings.ToLower(f.Severity), f.Severity,
+	))
+
+	// Tags: category, risk tier, governance
+	hasTags := f.Category != "" || f.RiskTier != "" || f.GovernanceCategory != ""
+	if hasTags {
+		sb.WriteString(`<div class="deep-finding-tags">`)
+		if f.Category != "" {
+			sb.WriteString(fmt.Sprintf(`<span class="deep-tag category">%s</span>`, escapeHTML(f.Category)))
+		}
+		if f.RiskTier != "" {
+			tierLabel := strings.ReplaceAll(f.RiskTier, "_", " ")
+			sb.WriteString(fmt.Sprintf(`<span class="deep-tag tier-%s">%s</span>`, escapeHTML(f.RiskTier), escapeHTML(tierLabel)))
+		}
+		if f.GovernanceCategory != "" {
+			sb.WriteString(fmt.Sprintf(`<span class="deep-tag governance">%s</span>`, escapeHTML(f.GovernanceCategory)))
+		}
+		sb.WriteString(`</div>`)
+	}
+
+	// Compliance mapping tags
+	if f.ComplianceMapping != nil {
+		hasCompliance := len(f.ComplianceMapping.EUAIActArticles) > 0 || len(f.ComplianceMapping.NISTCategories) > 0
+		if hasCompliance {
+			sb.WriteString(`<div class="deep-compliance-tags">`)
+			for _, art := range f.ComplianceMapping.EUAIActArticles {
+				sb.WriteString(fmt.Sprintf(`<span class="deep-compliance-tag eu">EU AI Act: %s</span>`, escapeHTML(art)))
+			}
+			for _, cat := range f.ComplianceMapping.NISTCategories {
+				sb.WriteString(fmt.Sprintf(`<span class="deep-compliance-tag nist">NIST: %s</span>`, escapeHTML(cat)))
+			}
+			sb.WriteString(`</div>`)
+		}
+	}
+
+	// Meta grid: file, confidence, CWE, OWASP
+	sb.WriteString(`<div class="deep-finding-meta-grid">`)
+	sb.WriteString(fmt.Sprintf(`<div class="meta-item"><span class="meta-label">File</span><span class="meta-value">%s:%d</span></div>`, file, f.Line))
+	sb.WriteString(fmt.Sprintf(`<div class="meta-item"><span class="meta-label">Confidence</span><span class="meta-value">%.0f%%</span></div>`, f.Confidence*100))
+	if f.CWE != "" {
+		sb.WriteString(fmt.Sprintf(`<div class="meta-item"><span class="meta-label">CWE</span><span class="meta-value">%s</span></div>`, escapeHTML(f.CWE)))
+	}
+	if f.OWASP != "" {
+		sb.WriteString(fmt.Sprintf(`<div class="meta-item"><span class="meta-label">OWASP</span><span class="meta-value">%s</span></div>`, escapeHTML(f.OWASP)))
+	}
+	sb.WriteString(`</div>`)
+
+	// Code reference
+	if f.Code != "" {
+		sb.WriteString(fmt.Sprintf(`<div class="deep-code-ref">%s</div>`, escapeHTML(f.Code)))
+	}
+
+	// Description
+	desc := f.Message
+	if f.ShortDescription != "" {
+		desc = f.ShortDescription
+	}
+	if desc != "" {
+		sb.WriteString(fmt.Sprintf(`<p class="deep-finding-description">%s</p>`, escapeHTML(desc)))
+	}
+
+	// Explanation trace / proof
+	if len(f.ExplanationTrace) > 0 {
+		sb.WriteString(`<div class="deep-proof"><h5>Evidence</h5>`)
+		for _, trace := range f.ExplanationTrace {
+			sb.WriteString(fmt.Sprintf(`<div class="deep-proof-snippet">%s</div>`, escapeHTML(trace)))
+		}
+		sb.WriteString(`</div>`)
+	}
+
+	// Remediation
+	if len(f.RemediationSteps) > 0 {
+		sb.WriteString(`<div class="deep-remediation"><h5>Recommended Action</h5>`)
+		if len(f.RemediationSteps) == 1 {
+			sb.WriteString(fmt.Sprintf(`<p>%s</p>`, escapeHTML(f.RemediationSteps[0])))
+		} else {
+			sb.WriteString(`<ul>`)
+			for _, step := range f.RemediationSteps {
+				sb.WriteString(fmt.Sprintf(`<li>%s</li>`, escapeHTML(step)))
+			}
+			sb.WriteString(`</ul>`)
+		}
+		sb.WriteString(`</div>`)
+	}
+
+	// Risk Assessment (confidence + FP risk + rationale) — after remediation
+	if f.FPRisk != "" || f.Confidence > 0 {
+		sb.WriteString(`<div class="deep-risk-assessment"><h5>Risk Assessment</h5>`)
+		if f.Confidence > 0 {
+			confLabel := "HIGH"
+			if f.Confidence < 0.5 {
+				confLabel = "LOW"
+			} else if f.Confidence < 0.8 {
+				confLabel = "MEDIUM"
+			}
+			badgeClass := strings.ToLower(confLabel)
+			sb.WriteString(fmt.Sprintf(`<div class="deep-risk-row"><span class="deep-risk-label">Confidence</span><span class="deep-risk-badge %s">%s</span></div>`, badgeClass, confLabel))
+		}
+		if f.FPRisk != "" {
+			badgeClass := strings.ToLower(f.FPRisk)
+			sb.WriteString(fmt.Sprintf(`<div class="deep-risk-row"><span class="deep-risk-label">FP Risk</span><span class="deep-risk-badge %s">%s</span></div>`, badgeClass, escapeHTML(strings.ToUpper(f.FPRisk))))
+		}
+		if f.FPRationale != "" {
+			sb.WriteString(fmt.Sprintf(`<div class="deep-risk-rationale">%s</div>`, escapeHTML(f.FPRationale)))
+		}
+		sb.WriteString(`</div>`)
+	}
+
+	sb.WriteString(`</div></div>`)
+	return sb.String()
+}
+
+// generateDeepAccordionsHTML creates accordion sections using the enriched deep finding renderer.
+func generateDeepAccordionsHTML(findings []contract.Finding) string {
+	if len(findings) == 0 {
+		return `<div class="empty-state"><div class="icon">✅</div><p>No security issues found</p></div>`
+	}
+
+	// Sort findings
+	sortFindingsByLocation(findings)
+
+	// Single accordion for deep scans (no agent grouping needed)
+	var badgesHTML string
+	critCount := len(filterFindingsBySeverity(findings, "CRITICAL"))
+	highCount := len(filterFindingsBySeverity(findings, "HIGH"))
+	medCount := len(filterFindingsBySeverity(findings, "MEDIUM"))
+	if critCount > 0 {
+		badgesHTML += fmt.Sprintf(`<span class="mini-pill critical">%d</span>`, critCount)
+	}
+	if highCount > 0 {
+		badgesHTML += fmt.Sprintf(`<span class="mini-pill high">%d</span>`, highCount)
+	}
+	if medCount > 0 {
+		badgesHTML += fmt.Sprintf(`<span class="mini-pill medium">%d</span>`, medCount)
+	}
+
+	issueText := "issues"
+	if len(findings) == 1 {
+		issueText = "issue"
+	}
+
+	var findingsHTML strings.Builder
+	for _, f := range findings {
+		findingsHTML.WriteString(generateDeepFindingHTML(f))
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf(`
+        <div class="accordion open">
+            <div class="accordion-header">
+                <span class="accordion-icon">▶</span>
+                <span class="accordion-title">All Findings</span>
+                <span class="accordion-count">%d %s</span>
+                <div class="accordion-badges">%s</div>
+            </div>
+            <div class="accordion-body">
+                %s
+            </div>
+        </div>`,
+		len(findings), issueText,
+		badgesHTML,
+		findingsHTML.String(),
+	))
+	return sb.String()
+}
+
+// outputDeepHTML renders a premium HTML report for Inkog Deep scans.
+func outputDeepHTML(result *cli.ScanResult, minSeverity string) error {
+	report := result.DeepReport
+	filtered := contract.GetBySeverity(result.AllFindings, strings.ToUpper(minSeverity))
+
+	criticalCount := len(filterFindingsBySeverity(filtered, "CRITICAL"))
+	highCount := len(filterFindingsBySeverity(filtered, "HIGH"))
+	mediumCount := len(filterFindingsBySeverity(filtered, "MEDIUM"))
+	lowCount := len(filterFindingsBySeverity(filtered, "LOW"))
+	totalCount := len(filtered)
+
+	statusText, statusClass, _ := getGlobalStatus(criticalCount, highCount)
+
+	// Build accordion-style findings using enriched deep scan renderer
+	accordionsHTML := generateDeepAccordionsHTML(filtered)
+
+	// Section generators
+	agentProfileHTML := generateAgentProfileHTML(report)
+	severityOverviewHTML := generateSeverityOverviewHTML(report, filtered)
+	riskAssessmentHTML := generateRiskAssessmentHTML(filtered)
+	governanceStatusHTML := generateGovernanceStatusHTML(result)
+	cleanDetectionsHTML := generateCleanDetectionsHTML(report)
+	complianceSummaryHTML := generateComplianceSummaryHTML(report)
+	methodologyHTML := generateMethodologyHTML(report)
+
+	// Report title from metadata
+	reportTitle := "Inkog Deep Scan"
+	if report.ReportMeta != nil && report.ReportMeta.AgentName != "" {
+		reportTitle = escapeHTML(report.ReportMeta.AgentName) + " — Inkog Deep Scan"
+	}
+
+	html := fmt.Sprintf(`<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inkog Deep Scan Report</title>
+    <style>%s%s</style>
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <linearGradient id="inkogGradient" x1="0%%" y1="0%%" x2="100%%" y2="100%%">
+                        <stop offset="0%%" style="stop-color:#a78bfa"/>
+                        <stop offset="100%%" style="stop-color:#7c3aed"/>
+                    </linearGradient>
+                </defs>
+                <path d="M16 2L4 7v9c0 7.18 5.12 13.88 12 16 6.88-2.12 12-8.82 12-16V7L16 2z" fill="url(#inkogGradient)"/>
+                <path d="M10 12h12M10 16h12M10 20h8" stroke="white" stroke-width="1.5" stroke-linecap="round" opacity="0.9"/>
+                <path d="M12 16l3 3 5-6" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span>%s</span>
+            <span class="deep-badge">Deep Scan</span>
+        </div>
+        <span class="timestamp">%s</span>
+    </header>
+
+    <!-- Global Status Bar -->
+    <div class="global-status %s">
+        <div class="status-indicator">
+            <span class="pulse"></span>
+            <span class="status-text">%s</span>
+        </div>
+        <div class="status-meta">
+            <span>%d Total Issues</span>
+        </div>
+    </div>
+
+    %s
+    %s
+    %s
+    %s
+
+    <!-- Detailed Findings -->
+    <section>
+        <h2>Detailed Findings</h2>
+        <div class="filter-bar">
+            <div class="filter-pills">
+                <button class="pill active" data-severity="all">All (%d)</button>
+                <button class="pill critical" data-severity="CRITICAL">Critical (%d)</button>
+                <button class="pill high" data-severity="HIGH">High (%d)</button>
+                <button class="pill medium" data-severity="MEDIUM">Medium (%d)</button>
+                <button class="pill low" data-severity="LOW">Low (%d)</button>
+            </div>
+        </div>
+        %s
+    </section>
+
+    %s
+    %s
+    %s
+
+    <footer>
+        <p>Powered by <a href="https://inkog.io" target="_blank">Inkog Deep Scan</a> v%s</p>
+    </footer>
+
+    <script>%s</script>
+</body>
+</html>`,
+		htmlReportCSS, htmlDeepReportCSS,
+		reportTitle,
+		currentTimestamp(),
+		statusClass, statusText,
+		totalCount,
+		agentProfileHTML,
+		severityOverviewHTML,
+		riskAssessmentHTML,
+		governanceStatusHTML,
+		totalCount, criticalCount, highCount, mediumCount, lowCount,
+		accordionsHTML,
+		cleanDetectionsHTML,
+		complianceSummaryHTML,
+		methodologyHTML,
+		AppVersion,
+		htmlDeepReportJS,
+	)
+
+	fmt.Println(html)
+	return nil
 }

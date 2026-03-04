@@ -103,6 +103,10 @@ type Finding struct {
 	RemediationSteps []string `json:"remediation_steps,omitempty"`
 	ExplanationTrace []string `json:"explanation_trace,omitempty"`
 	FixDifficulty    string   `json:"fix_difficulty,omitempty"`
+
+	// False positive assessment (from deep scan orchestrator)
+	FPRisk      string `json:"false_positive_risk,omitempty"`
+	FPRationale string `json:"false_positive_rationale,omitempty"`
 }
 
 // ComplianceMapping maps a finding to compliance frameworks
