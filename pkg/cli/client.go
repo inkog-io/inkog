@@ -461,6 +461,79 @@ func (c *InkogClient) PollDeepScanStatus(scanID string) (*DeepScanStatusResponse
 	return &result, nil
 }
 
+// SkillScanDetailResponse represents the response from GET /v1/scan/skills/{id}
+type SkillScanDetailResponse struct {
+	Success bool                   `json:"success"`
+	Scan    map[string]interface{} `json:"scan"`
+}
+
+// TriggerSkillDeepScan triggers AI deep analysis for a completed skill scan.
+// POST /v1/scan/skills/{scanID}/ai
+func (c *InkogClient) TriggerSkillDeepScan(scanID string) error {
+	req, err := http.NewRequest("POST", c.BaseURL+"/v1/scan/skills/"+scanID+"/ai", nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("User-Agent", "inkog-cli/"+CLIVersion)
+	if c.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	}
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("network error: %w", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusAccepted:
+		return nil
+	case http.StatusForbidden:
+		return fmt.Errorf("deep scan requires the Inkog Deep role. Contact your admin to enable it at https://app.inkog.io")
+	case http.StatusUnauthorized:
+		return fmt.Errorf(APIKeyRequiredMessage())
+	case http.StatusConflict:
+		return nil // already processing — treat as success
+	default:
+		return fmt.Errorf("failed to trigger deep scan (HTTP %d): %s", resp.StatusCode, string(body))
+	}
+}
+
+// GetSkillScan retrieves the full skill scan detail including AI results.
+// GET /v1/scan/skills/{scanID}
+func (c *InkogClient) GetSkillScan(scanID string) (*SkillScanDetailResponse, error) {
+	req, err := http.NewRequest("GET", c.BaseURL+"/v1/scan/skills/"+scanID, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("User-Agent", "inkog-cli/"+CLIVersion)
+	if c.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	}
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("network error: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to get skill scan (HTTP %d): %s", resp.StatusCode, string(body))
+	}
+
+	var result SkillScanDetailResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return &result, nil
+}
+
 // logRetry logs retry attempts (respects quiet mode)
 func (c *InkogClient) logRetry(attempt int, message string) {
 	if c.Quiet {
@@ -484,4 +557,200 @@ func (c *InkogClient) logRateLimit(attempt int, seconds int) {
 	} else {
 		fmt.Fprintf(os.Stderr, "   %s\n", msg)
 	}
+}
+
+// SkillScanResponse represents the response from the skill scan API.
+type SkillScanResponse struct {
+	Success bool   `json:"success"`
+	ScanID  string `json:"scan_id"`
+	Status  string `json:"status"`
+	Error   string `json:"error,omitempty"`
+	Result  *struct {
+		ID            string `json:"id"`
+		Format        int    `json:"format"`
+		Name          string `json:"name"`
+		Source        string `json:"source"`
+		RiskScore     int    `json:"risk_score"`
+		SecurityScore int    `json:"security_score"`
+		OverallRisk   string `json:"overall_risk"`
+		FilesScanned  int    `json:"files_scanned"`
+		LinesOfCode   int    `json:"lines_of_code"`
+		CriticalCount int    `json:"critical_count"`
+		HighCount     int    `json:"high_count"`
+		MediumCount   int    `json:"medium_count"`
+		LowCount      int    `json:"low_count"`
+		Findings      []struct {
+			ID             string  `json:"id"`
+			PatternID      string  `json:"pattern_id"`
+			Category       string  `json:"category"`
+			Severity       string  `json:"severity"`
+			Title          string  `json:"title"`
+			Description    string  `json:"description"`
+			File           string  `json:"file,omitempty"`
+			Line           int     `json:"line,omitempty"`
+			Code           string  `json:"code_snippet,omitempty"`
+			Remediation    string  `json:"remediation"`
+			DetectionLayer string  `json:"detection_layer"`
+			ToolName       string  `json:"tool_name,omitempty"`
+			OWASPAgentic   string  `json:"owasp_agentic,omitempty"`
+			OWASPMCP       string  `json:"owasp_mcp,omitempty"`
+			Confidence     float64 `json:"confidence"`
+		} `json:"findings"`
+		ToolAnalyses []struct {
+			Name        string   `json:"name"`
+			RiskLevel   string   `json:"risk_level"`
+			RiskReasons []string `json:"risk_reasons,omitempty"`
+		} `json:"tool_analyses"`
+		Permissions *struct {
+			FileAccess        bool   `json:"file_access"`
+			NetworkAccess     bool   `json:"network_access"`
+			CodeExecution     bool   `json:"code_execution"`
+			DatabaseAccess    bool   `json:"database_access"`
+			EnvironmentAccess bool   `json:"environment_access"`
+			Scope             string `json:"scope"`
+		} `json:"permissions"`
+	} `json:"result,omitempty"`
+}
+
+// SendSkillScan sends a skill package for scanning.
+func (c *InkogClient) SendSkillScan(files map[string]string) (*SkillScanResponse, error) {
+	reqBody := struct {
+		Files map[string]string `json:"files"`
+	}{
+		Files: files,
+	}
+
+	data, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", c.BaseURL+"/v1/scan/skills", bytes.NewBuffer(data))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "inkog-cli/"+CLIVersion)
+	if c.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	}
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("network error: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("server error (%d): %s", resp.StatusCode, string(body))
+	}
+
+	var result SkillScanResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	return &result, nil
+}
+
+// ScanSkillRepo scans a skill repository by URL.
+// The backend clones the repo, scans it, and stores the URL as Source for deep scan.
+func (c *InkogClient) ScanSkillRepo(repoURL string) (*SkillScanResponse, error) {
+	reqBody := struct {
+		RepositoryURL string `json:"repository_url"`
+	}{
+		RepositoryURL: repoURL,
+	}
+
+	data, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", c.BaseURL+"/v1/scan/skills", bytes.NewBuffer(data))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "inkog-cli/"+CLIVersion)
+	if c.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	}
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("network error: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("server error (%d): %s", resp.StatusCode, string(body))
+	}
+
+	var result SkillScanResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	return &result, nil
+}
+
+// ScanMCPServer scans an MCP server from the registry by name.
+// If repoURL is provided, it is sent as the "url" field so the backend
+// can use it as the source for deep scans.
+func (c *InkogClient) ScanMCPServer(serverName, repoURL string) (*SkillScanResponse, error) {
+	reqBody := struct {
+		ServerName string `json:"server_name"`
+		URL        string `json:"url,omitempty"`
+	}{
+		ServerName: serverName,
+		URL:        repoURL,
+	}
+
+	data, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", c.BaseURL+"/v1/scan/skills/mcp", bytes.NewBuffer(data))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "inkog-cli/"+CLIVersion)
+	if c.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	}
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("network error: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("server error (%d): %s", resp.StatusCode, string(body))
+	}
+
+	var result SkillScanResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	return &result, nil
 }

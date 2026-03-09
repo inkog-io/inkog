@@ -150,6 +150,8 @@ type ScanResult struct {
 	TopologyMap      *contract.TopologyMap             `json:"topology_map,omitempty"`
 	Strengths        []contract.SecurityStrength        `json:"strengths,omitempty"`
 	DeepReport       *DeepReport                        `json:"deep_report,omitempty"`
+	IsSkillScan      bool                               `json:"-"` // rendering hint only
+	IsMCPScan        bool                               `json:"-"` // rendering hint: MCP server scan
 }
 
 // DeepReport contains orchestrator metadata from a deep scan.

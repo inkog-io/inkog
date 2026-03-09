@@ -6,7 +6,9 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -32,6 +34,577 @@ func init() {
 }
 
 const AppName = "inkog"
+
+// runSkillScan handles the "skill-scan" subcommand.
+func runSkillScan(args []string, serverURL, outputFormat, policy string, deep, quiet bool) {
+	// Parse skill-scan specific flags
+	var repoURL string
+	var target string
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--repo":
+			if i+1 < len(args) {
+				repoURL = args[i+1]
+				i++
+			}
+		case "--output", "-output":
+			if i+1 < len(args) {
+				outputFormat = args[i+1]
+				i++
+			}
+		case "--policy", "-policy":
+			if i+1 < len(args) {
+				policy = args[i+1]
+				i++
+			}
+		case "--deep", "-deep":
+			deep = true
+		case "--quiet", "-quiet":
+			quiet = true
+		default:
+			if !strings.HasPrefix(args[i], "-") {
+				target = args[i]
+			}
+		}
+	}
+
+	// Update quiet mode based on resolved output format
+	if outputFormat == "json" || os.Getenv("CI") != "" {
+		quiet = true
+	}
+
+	if target == "" && repoURL == "" {
+		target = "."
+	}
+
+	// Validate --repo URL if provided
+	if repoURL != "" {
+		if err := validateRepoURL(repoURL); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	// Resolve API key
+	apiKey := os.Getenv("INKOG_API_KEY")
+	if apiKey == "" {
+		apiKey = cli.GetSavedAPIKey()
+	}
+	if apiKey == "" {
+		fmt.Fprintf(os.Stderr, "Error: INKOG_API_KEY not set. Get your free key at https://app.inkog.io\n")
+		os.Exit(1)
+	}
+	os.Setenv("INKOG_API_KEY", apiKey)
+
+	// Create client
+	progress := cli.NewProgressReporter(quiet)
+	client := cli.NewInkogClient(serverURL, quiet, progress)
+
+	var resp *cli.SkillScanResponse
+	var err error
+
+	if repoURL != "" {
+		// Scan repository by URL
+		if !quiet {
+			progress.Start("Scanning repository: " + repoURL)
+		}
+		resp, err = client.ScanSkillRepo(repoURL)
+	} else if deep && target != "" {
+		// Deep scan on local dir: auto-detect git remote
+		detectedURL, detectErr := detectGitRemoteURL(target)
+		if detectErr != nil {
+			fmt.Fprintf(os.Stderr, "Error: Deep scan requires a repository URL. Use --repo <url> or run from a git repo with a GitHub/GitLab/Bitbucket remote.\n")
+			fmt.Fprintf(os.Stderr, "       (%v)\n", detectErr)
+			os.Exit(1)
+		}
+		if !quiet {
+			progress.Start("Scanning repository (from git remote): " + detectedURL)
+		}
+		resp, err = client.ScanSkillRepo(detectedURL)
+	} else {
+		// Scan local directory (non-deep)
+		if !quiet {
+			progress.Start("Collecting skill files from: " + target)
+		}
+
+		files, summary, collectErr := cli.CollectSkillFiles(target)
+		if collectErr != nil {
+			progress.Stop()
+			fmt.Fprintf(os.Stderr, "Error collecting files: %v\n", collectErr)
+			os.Exit(1)
+		}
+
+		if !quiet {
+			progress.Update(fmt.Sprintf("Found %d files (%s format)", summary.FileCount, summary.Format))
+			progress.Update("Uploading for analysis...")
+		}
+
+		resp, err = client.SendSkillScan(files)
+	}
+
+	progress.Stop()
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if !resp.Success {
+		fmt.Fprintf(os.Stderr, "Scan failed: %s\n", resp.Error)
+		os.Exit(1)
+	}
+
+	if deep && resp.ScanID != "" {
+		// Deep scan flow: trigger AI analysis, poll, output via outputResults()
+		if !quiet {
+			fmt.Fprintf(os.Stderr, "\n🔬 Inkog Deep Skill Scan\n")
+			fmt.Fprintf(os.Stderr, "   Deep scans perform advanced analysis and typically take around 10 minutes.\n")
+			fmt.Fprintf(os.Stderr, "   You can safely leave this running — results will appear when ready.\n\n")
+		}
+
+		progress.Start("Triggering deep analysis...")
+		if err := client.TriggerSkillDeepScan(resp.ScanID); err != nil {
+			progress.Stop()
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		progress.Stop()
+
+		scan, err := pollSkillDeepScan(client, resp.ScanID, progress, quiet)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
+		// The backend stores the orchestrator report in ai_findings.
+		// Wrap it so extractDeepFindings/extractDeepReport (which expect "findings" key) work.
+		wrappedScan := map[string]interface{}{
+			"findings": scan["ai_findings"],
+		}
+		// Copy top-level keys for extractDeepReport metadata fallback
+		for k, v := range scan {
+			if k != "findings" && k != "ai_findings" {
+				wrappedScan[k] = v
+			}
+		}
+
+		aiResult := &cli.DeepScanResult{
+			ScanID: resp.ScanID,
+			Status: "completed",
+			Scan:   wrappedScan,
+		}
+
+		findings := convertDeepFindings(aiResult)
+		// Include core findings from the initial skill scan alongside deep findings
+		coreFindings := convertSkillFindings(resp)
+		findings = append(coreFindings, findings...)
+		deepReport := extractDeepReport(wrappedScan)
+		if deepReport == nil {
+			deepReport = &cli.DeepReport{}
+		}
+
+		var strengths []contract.SecurityStrength
+		if len(deepReport.CleanDetections) > 0 {
+			for _, cd := range deepReport.CleanDetections {
+				strengths = append(strengths, contract.SecurityStrength{
+					Title:   humanizeDetectionID(cd.DetectionID),
+					Message: cd.Reason,
+				})
+			}
+		}
+
+		scanResult := &cli.ScanResult{
+			AllFindings:    findings,
+			ServerFindings: findings,
+			Strengths:      strengths,
+			DeepReport:     deepReport,
+			IsSkillScan:    true,
+		}
+
+		if err := outputResults(scanResult, outputFormat, "", policy, false, quiet); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
+		if len(findings) > 0 {
+			os.Exit(1)
+		}
+		return
+	}
+
+	// Non-deep: convert to unified format and output via outputResults()
+	findings := convertSkillFindings(resp)
+	scanResult := &cli.ScanResult{
+		AllFindings:    findings,
+		ServerFindings: findings,
+		IsSkillScan:    true,
+	}
+	if err := outputResults(scanResult, outputFormat, "", policy, false, quiet); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if len(findings) > 0 {
+		os.Exit(1)
+	}
+}
+
+// runMCPScan handles the "mcp-scan" subcommand.
+func runMCPScan(args []string, serverURL, outputFormat, policy string, deep, quiet bool) {
+	// Parse mcp-scan specific flags
+	var repoURL string
+	var mcpServer string
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--repo":
+			if i+1 < len(args) {
+				repoURL = args[i+1]
+				i++
+			}
+		case "--output", "-output":
+			if i+1 < len(args) {
+				outputFormat = args[i+1]
+				i++
+			}
+		case "--policy", "-policy":
+			if i+1 < len(args) {
+				policy = args[i+1]
+				i++
+			}
+		case "--deep", "-deep":
+			deep = true
+		case "--quiet", "-quiet":
+			quiet = true
+		default:
+			if !strings.HasPrefix(args[i], "-") {
+				mcpServer = args[i]
+			}
+		}
+	}
+
+	// Update quiet mode based on resolved output format
+	if outputFormat == "json" || os.Getenv("CI") != "" {
+		quiet = true
+	}
+
+	if mcpServer == "" && repoURL == "" {
+		fmt.Fprintf(os.Stderr, "Error: mcp-scan requires a server name or --repo URL\n")
+		fmt.Fprintf(os.Stderr, "Usage: inkog mcp-scan <server-name> [--repo <url>] [--deep]\n")
+		os.Exit(1)
+	}
+
+	// Validate --repo URL if provided
+	if repoURL != "" {
+		if err := validateRepoURL(repoURL); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	// Resolve API key
+	apiKey := os.Getenv("INKOG_API_KEY")
+	if apiKey == "" {
+		apiKey = cli.GetSavedAPIKey()
+	}
+	if apiKey == "" {
+		fmt.Fprintf(os.Stderr, "Error: INKOG_API_KEY not set. Get your free key at https://app.inkog.io\n")
+		os.Exit(1)
+	}
+	os.Setenv("INKOG_API_KEY", apiKey)
+
+	// Create client
+	progress := cli.NewProgressReporter(quiet)
+	client := cli.NewInkogClient(serverURL, quiet, progress)
+
+	var resp *cli.SkillScanResponse
+	var err error
+
+	if mcpServer != "" {
+		// Scan MCP server from registry (optionally with explicit repo URL)
+		if !quiet {
+			if repoURL != "" {
+				progress.Start("Scanning MCP server: " + mcpServer + " (repo: " + repoURL + ")")
+			} else {
+				progress.Start("Scanning MCP server: " + mcpServer)
+			}
+		}
+		resp, err = client.ScanMCPServer(mcpServer, repoURL)
+	} else {
+		// Deep scan with --repo only (no server name)
+		if !quiet {
+			progress.Start("Scanning MCP repository: " + repoURL)
+		}
+		resp, err = client.ScanSkillRepo(repoURL)
+	}
+
+	progress.Stop()
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if !resp.Success {
+		fmt.Fprintf(os.Stderr, "Scan failed: %s\n", resp.Error)
+		os.Exit(1)
+	}
+
+	if deep && resp.ScanID != "" {
+		// Deep scan flow: trigger AI analysis, poll, output via outputResults()
+		if !quiet {
+			fmt.Fprintf(os.Stderr, "\n🔬 Inkog Deep MCP Scan\n")
+			fmt.Fprintf(os.Stderr, "   Deep scans perform advanced analysis and typically take around 10 minutes.\n")
+			fmt.Fprintf(os.Stderr, "   You can safely leave this running — results will appear when ready.\n\n")
+		}
+
+		progress.Start("Triggering deep analysis...")
+		if err := client.TriggerSkillDeepScan(resp.ScanID); err != nil {
+			progress.Stop()
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		progress.Stop()
+
+		scan, err := pollSkillDeepScan(client, resp.ScanID, progress, quiet)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
+		wrappedScan := map[string]interface{}{
+			"findings": scan["ai_findings"],
+		}
+		for k, v := range scan {
+			if k != "findings" && k != "ai_findings" {
+				wrappedScan[k] = v
+			}
+		}
+
+		aiResult := &cli.DeepScanResult{
+			ScanID: resp.ScanID,
+			Status: "completed",
+			Scan:   wrappedScan,
+		}
+
+		findings := convertDeepFindings(aiResult)
+		coreFindings := convertSkillFindings(resp)
+		findings = append(coreFindings, findings...)
+		deepReport := extractDeepReport(wrappedScan)
+		if deepReport == nil {
+			deepReport = &cli.DeepReport{}
+		}
+
+		var strengths []contract.SecurityStrength
+		if len(deepReport.CleanDetections) > 0 {
+			for _, cd := range deepReport.CleanDetections {
+				strengths = append(strengths, contract.SecurityStrength{
+					Title:   humanizeDetectionID(cd.DetectionID),
+					Message: cd.Reason,
+				})
+			}
+		}
+
+		scanResult := &cli.ScanResult{
+			AllFindings:    findings,
+			ServerFindings: findings,
+			Strengths:      strengths,
+			DeepReport:     deepReport,
+			IsSkillScan:    true,
+			IsMCPScan:      true,
+		}
+
+		if err := outputResults(scanResult, outputFormat, "", policy, false, quiet); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
+		if len(findings) > 0 {
+			os.Exit(1)
+		}
+		return
+	}
+
+	// Non-deep: convert to unified format and output via outputResults()
+	findings := convertSkillFindings(resp)
+	scanResult := &cli.ScanResult{
+		AllFindings:    findings,
+		ServerFindings: findings,
+		IsSkillScan:    true,
+		IsMCPScan:      true,
+	}
+	if err := outputResults(scanResult, outputFormat, "", policy, false, quiet); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if len(findings) > 0 {
+		os.Exit(1)
+	}
+}
+
+// allowedRepoHosts lists the hosts accepted for --repo and git remote auto-detection.
+var allowedRepoHosts = map[string]bool{
+	"github.com":    true,
+	"gitlab.com":    true,
+	"bitbucket.org": true,
+}
+
+// validateRepoURL checks that a repo URL is https:// and on an allowed host.
+func validateRepoURL(rawURL string) error {
+	if !strings.HasPrefix(rawURL, "https://") {
+		return fmt.Errorf("repository URL must start with https:// (got %q)", rawURL)
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid repository URL: %w", err)
+	}
+	if !allowedRepoHosts[parsed.Host] {
+		return fmt.Errorf("unsupported repository host %q — must be github.com, gitlab.com, or bitbucket.org", parsed.Host)
+	}
+	return nil
+}
+
+// detectGitRemoteURL runs `git remote get-url origin` in the target directory,
+// normalizes SSH URLs to HTTPS, and validates the host.
+func detectGitRemoteURL(targetDir string) (string, error) {
+	cmd := exec.Command("git", "-C", targetDir, "remote", "get-url", "origin")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("no git remote found in %q: %w", targetDir, err)
+	}
+	remote := strings.TrimSpace(string(out))
+	if remote == "" {
+		return "", fmt.Errorf("git remote origin is empty in %q", targetDir)
+	}
+
+	// Normalize SSH URLs: git@github.com:org/repo.git -> https://github.com/org/repo
+	normalized := normalizeGitURL(remote)
+
+	if err := validateRepoURL(normalized); err != nil {
+		return "", fmt.Errorf("git remote origin is not a supported repository: %w", err)
+	}
+	return normalized, nil
+}
+
+// normalizeGitURL converts git SSH URLs to HTTPS and strips .git suffix.
+func normalizeGitURL(raw string) string {
+	// Handle SSH format: git@host:org/repo.git
+	if strings.HasPrefix(raw, "git@") {
+		raw = strings.TrimPrefix(raw, "git@")
+		raw = strings.Replace(raw, ":", "/", 1)
+		raw = "https://" + raw
+	}
+	// Handle ssh:// format: ssh://git@host/org/repo.git
+	if strings.HasPrefix(raw, "ssh://") {
+		raw = strings.TrimPrefix(raw, "ssh://")
+		if idx := strings.Index(raw, "@"); idx != -1 {
+			raw = raw[idx+1:]
+		}
+		raw = "https://" + raw
+	}
+	// Strip .git suffix
+	raw = strings.TrimSuffix(raw, ".git")
+	return raw
+}
+
+// pollSkillDeepScan polls GET /v1/scan/skills/{id} until ai_scan_status is completed or failed.
+func pollSkillDeepScan(client *cli.InkogClient, scanID string, progress *cli.ProgressReporter, quiet bool) (map[string]interface{}, error) {
+	const pollInterval = 5 * time.Second
+	const maxPollDuration = 30 * time.Minute
+
+	progress.Start("Deep scan in progress — this typically takes around 10 minutes...")
+	startTime := time.Now()
+	deadline := startTime.Add(maxPollDuration)
+
+	phases := []struct {
+		after   time.Duration
+		message string
+	}{
+		{30 * time.Second, "Analyzing your skill..."},
+		{2 * time.Minute, "Deep analysis in progress — checking for complex vulnerability patterns..."},
+		{5 * time.Minute, "Still working — analyzing control flow and data dependencies..."},
+		{8 * time.Minute, "Almost there — generating report..."},
+		{12 * time.Minute, "This scan is taking longer than usual — still processing..."},
+		{18 * time.Minute, "Still waiting for orchestrator response..."},
+		{25 * time.Minute, "Approaching timeout..."},
+	}
+	lastPhase := -1
+
+	for time.Now().Before(deadline) {
+		time.Sleep(pollInterval)
+
+		elapsed := time.Since(startTime)
+
+		for i := len(phases) - 1; i >= 0; i-- {
+			if elapsed >= phases[i].after && i > lastPhase {
+				lastPhase = i
+				break
+			}
+		}
+		if lastPhase >= 0 {
+			mins := int(elapsed.Minutes())
+			secs := int(elapsed.Seconds()) % 60
+			progress.Update(fmt.Sprintf("%s (%dm%02ds)", phases[lastPhase].message, mins, secs))
+		}
+
+		resp, err := client.GetSkillScan(scanID)
+		if err != nil {
+			continue // transient error, keep polling
+		}
+
+		status, _ := resp.Scan["ai_scan_status"].(string)
+		switch status {
+		case "completed":
+			elapsed := time.Since(startTime).Truncate(time.Second)
+			progress.Success(fmt.Sprintf("Deep scan completed in %s", elapsed))
+			return resp.Scan, nil
+		case "failed":
+			progress.Fail("Deep scan failed")
+			errMsg := "deep scan failed"
+			if e, ok := resp.Scan["ai_scan_error"].(string); ok && e != "" {
+				errMsg = "deep scan failed: " + e
+			}
+			return nil, fmt.Errorf(errMsg)
+		}
+		// "processing" or any other status → keep polling
+	}
+
+	progress.Fail("Deep scan timed out after 30 minutes")
+	return nil, fmt.Errorf("deep scan timed out after %s. Check results at https://app.inkog.io/scans/%s", maxPollDuration, scanID)
+}
+
+// convertSkillFindings converts SkillScanResponse findings to unified contract.Finding slice.
+func convertSkillFindings(resp *cli.SkillScanResponse) []contract.Finding {
+	if resp.Result == nil {
+		return nil
+	}
+	var findings []contract.Finding
+	for _, f := range resp.Result.Findings {
+		cf := contract.Finding{
+			ID:               f.ID,
+			PatternID:        f.PatternID,
+			Pattern:          f.Title,
+			Source:           contract.SourceServerLogic,
+			File:             f.File,
+			Line:             f.Line,
+			Message:          f.Description,
+			Code:             f.Code,
+			Severity:         f.Severity,
+			Confidence:       float32(f.Confidence),
+			Category:         f.Category,
+			OWASP:            f.OWASPMCP,
+			DisplayTitle:     f.Title,
+			ShortDescription: f.Description,
+		}
+		if f.Remediation != "" {
+			cf.RemediationSteps = []string{f.Remediation}
+		}
+		findings = append(findings, cf)
+	}
+	return findings
+}
 
 // AppVersion can be set at build time via:
 // go build -ldflags "-X main.AppVersion=1.2.3"
@@ -70,6 +643,25 @@ trails before deployment. EU AI Act Article 14 deadline: August 2, 2026.
 
 Usage:
   inkog [OPTIONS] [PATH]
+  inkog skill-scan [OPTIONS] <TARGET>
+  inkog mcp-scan [OPTIONS] <SERVER-NAME>
+
+Commands:
+  scan                Scan agent code for vulnerabilities (default)
+  skill-scan          Scan SKILL.md packages and agent tools
+  mcp-scan            Scan MCP servers from registry or by URL
+
+Skill Scan Examples:
+  inkog skill-scan .                                     Scan current directory as skill package
+  inkog skill-scan ./my-mcp-server                       Scan local MCP server
+  inkog skill-scan --repo https://github.com/org/repo    Scan skill from repository
+  inkog skill-scan --deep --repo https://github.com/...  Deep scan from repository
+  inkog skill-scan --deep .                              Deep scan (auto-detects git remote)
+
+MCP Scan Examples:
+  inkog mcp-scan github                                  Scan MCP server from registry
+  inkog mcp-scan github --repo https://github.com/...    With explicit repo for deep
+  inkog mcp-scan --deep --repo https://github.com/...    Deep scan from repository
 
 Options:
   -path string        Source path to scan (default: .)
@@ -79,6 +671,7 @@ Options:
   -severity string    Minimum severity level: critical, high, medium, low (default: low)
   -agent-name string  Explicit agent name (overrides auto-detection from path)
   -max-files int      Maximum files to upload (default: 500)
+  -repo string        Repository URL to scan (github.com, gitlab.com, bitbucket.org)
   -deep               Inkog Deep scan — advanced security analysis (requires Inkog Deep role)
   -diff               Show only new findings since baseline (for CI/CD)
   -baseline string    Path to baseline file (default: .inkog-baseline.json)
@@ -257,6 +850,27 @@ func main() {
 	// Override path from positional argument if provided.
 	// Supports "inkog scan ." syntax (used by npm wrapper) and "inkog ." (legacy).
 	args := flag.Args()
+	if len(args) > 0 && args[0] == "skill-scan" {
+		// Handle "inkog skill-scan [options] <target>" subcommand
+		// Resolve server URL and quiet mode early for this subcommand
+		skillServerURL := *serverFlag
+		if skillServerURL == "" {
+			skillServerURL = ServerURL
+		}
+		skillQuiet := *outputFlag == "json" || os.Getenv("CI") != ""
+		runSkillScan(args[1:], skillServerURL, *outputFlag, *policyFlag, *deepFlag, skillQuiet)
+		return
+	}
+	if len(args) > 0 && args[0] == "mcp-scan" {
+		// Handle "inkog mcp-scan [options] <server-name>" subcommand
+		skillServerURL := *serverFlag
+		if skillServerURL == "" {
+			skillServerURL = ServerURL
+		}
+		skillQuiet := *outputFlag == "json" || os.Getenv("CI") != ""
+		runMCPScan(args[1:], skillServerURL, *outputFlag, *policyFlag, *deepFlag, skillQuiet)
+		return
+	}
 	if len(args) > 0 && args[0] == "scan" {
 		if len(args) > 1 {
 			*pathFlag = args[1]
@@ -4833,14 +5447,20 @@ const htmlDeepReportCSS = `
 `
 
 // generateAgentProfileHTML builds the Agent Profile section.
-func generateAgentProfileHTML(report *cli.DeepReport) string {
+func generateAgentProfileHTML(report *cli.DeepReport, result *cli.ScanResult) string {
 	// Need at least agent profile or report meta to render this section
 	if report.AgentProfile == nil && report.ReportMeta == nil {
 		return ""
 	}
 
 	var sb strings.Builder
-	sb.WriteString(`<section><h2>Agent Profile</h2><div class="profile-hero">`)
+	profileLabel := "Agent Profile"
+	if result.IsMCPScan {
+		profileLabel = "MCP Server Profile"
+	} else if result.IsSkillScan {
+		profileLabel = "Skill Profile"
+	}
+	sb.WriteString(fmt.Sprintf(`<section><h2>%s</h2><div class="profile-hero">`, profileLabel))
 
 	// ── Hero Header: agent name + stats ──
 	sb.WriteString(`<div class="profile-hero-header">`)
@@ -4851,7 +5471,13 @@ func generateAgentProfileHTML(report *cli.DeepReport) string {
 	if report.ReportMeta != nil && report.ReportMeta.AgentName != "" {
 		agentName = report.ReportMeta.AgentName
 	} else if report.AgentProfile != nil && report.AgentProfile.Framework != "" {
-		agentName = report.AgentProfile.Framework + " Agent"
+		suffix := " Agent"
+		if result.IsMCPScan {
+			suffix = " MCP Server"
+		} else if result.IsSkillScan {
+			suffix = " Skill"
+		}
+		agentName = report.AgentProfile.Framework + suffix
 	}
 	if agentName != "" {
 		sb.WriteString(fmt.Sprintf(`<div class="profile-hero-name">%s</div>`, escapeHTML(agentName)))
@@ -5492,7 +6118,7 @@ func outputDeepHTML(result *cli.ScanResult, minSeverity string) error {
 	accordionsHTML := generateDeepAccordionsHTML(filtered)
 
 	// Section generators
-	agentProfileHTML := generateAgentProfileHTML(report)
+	agentProfileHTML := generateAgentProfileHTML(report, result)
 	severityOverviewHTML := generateSeverityOverviewHTML(report, filtered)
 	riskAssessmentHTML := generateRiskAssessmentHTML(filtered)
 	governanceStatusHTML := generateGovernanceStatusHTML(result)
