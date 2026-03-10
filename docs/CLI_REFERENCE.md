@@ -112,6 +112,43 @@ inkog -path . -severity critical
 inkog -path . -severity high
 ```
 
+#### `-deep`
+**Default:** false
+
+Run an Inkog Deep scan — advanced orchestrator-based security analysis. Requires the **Inkog Deep role** on your account.
+
+Deep scans take longer than standard scans (typically around 10 minutes) because they use an AI orchestrator to perform deeper analysis with enriched context.
+
+```bash
+# Deep scan your agent code
+inkog -deep .
+
+# Deep scan with HTML report
+inkog -deep -output html . > deep-report.html
+
+# Deep scan with JSON output
+inkog -deep -output json . > deep-results.json
+```
+
+**What Deep adds over Core:**
+
+| Feature | Core | Deep |
+|---------|------|------|
+| Static analysis | Yes | Yes |
+| Agent Profile (architecture, framework, trust boundaries) | — | Yes |
+| Strengths (passing security checks) | — | Yes |
+| Compliance Coverage (EU AI Act, NIST, OWASP mapping) | — | Yes |
+| Methodology (how the analysis was performed) | — | Yes |
+| Extended finding fields (proof, false positive rationale) | — | Yes |
+| Premium HTML report | — | Yes |
+
+**Output differences by format:**
+
+- **Text:** Header shows "Inkog Deep" instead of "Inkog Core", plus a Strengths section listing passing security checks
+- **HTML:** Completely different premium report with Agent Profile, Severity Overview, Clean Detections, Compliance Summary, and Methodology sections
+- **JSON:** Includes a `deep_report` object with `agent_profile`, `clean_detections`, `compliance_summary`, `methodology`, and `severity_summary`
+- **SARIF:** Standard SARIF structure with findings from the deep analysis
+
 #### `-verbose`
 **Default:** false
 

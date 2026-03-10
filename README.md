@@ -101,6 +101,20 @@ inkog .
 [Full CI/CD docs →](https://docs.inkog.io/ci-cd/github-action)
 
 <details>
+<summary><strong>Deep scan</strong></summary>
+
+Run an advanced orchestrator-based analysis with enriched findings, an agent profile, compliance coverage, and a premium HTML report:
+
+```bash
+inkog -deep .
+inkog -deep -output html . > deep-report.html
+```
+
+Requires the Inkog Deep role. [Deep scan docs →](https://docs.inkog.io/cli/deep-scan)
+
+</details>
+
+<details>
 <summary><strong>Scan policies</strong></summary>
 
 ```bash
