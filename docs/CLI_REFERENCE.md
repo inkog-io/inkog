@@ -15,12 +15,80 @@ inkog scan .
 
 See the [README](../README.md) for all installation methods (Homebrew, Go, binary download).
 
-## Command-Line Options
+## Commands
 
 ### Syntax
 ```
 inkog [scan] [OPTIONS] [PATH]
+inkog skill-scan [OPTIONS] <TARGET>
+inkog mcp-scan [OPTIONS] <SERVER-NAME>
 ```
+
+| Command | Purpose |
+|---------|---------|
+| `scan` (default) | Scan agent code for vulnerabilities |
+| `skill-scan` | Scan SKILL.md packages and agent tools |
+| `mcp-scan` | Scan MCP servers from registry or by URL |
+
+---
+
+### `skill-scan`
+
+Scan SKILL.md packages, agent tools, and local MCP servers for security vulnerabilities.
+
+```bash
+# Scan current directory as a skill package
+inkog skill-scan .
+
+# Scan a local MCP server directory
+inkog skill-scan ./my-mcp-server
+
+# Scan a skill from a repository URL
+inkog skill-scan --repo https://github.com/org/repo
+
+# Deep scan (auto-detects git remote from local directory)
+inkog skill-scan --deep .
+
+# Deep scan from repository URL
+inkog skill-scan --deep --repo https://github.com/org/repo
+```
+
+**Options:**
+- `--repo <url>` — Repository URL to scan (GitHub, GitLab, Bitbucket)
+- `--deep` — Run advanced orchestrator-based analysis (requires Inkog Deep role)
+- `--output <format>` — Output format: `text`, `json`, `html`, `sarif`
+- `--policy <preset>` — Security policy preset
+
+When `--deep` is used without `--repo`, the CLI auto-detects the git remote URL from the target directory.
+
+---
+
+### `mcp-scan`
+
+Scan MCP servers by registry name or repository URL. Checks for tool poisoning, privilege escalation, and data exfiltration.
+
+```bash
+# Scan an MCP server by registry name
+inkog mcp-scan github
+
+# Scan with explicit repository URL
+inkog mcp-scan github --repo https://github.com/org/mcp-server
+
+# Deep scan an MCP server
+inkog mcp-scan --deep --repo https://github.com/org/mcp-server
+```
+
+**Options:**
+- `--repo <url>` — Repository URL for the MCP server source code
+- `--deep` — Run advanced orchestrator-based analysis (requires Inkog Deep role)
+- `--output <format>` — Output format: `text`, `json`, `html`, `sarif`
+- `--policy <preset>` — Security policy preset
+
+**Output differences:** Deep MCP scans produce an "MCP Server Profile" (instead of "Agent Profile") in HTML reports, with framework and architecture details specific to the MCP server.
+
+---
+
+## Scan Options
 
 ### Options
 

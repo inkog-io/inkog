@@ -115,6 +115,29 @@ Requires the Inkog Deep role. [Deep scan docs →](https://docs.inkog.io/cli/dee
 </details>
 
 <details>
+<summary><strong>Skill & MCP scan</strong></summary>
+
+Scan SKILL.md packages, agent tools, and MCP servers for vulnerabilities:
+
+```bash
+# Scan a skill package
+inkog skill-scan .
+inkog skill-scan --repo https://github.com/org/repo
+
+# Scan an MCP server by registry name
+inkog mcp-scan github
+inkog mcp-scan github --repo https://github.com/org/mcp-server
+
+# Deep scan either
+inkog skill-scan --deep .
+inkog mcp-scan --deep --repo https://github.com/org/mcp-server
+```
+
+[Skill & MCP scan docs →](https://docs.inkog.io/cli/skill-scan)
+
+</details>
+
+<details>
 <summary><strong>Scan policies</strong></summary>
 
 ```bash
