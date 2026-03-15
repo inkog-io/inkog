@@ -1,0 +1,15 @@
+variables:
+  INKOG_POLICY: 'balanced'
+  INKOG_PATH: '$(Build.SourcesDirectory)'
+  INKOG_SEVERITY: 'low'
+
+steps:
+- task: Bash@3
+  displayName: 'Inkog Security Scan'
+  inputs:
+    targetType: 'inline'
+    script: |
+      curl -fsSL https://get.inkog.io | sh
+      inkog -path $(INKOG_PATH) -policy $(INKOG_POLICY) -severity $(INKOG_SEVERITY) -output sarif > $(Build.ArtifactStagingDirectory)/inkog.sarif
+  env:
+    INKOG_API_KEY: $(INKOG_API_KEY)
