@@ -1,0 +1,15 @@
+variables:
+  INKOG_POLICY: "balanced"
+  INKOG_PATH: "."
+  INKOG_SEVERITY: "low"
+
+inkog-scan:
+  stage: test
+  image: ghcr.io/inkog-io/inkog:latest
+  script:
+    - inkog -path $INKOG_PATH -policy $INKOG_POLICY -severity $INKOG_SEVERITY -output sarif > gl-inkog-results.sarif
+  artifacts:
+    reports:
+      sast: gl-inkog-results.sarif
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
