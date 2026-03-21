@@ -45,7 +45,9 @@ Inkog scans your agent code statically and catches these problems before deploym
 - **Reviewing agent code** — Use from Claude Code, Cursor, or any MCP client to get security analysis while you code
 - **Auditing MCP servers** — Check any MCP server for tool poisoning, privilege escalation, or data exfiltration before installing
 - **Verifying AGENTS.md** — Validate that governance declarations match actual code behavior
-- **Building multi-agent systems** — Detect delegation loops, privilege escalation, and unauthorized handoffs between agents
+- **Scanning Skill packages** — Audit SKILL.md packages for tool poisoning, command injection, and excessive permissions before adding to your agent
+- **Generating an MLBOM** — Create a Machine Learning Bill of Materials documenting your agent's components, tools, and data flows
+- **Building multi-agent systems** — Detect delegation loops, privilege escalation, and unauthorized handoffs between agents (A2A audit)
 
 ## Quick Start
 
@@ -85,7 +87,7 @@ inkog .
 
 ## Supported Frameworks
 
-**Code-first:** LangChain · LangGraph · CrewAI · AutoGen · OpenAI Agents · Semantic Kernel · Azure AI Foundry · LlamaIndex · Haystack · DSPy · Phidata · Smolagents · PydanticAI · Google ADK
+**Code-first:** LangChain · LangGraph · CrewAI · AutoGen · AG2 · OpenAI Agents · Semantic Kernel · Azure AI Foundry · LlamaIndex · Haystack · DSPy · Phidata · Smolagents · PydanticAI · Google ADK
 
 **No-code:** n8n · Flowise · Langflow · Dify · Microsoft Copilot Studio · Salesforce Agentforce
 
@@ -160,7 +162,13 @@ Scan agent code directly from Claude, ChatGPT, or Cursor:
 npx -y @inkog-io/mcp
 ```
 
-7 tools including MCP server auditing and multi-agent topology analysis. [MCP docs →](https://docs.inkog.io/integrations/mcp)
+7 tools including MCP server auditing, Skill package scanning, and multi-agent topology analysis. [MCP docs →](https://docs.inkog.io/integrations/mcp)
+
+## Inkog Red — Coming Soon
+
+Automated adversarial testing for AI agents. Inkog Red probes your running agents with prompt injection, jailbreaks, and tool misuse attacks to validate that defenses hold under real-world conditions.
+
+[Join the waitlist →](https://inkog.io/red)
 
 ## Community
 
