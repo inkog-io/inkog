@@ -1,0 +1,22 @@
+pipeline {
+    agent any
+    environment {
+        INKOG_API_KEY = credentials('inkog-api-key')
+        INKOG_POLICY = 'balanced'
+        INKOG_PATH = '.'
+        INKOG_SEVERITY = 'low'
+    }
+    stages {
+        stage('Inkog Security Scan') {
+            steps {
+                sh 'curl -fsSL https://get.inkog.io | sh'
+                sh 'inkog -path ${INKOG_PATH} -policy ${INKOG_POLICY} -severity ${INKOG_SEVERITY} -output sarif > inkog-results.sarif'
+            }
+        }
+    }
+    post {
+        always {
+            recordIssues(tools: [sarif(pattern: 'inkog-results.sarif')])
+        }
+    }
+}

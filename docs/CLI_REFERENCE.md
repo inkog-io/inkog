@@ -15,12 +15,80 @@ inkog scan .
 
 See the [README](../README.md) for all installation methods (Homebrew, Go, binary download).
 
-## Command-Line Options
+## Commands
 
 ### Syntax
 ```
 inkog [scan] [OPTIONS] [PATH]
+inkog skill-scan [OPTIONS] <TARGET>
+inkog mcp-scan [OPTIONS] <SERVER-NAME>
 ```
+
+| Command | Purpose |
+|---------|---------|
+| `scan` (default) | Scan agent code for vulnerabilities |
+| `skill-scan` | Scan SKILL.md packages and agent tools |
+| `mcp-scan` | Scan MCP servers from registry or by URL |
+
+---
+
+### `skill-scan`
+
+Scan SKILL.md packages, agent tools, and local MCP servers for security vulnerabilities.
+
+```bash
+# Scan current directory as a skill package
+inkog skill-scan .
+
+# Scan a local MCP server directory
+inkog skill-scan ./my-mcp-server
+
+# Scan a skill from a repository URL
+inkog skill-scan --repo https://github.com/org/repo
+
+# Deep scan (auto-detects git remote from local directory)
+inkog skill-scan --deep .
+
+# Deep scan from repository URL
+inkog skill-scan --deep --repo https://github.com/org/repo
+```
+
+**Options:**
+- `--repo <url>` — Repository URL to scan (GitHub, GitLab, Bitbucket)
+- `--deep` — Run advanced orchestrator-based analysis (requires Inkog Deep role)
+- `--output <format>` — Output format: `text`, `json`, `html`, `sarif`
+- `--policy <preset>` — Security policy preset
+
+When `--deep` is used without `--repo`, the CLI auto-detects the git remote URL from the target directory.
+
+---
+
+### `mcp-scan`
+
+Scan MCP servers by registry name or repository URL. Checks for tool poisoning, privilege escalation, and data exfiltration.
+
+```bash
+# Scan an MCP server by registry name
+inkog mcp-scan github
+
+# Scan with explicit repository URL
+inkog mcp-scan github --repo https://github.com/org/mcp-server
+
+# Deep scan an MCP server
+inkog mcp-scan --deep --repo https://github.com/org/mcp-server
+```
+
+**Options:**
+- `--repo <url>` — Repository URL for the MCP server source code
+- `--deep` — Run advanced orchestrator-based analysis (requires Inkog Deep role)
+- `--output <format>` — Output format: `text`, `json`, `html`, `sarif`
+- `--policy <preset>` — Security policy preset
+
+**Output differences:** Deep MCP scans produce an "MCP Server Profile" (instead of "Agent Profile") in HTML reports, with framework and architecture details specific to the MCP server.
+
+---
+
+## Scan Options
 
 ### Options
 
@@ -111,6 +179,43 @@ inkog -path . -severity critical
 # Show high and critical findings
 inkog -path . -severity high
 ```
+
+#### `-deep`
+**Default:** false
+
+Run an Inkog Deep scan — advanced orchestrator-based security analysis. Requires the **Inkog Deep role** on your account.
+
+Deep scans take longer than standard scans (typically around 10 minutes) because they use an AI orchestrator to perform deeper analysis with enriched context.
+
+```bash
+# Deep scan your agent code
+inkog -deep .
+
+# Deep scan with HTML report
+inkog -deep -output html . > deep-report.html
+
+# Deep scan with JSON output
+inkog -deep -output json . > deep-results.json
+```
+
+**What Deep adds over Core:**
+
+| Feature | Core | Deep |
+|---------|------|------|
+| Static analysis | Yes | Yes |
+| Agent Profile (architecture, framework, trust boundaries) | — | Yes |
+| Strengths (passing security checks) | — | Yes |
+| Compliance Coverage (EU AI Act, NIST, OWASP mapping) | — | Yes |
+| Methodology (how the analysis was performed) | — | Yes |
+| Extended finding fields (proof, false positive rationale) | — | Yes |
+| Premium HTML report | — | Yes |
+
+**Output differences by format:**
+
+- **Text:** Header shows "Inkog Deep" instead of "Inkog Core", plus a Strengths section listing passing security checks
+- **HTML:** Completely different premium report with Agent Profile, Severity Overview, Clean Detections, Compliance Summary, and Methodology sections
+- **JSON:** Includes a `deep_report` object with `agent_profile`, `clean_detections`, `compliance_summary`, `methodology`, and `severity_summary`
+- **SARIF:** Standard SARIF structure with findings from the deep analysis
 
 #### `-verbose`
 **Default:** false
