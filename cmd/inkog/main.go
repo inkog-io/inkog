@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -248,6 +249,848 @@ func runSkillScan(args []string, serverURL, outputFormat, policy string, deep, q
 	if len(findings) > 0 {
 		os.Exit(1)
 	}
+}
+
+// runRedScan handles the "red" subcommand — red team testing via relay.
+func runRedScan(args []string, serverURL, outputFormat string, quiet bool) {
+	var targetURL string
+	var scanTier string
+	var model string
+	var systemPrompt string
+	var systemPromptFile string
+	var name string
+	var customProbesFile string
+	var datasets []string
+	var providerKey string
+	var providerBaseURL string
+	var compliance bool
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--deep", "-deep":
+			scanTier = "deep"
+		case "--tier", "-tier":
+			if i+1 < len(args) {
+				scanTier = args[i+1]
+				i++
+			}
+		case "--model", "-model":
+			if i+1 < len(args) {
+				model = args[i+1]
+				i++
+			}
+		case "--system-prompt", "-system-prompt":
+			if i+1 < len(args) {
+				systemPrompt = args[i+1]
+				i++
+			}
+		case "--system-prompt-file", "-system-prompt-file":
+			if i+1 < len(args) {
+				systemPromptFile = args[i+1]
+				i++
+			}
+		case "--name", "-name":
+			if i+1 < len(args) {
+				name = args[i+1]
+				i++
+			}
+		case "--output", "-output":
+			if i+1 < len(args) {
+				outputFormat = args[i+1]
+				i++
+			}
+		case "--quiet", "-quiet":
+			quiet = true
+		case "--custom-probes", "-custom-probes":
+			if i+1 < len(args) {
+				customProbesFile = args[i+1]
+				i++
+			}
+		case "--dataset", "-dataset":
+			if i+1 < len(args) {
+				datasets = append(datasets, args[i+1])
+				i++
+			}
+		case "--provider-key", "-provider-key":
+			if i+1 < len(args) {
+				providerKey = args[i+1]
+				i++
+			}
+		case "--provider-base-url", "-provider-base-url":
+			if i+1 < len(args) {
+				providerBaseURL = args[i+1]
+				i++
+			}
+		case "--compliance", "-compliance":
+			compliance = true
+		default:
+			if !strings.HasPrefix(args[i], "-") && targetURL == "" {
+				targetURL = args[i]
+			}
+		}
+	}
+
+	if outputFormat == "json" || os.Getenv("CI") != "" {
+		quiet = true
+	}
+
+	// Detect provider mode: "openai:gpt-4o" or "anthropic:claude-sonnet-4-5-20250514"
+	var providerType, providerModel, providerAPIKey string
+	if targetURL != "" && strings.Contains(targetURL, ":") && !strings.HasPrefix(targetURL, "http") {
+		parts := strings.SplitN(targetURL, ":", 2)
+		providerType = parts[0]
+		providerModel = parts[1]
+		targetURL = "" // Clear — not a URL
+
+		// Resolve API key from env if not provided
+		if providerKey == "" {
+			switch providerType {
+			case "openai":
+				providerKey = os.Getenv("OPENAI_API_KEY")
+			case "anthropic":
+				providerKey = os.Getenv("ANTHROPIC_API_KEY")
+			}
+		}
+		providerAPIKey = providerKey
+
+		if providerAPIKey == "" && providerType != "ollama" {
+			fmt.Fprintf(os.Stderr, "Error: API key required for %s provider. Set %s_API_KEY or use --provider-key\n",
+				providerType, strings.ToUpper(providerType))
+			os.Exit(1)
+		}
+	}
+
+	if targetURL == "" && providerType == "" {
+		fmt.Fprintf(os.Stderr, "Error: target URL or provider is required\n")
+		fmt.Fprintf(os.Stderr, "Usage: inkog red <target-url> [options]\n")
+		fmt.Fprintf(os.Stderr, "       inkog red openai:gpt-4o --system-prompt \"...\" [options]\n")
+		os.Exit(1)
+	}
+
+	// Validate target URL if provided
+	if targetURL != "" {
+		if _, err := url.Parse(targetURL); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: invalid target URL: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	if scanTier == "" {
+		scanTier = "core"
+	}
+	if scanTier != "core" && scanTier != "deep" {
+		fmt.Fprintf(os.Stderr, "Error: scan tier must be 'core' or 'deep'\n")
+		os.Exit(1)
+	}
+
+	// Read system prompt from file if specified
+	if systemPromptFile != "" {
+		data, err := os.ReadFile(systemPromptFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: failed to read system prompt file: %v\n", err)
+			os.Exit(1)
+		}
+		systemPrompt = string(data)
+	}
+
+	// Read and base64-encode custom probes file
+	var customProbesB64 string
+	if customProbesFile != "" {
+		data, err := os.ReadFile(customProbesFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: failed to read custom probes file: %v\n", err)
+			os.Exit(1)
+		}
+		customProbesB64 = base64.StdEncoding.EncodeToString(data)
+	}
+
+	// Resolve API key
+	apiKey := os.Getenv("INKOG_API_KEY")
+	if apiKey == "" {
+		apiKey = cli.GetSavedAPIKey()
+	}
+	if apiKey == "" {
+		fmt.Fprintf(os.Stderr, "Error: INKOG_API_KEY not set. Get your free key at https://app.inkog.io\n")
+		os.Exit(1)
+	}
+	os.Setenv("INKOG_API_KEY", apiKey)
+
+	progress := cli.NewProgressReporter(quiet)
+	client := cli.NewInkogClient(serverURL, quiet, progress)
+
+	displayTarget := targetURL
+	if providerType != "" {
+		displayTarget = providerType + ":" + providerModel
+	}
+
+	if !quiet {
+		fmt.Fprintf(os.Stderr, "\nInkog Red — AI Agent Security Testing\n")
+		fmt.Fprintf(os.Stderr, "Target: %s\n", displayTarget)
+		fmt.Fprintf(os.Stderr, "Tier:   %s\n", scanTier)
+		if compliance {
+			fmt.Fprintf(os.Stderr, "Mode:   compliance testing enabled\n")
+		}
+		if customProbesB64 != "" {
+			fmt.Fprintf(os.Stderr, "Custom: %s\n", customProbesFile)
+		}
+		if len(datasets) > 0 {
+			fmt.Fprintf(os.Stderr, "Datasets: %s\n", strings.Join(datasets, ", "))
+		}
+		fmt.Fprintf(os.Stderr, "\n")
+	}
+
+	// Connectivity check: send a benign message to the target (skip in provider mode)
+	if targetURL != "" {
+		if !quiet {
+			progress.Start("Checking target reachability...")
+		}
+		connectStart := time.Now()
+		testBody := []byte(`{"messages":[{"role":"user","content":"Hello"}]}`)
+		_, _, err := client.SendToTarget(targetURL, testBody)
+		if err != nil {
+			progress.Stop()
+			fmt.Fprintf(os.Stderr, "Error: target is unreachable: %v\n", err)
+			os.Exit(1)
+		}
+		connectMs := time.Since(connectStart).Milliseconds()
+		if !quiet {
+			progress.Stop()
+			fmt.Fprintf(os.Stderr, "  Target reachable (%dms)\n", connectMs)
+		}
+	} else if !quiet {
+		fmt.Fprintf(os.Stderr, "  Provider mode: %s (no relay needed)\n", displayTarget)
+	}
+
+	// Trigger scan
+	if !quiet {
+		progress.Start("Triggering Red scan...")
+	}
+	triggerResp, err := client.TriggerRedScanWithOptions(cli.RedScanOptions{
+		TargetURL:         targetURL,
+		TargetName:        name,
+		TargetModel:       model,
+		SystemPrompt:      systemPrompt,
+		ScanTier:          scanTier,
+		Relay:             targetURL != "", // Only relay when targeting a URL
+		CustomProbes:      customProbesB64,
+		Datasets:          datasets,
+		ProviderType:      providerType,
+		ProviderModel:     providerModel,
+		ProviderAPIKey:    providerAPIKey,
+		ProviderBaseURL:   providerBaseURL,
+		ComplianceEnabled: compliance,
+	})
+	if err != nil {
+		progress.Stop()
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	if !quiet {
+		progress.Stop()
+		fmt.Fprintf(os.Stderr, "  Scan queued (ID: %s)\n", triggerResp.ScanID)
+	}
+
+	// Relay loop (skip in provider mode — container calls provider directly)
+	if targetURL != "" && triggerResp.RelayToken != "" {
+		if !quiet {
+			progress.Start("Relaying probes...")
+		}
+		defended := 0
+		degraded := 0
+		exposed := 0
+		errCount := 0
+		probeCount := 0
+		maxDuration := 2 * time.Hour
+		deadline := time.Now().Add(maxDuration)
+
+		for time.Now().Before(deadline) {
+			probeResp, err := client.PollRedProbe(triggerResp.ScanID, triggerResp.RelayToken)
+			if err != nil {
+				if !quiet {
+					progress.Update(fmt.Sprintf("Relay error: %v, retrying...", err))
+				}
+				time.Sleep(2 * time.Second)
+				continue
+			}
+
+			switch probeResp.Status {
+			case "done":
+				goto relayDone
+			case "waiting":
+				continue
+			case "probe":
+				probeCount++
+				if !quiet {
+					progress.Update(fmt.Sprintf("Relaying probes... [%d] defended: %d | degraded: %d | exposed: %d | error: %d",
+						probeCount, defended, degraded, exposed, errCount))
+				}
+
+				respBody, statusCode, targetErr := client.SendToTarget(targetURL, probeResp.Probe)
+
+				var sendErr string
+				if targetErr != nil {
+					sendErr = targetErr.Error()
+					errCount++
+				} else if statusCode >= 200 && statusCode < 300 {
+					defended++
+				} else if statusCode >= 400 && statusCode < 500 {
+					degraded++
+				} else {
+					exposed++
+				}
+
+				if sendRelayErr := client.SendRedResponse(triggerResp.ScanID, triggerResp.RelayToken, respBody, statusCode, sendErr); sendRelayErr != nil {
+					if !quiet {
+						progress.Update(fmt.Sprintf("Warning: failed to send response to relay: %v", sendRelayErr))
+					}
+				}
+			}
+		}
+
+	relayDone:
+		progress.Stop()
+		if !quiet {
+			fmt.Fprintf(os.Stderr, "  Relay complete (%d probes forwarded)\n", probeCount)
+		}
+	}
+
+	// Poll for final report
+	if !quiet {
+		progress.Start("Waiting for report...")
+	}
+	var statusResp *cli.RedScanStatusResponse
+	for i := 0; i < 120; i++ { // up to 10 minutes
+		statusResp, err = client.GetRedScanStatus(triggerResp.ScanID)
+		if err != nil {
+			progress.Stop()
+			fmt.Fprintf(os.Stderr, "Error: failed to get scan results: %v\n", err)
+			os.Exit(1)
+		}
+		if statusResp.Status == "completed" || statusResp.Status == "failed" {
+			break
+		}
+		time.Sleep(5 * time.Second)
+	}
+	progress.Stop()
+
+	if statusResp == nil || statusResp.Status == "failed" {
+		fmt.Fprintf(os.Stderr, "Error: Red scan failed\n")
+		os.Exit(1)
+	}
+
+	if statusResp.Status != "completed" {
+		fmt.Fprintf(os.Stderr, "Error: Red scan timed out waiting for results\n")
+		os.Exit(1)
+	}
+
+	// Output results
+	outputRedResults(statusResp, outputFormat, quiet)
+}
+
+// outputRedResults displays the Red scan results.
+func outputRedResults(resp *cli.RedScanStatusResponse, format string, quiet bool) {
+	if format == "json" {
+		data, _ := json.MarshalIndent(resp, "", "  ")
+		fmt.Println(string(data))
+		return
+	}
+
+	if format == "html" {
+		outputRedHTML(resp)
+		return
+	}
+
+	scan := resp.Scan
+
+	// Extract score fields
+	resilienceScore := intFromMap(scan, "resilience_score")
+	resilienceGrade, _ := scan["resilience_grade"].(string)
+
+	// Score breakdown
+	var extRes, injRes, evaRes, consistency, compRes float64
+	if bd, ok := scan["score_breakdown"].(map[string]interface{}); ok {
+		extRes = floatFromMap(bd, "extraction_resilience")
+		injRes = floatFromMap(bd, "injection_resilience")
+		evaRes = floatFromMap(bd, "evasion_resilience")
+		consistency = floatFromMap(bd, "consistency_score")
+		compRes = floatFromMap(bd, "compliance_resilience")
+	}
+
+	// Category counts
+	var total, def, deg, exp, errs int
+	if cc, ok := scan["category_counts"].(map[string]interface{}); ok {
+		total = intFromMap(cc, "total")
+		def = intFromMap(cc, "defended")
+		deg = intFromMap(cc, "degraded")
+		exp = intFromMap(cc, "exposed")
+		errs = intFromMap(cc, "error")
+	}
+
+	// Header
+	fmt.Println()
+	fmt.Println(strings.Repeat("=", 55))
+	fmt.Printf("  RESILIENCE SCORE: %d/100 — %s\n", resilienceScore, resilienceGrade)
+	fmt.Println(strings.Repeat("=", 55))
+	fmt.Println()
+
+	// Breakdown
+	fmt.Printf("  Extraction Resilience:  %.0f%%    Injection Resilience:  %.0f%%\n", extRes, injRes)
+	fmt.Printf("  Evasion Resilience:     %.0f%%    Consistency:           %.0f%%\n", evaRes, consistency)
+	if compRes > 0 {
+		fmt.Printf("  Compliance Resilience:  %.0f%%\n", compRes)
+	}
+	fmt.Println()
+
+	// Probe counts
+	fmt.Printf("  Probes: %d total | %d defended | %d degraded | %d exposed | %d error\n",
+		total, def, deg, exp, errs)
+	fmt.Println()
+
+	// OWASP mapping — handle both dict format (from agent) and array format
+	if owaspRaw, ok := scan["owasp_mapping"]; ok && owaspRaw != nil {
+		var owaspEntries []map[string]interface{}
+
+		switch v := owaspRaw.(type) {
+		case []interface{}:
+			for _, item := range v {
+				if entry, ok := item.(map[string]interface{}); ok {
+					owaspEntries = append(owaspEntries, entry)
+				}
+			}
+		case map[string]interface{}:
+			for _, item := range v {
+				if entry, ok := item.(map[string]interface{}); ok {
+					owaspEntries = append(owaspEntries, entry)
+				}
+			}
+		}
+
+		if len(owaspEntries) > 0 {
+			// Sort by ID
+			sort.Slice(owaspEntries, func(i, j int) bool {
+				a, _ := owaspEntries[i]["id"].(string)
+				b, _ := owaspEntries[j]["id"].(string)
+				return a < b
+			})
+			fmt.Println("  OWASP LLM Top 10:")
+			for i, entry := range owaspEntries {
+				id, _ := entry["id"].(string)
+				label, _ := entry["name"].(string)
+				defended := intFromMap(entry, "defended")
+				totalProbes := intFromMap(entry, "total")
+				exposed := intFromMap(entry, "exposed")
+				resilience := floatFromMap(entry, "resilience")
+				// Normalize 0-1 to 0-100
+				if resilience > 0 && resilience <= 1 {
+					resilience *= 100
+				}
+				prefix := "  |-- "
+				if i == len(owaspEntries)-1 {
+					prefix = "  `-- "
+				}
+				_ = exposed // available if needed
+				fmt.Printf("%s%-35s %d/%d defended  %.0f%%\n", prefix, id+" "+label, defended, totalProbes, resilience)
+			}
+			fmt.Println()
+		}
+	}
+
+	// Vulnerabilities (grouped) — preferred over raw probe results
+	if vulnsRaw, ok := scan["vulnerabilities"]; ok {
+		if vulns, ok := vulnsRaw.([]interface{}); ok && len(vulns) > 0 {
+			// Sort by severity: CRITICAL > HIGH > MEDIUM > LOW
+			sort.Slice(vulns, func(i, j int) bool {
+				sevOrd := map[string]int{"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
+				si, _ := vulns[i].(map[string]interface{})["severity"].(string)
+				sj, _ := vulns[j].(map[string]interface{})["severity"].(string)
+				return sevOrd[strings.ToUpper(si)] < sevOrd[strings.ToUpper(sj)]
+			})
+			fmt.Printf("  Vulnerabilities: %d\n\n", len(vulns))
+			for _, v := range vulns {
+				if entry, ok := v.(map[string]interface{}); ok {
+					severity, _ := entry["severity"].(string)
+					title, _ := entry["title"].(string)
+					owaspID, _ := entry["owasp_id"].(string)
+					exposedCount := intFromMap(entry, "exposed_count")
+					probeCount := intFromMap(entry, "probe_count")
+					desc, _ := entry["description"].(string)
+
+					fmt.Printf("    %-9s %s", strings.ToUpper(severity), title)
+					if owaspID != "" {
+						fmt.Printf("  [%s]", owaspID)
+					}
+					fmt.Printf("  (%d/%d exposed)\n", exposedCount, probeCount)
+					if desc != "" {
+						wrapPrintIndented(desc, "              ", 80)
+					}
+
+					// Show remediation steps
+					if remRaw, ok := entry["remediation"]; ok {
+						if remList, ok := remRaw.([]interface{}); ok && len(remList) > 0 {
+							fmt.Println("              Fix:")
+							for i, step := range remList {
+								if i >= 2 {
+									break // Show top 2 in CLI
+								}
+								if s, ok := step.(string); ok {
+									fmt.Printf("              %d. %s\n", i+1, s)
+								}
+							}
+						}
+					}
+					fmt.Println()
+				}
+			}
+		}
+	} else if probeResults, ok := scan["probe_results"]; ok {
+		// Fallback: show raw exposed probes if no vulnerabilities field
+		if results, ok := probeResults.([]interface{}); ok {
+			var exposures []map[string]interface{}
+			for _, r := range results {
+				if entry, ok := r.(map[string]interface{}); ok {
+					verdict, _ := entry["verdict"].(string)
+					if verdict == "exposed" {
+						exposures = append(exposures, entry)
+					}
+				}
+			}
+			if len(exposures) > 0 {
+				fmt.Println("  Exposures:")
+				limit := 10
+				if len(exposures) < limit {
+					limit = len(exposures)
+				}
+				for _, e := range exposures[:limit] {
+					severity, _ := e["severity"].(string)
+					probeID, _ := e["probe_id"].(string)
+					details, _ := e["detection_details"].(string)
+					fmt.Printf("    %-9s %-20s %s\n", strings.ToUpper(severity), probeID, details)
+				}
+				fmt.Println()
+			}
+		}
+	}
+
+	// Link to full report
+	fmt.Printf("  Full report: https://app.inkog.io/dashboard/red/%s\n\n", resp.ScanID)
+
+	// Exit with 1 if score is below threshold (exposed findings exist)
+	if exp > 0 {
+		os.Exit(1)
+	}
+}
+
+// wrapPrintIndented prints text word-wrapped at maxWidth with the given indent.
+func wrapPrintIndented(text, indent string, maxWidth int) {
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return
+	}
+	line := indent + words[0]
+	for _, w := range words[1:] {
+		if len(line)+1+len(w) > maxWidth {
+			fmt.Println(line)
+			line = indent + w
+		} else {
+			line += " " + w
+		}
+	}
+	if len(line) > len(indent) {
+		fmt.Println(line)
+	}
+}
+
+// intFromMap safely extracts an int from a map[string]interface{}.
+func intFromMap(m map[string]interface{}, key string) int {
+	v, ok := m[key]
+	if !ok {
+		return 0
+	}
+	switch n := v.(type) {
+	case float64:
+		return int(n)
+	case int:
+		return n
+	case json.Number:
+		i, _ := n.Int64()
+		return int(i)
+	default:
+		return 0
+	}
+}
+
+// floatFromMap safely extracts a float64 from a map[string]interface{}.
+func floatFromMap(m map[string]interface{}, key string) float64 {
+	v, ok := m[key]
+	if !ok {
+		return 0
+	}
+	switch n := v.(type) {
+	case float64:
+		return n
+	case int:
+		return float64(n)
+	case json.Number:
+		f, _ := n.Float64()
+		return f
+	default:
+		return 0
+	}
+}
+
+// outputRedHTML generates a standalone HTML report for Red scan results.
+func outputRedHTML(resp *cli.RedScanStatusResponse) {
+	scan := resp.Scan
+	resilienceScore := intFromMap(scan, "resilience_score")
+	resilienceGrade, _ := scan["resilience_grade"].(string)
+
+	var extRes, injRes, evaRes, consistency float64
+	if bd, ok := scan["score_breakdown"].(map[string]interface{}); ok {
+		extRes = floatFromMap(bd, "extraction_resilience")
+		injRes = floatFromMap(bd, "injection_resilience")
+		evaRes = floatFromMap(bd, "evasion_resilience")
+		consistency = floatFromMap(bd, "consistency_score")
+	}
+
+	var total, def, deg, exp, errs int
+	if cc, ok := scan["category_counts"].(map[string]interface{}); ok {
+		total = intFromMap(cc, "total")
+		def = intFromMap(cc, "defended")
+		deg = intFromMap(cc, "degraded")
+		exp = intFromMap(cc, "exposed")
+		errs = intFromMap(cc, "error")
+	}
+
+	targetURL, _ := scan["target_url"].(string)
+	scanTier, _ := scan["scan_tier"].(string)
+
+	// OWASP mapping rows
+	owaspHTML := ""
+	if owaspRaw, ok := scan["owasp_mapping"]; ok {
+		if owaspList, ok := owaspRaw.([]interface{}); ok {
+			for _, item := range owaspList {
+				if entry, ok := item.(map[string]interface{}); ok {
+					id, _ := entry["id"].(string)
+					name, _ := entry["name"].(string)
+					score := floatFromMap(entry, "resilience")
+					barColor := "#22c55e"
+					if score < 60 {
+						barColor = "#ef4444"
+					} else if score < 80 {
+						barColor = "#f59e0b"
+					}
+					owaspHTML += fmt.Sprintf(`<div class="owasp-row">
+						<span class="owasp-label">%s %s</span>
+						<div class="owasp-bar-bg"><div class="owasp-bar" style="width:%.0f%%;background:%s"></div></div>
+						<span class="owasp-pct">%.0f%%</span>
+					</div>`, escapeHTML(id), escapeHTML(name), score, barColor, score)
+				}
+			}
+		}
+	}
+
+	// Exposures rows
+	exposuresHTML := ""
+	if probeResults, ok := scan["probe_results"]; ok {
+		if results, ok := probeResults.([]interface{}); ok {
+			count := 0
+			for _, r := range results {
+				if entry, ok := r.(map[string]interface{}); ok {
+					verdict, _ := entry["verdict"].(string)
+					if verdict == "exposed" && count < 20 {
+						severity, _ := entry["severity"].(string)
+						probeID, _ := entry["probe_id"].(string)
+						desc, _ := entry["description"].(string)
+						exposuresHTML += fmt.Sprintf(`<tr>
+							<td><span class="severity-%s">%s</span></td>
+							<td class="probe-id">%s</td>
+							<td>%s</td>
+						</tr>`, strings.ToLower(severity), strings.ToUpper(severity), escapeHTML(probeID), escapeHTML(desc))
+						count++
+					}
+				}
+			}
+		}
+	}
+
+	scoreColor := "#22c55e"
+	if resilienceScore < 60 {
+		scoreColor = "#ef4444"
+	} else if resilienceScore < 80 {
+		scoreColor = "#f59e0b"
+	}
+
+	html := fmt.Sprintf(`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inkog Red Scan Report</title>
+<style>
+:root{--bg:#0f172a;--card:#1e293b;--border:#334155;--text:#e2e8f0;--muted:#94a3b8;--accent:#8b5cf6}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);padding:2rem;max-width:900px;margin:0 auto}
+header{display:flex;align-items:center;justify-content:space-between;margin-bottom:2rem;padding-bottom:1rem;border-bottom:1px solid var(--border)}
+.logo{display:flex;align-items:center;gap:0.75rem;font-size:1.25rem;font-weight:700}
+.logo svg{width:28px;height:28px}
+.badge{background:#dc2626;color:white;font-size:0.65rem;font-weight:700;padding:2px 8px;border-radius:4px;text-transform:uppercase;letter-spacing:0.05em}
+.timestamp{color:var(--muted);font-size:0.75rem}
+.hero{background:linear-gradient(135deg,#1e293b,#0f172a);border:1px solid var(--border);border-radius:12px;padding:2rem;display:flex;align-items:center;gap:2rem;margin-bottom:1.5rem}
+.score-ring{position:relative;width:120px;height:120px;flex-shrink:0}
+.score-ring svg{width:120px;height:120px}
+.score-label{font-size:2rem;font-weight:800}
+.score-sub{font-size:0.75rem;color:var(--muted)}
+.grade{font-size:1.75rem;font-weight:700}
+.meta{font-size:0.8rem;color:var(--muted);margin-top:0.25rem}
+.breakdown{display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin-left:auto}
+.breakdown div{text-align:right}
+.breakdown .label{font-size:0.7rem;color:var(--muted)}
+.breakdown .value{font-size:1.1rem;font-weight:600}
+.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:0.75rem;margin-bottom:1.5rem}
+.stat{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:0.75rem 1rem}
+.stat .stat-label{font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em}
+.stat .stat-value{font-size:1.5rem;font-weight:700;margin-top:0.25rem}
+.green{color:#22c55e}.amber{color:#f59e0b}.red{color:#ef4444}.gray{color:#94a3b8}
+section{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.5rem;margin-bottom:1.5rem}
+h2{font-size:1rem;font-weight:600;margin-bottom:1rem;display:flex;align-items:center;gap:0.5rem}
+.bar-row{display:flex;align-items:center;gap:1rem;margin-bottom:0.75rem}
+.bar-label{width:160px;font-size:0.85rem;color:var(--muted)}
+.bar-bg{flex:1;height:8px;background:rgba(255,255,255,0.1);border-radius:4px;overflow:hidden}
+.bar-fill{height:100%%;border-radius:4px;transition:width 0.5s}
+.bar-pct{width:50px;text-align:right;font-size:0.85rem;font-weight:600}
+.owasp-row{display:flex;align-items:center;gap:0.75rem;margin-bottom:0.5rem}
+.owasp-label{width:280px;font-size:0.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.owasp-bar-bg{flex:1;height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden}
+.owasp-bar{height:100%%;border-radius:3px}
+.owasp-pct{width:40px;text-align:right;font-size:0.8rem;font-weight:600}
+table{width:100%%;border-collapse:collapse;font-size:0.8rem}
+th,td{text-align:left;padding:0.5rem 0.75rem;border-bottom:1px solid var(--border)}
+th{color:var(--muted);font-weight:500;text-transform:uppercase;font-size:0.7rem;letter-spacing:0.05em}
+.probe-id{font-family:monospace;color:var(--muted);font-size:0.75rem}
+.severity-critical{background:#7f1d1d;color:#fca5a5;padding:1px 6px;border-radius:3px;font-size:0.65rem;font-weight:600}
+.severity-high{background:#7c2d12;color:#fdba74;padding:1px 6px;border-radius:3px;font-size:0.65rem;font-weight:600}
+.severity-medium{background:#78350f;color:#fcd34d;padding:1px 6px;border-radius:3px;font-size:0.65rem;font-weight:600}
+.severity-low{background:#1e3a5f;color:#93c5fd;padding:1px 6px;border-radius:3px;font-size:0.65rem;font-weight:600}
+footer{text-align:center;color:var(--muted);font-size:0.75rem;margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border)}
+footer a{color:var(--accent);text-decoration:none}
+@media(max-width:640px){.stats{grid-template-columns:repeat(2,1fr)}.hero{flex-direction:column;text-align:center}.breakdown{margin-left:0;margin-top:1rem}}
+</style>
+</head>
+<body>
+<header>
+	<div class="logo">
+		<svg viewBox="0 0 32 32" fill="none"><defs><linearGradient id="g" x1="0%%%%" y1="0%%%%" x2="100%%%%" y2="100%%%%"><stop offset="0%%%%" style="stop-color:#a78bfa"/><stop offset="100%%%%" style="stop-color:#7c3aed"/></linearGradient></defs><path d="M16 2L4 7v9c0 7.18 5.12 13.88 12 16 6.88-2.12 12-8.82 12-16V7L16 2z" fill="url(#g)"/><path d="M10 12h12M10 16h12M10 20h8" stroke="white" stroke-width="1.5" stroke-linecap="round" opacity="0.9"/></svg>
+		<span>Inkog Red Scan</span>
+		<span class="badge">%s</span>
+	</div>
+	<span class="timestamp">%s</span>
+</header>
+
+<div class="hero">
+	<div class="score-ring">
+		<svg viewBox="0 0 120 120">
+			<circle cx="60" cy="60" r="52" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="8"/>
+			<circle cx="60" cy="60" r="52" fill="none" stroke="%s" stroke-width="8" stroke-linecap="round" stroke-dasharray="%.0f 327" transform="rotate(-90 60 60)"/>
+			<text x="60" y="55" text-anchor="middle" fill="white" font-size="28" font-weight="800">%d</text>
+			<text x="60" y="75" text-anchor="middle" fill="rgba(255,255,255,0.5)" font-size="12">/ 100</text>
+		</svg>
+	</div>
+	<div>
+		<div style="font-size:0.8rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em">Resilience Score</div>
+		<div class="grade" style="color:%s">%s</div>
+		<div class="meta">Target: %s</div>
+		<div class="meta">%d probes</div>
+	</div>
+	<div class="breakdown">
+		<div><div class="label">Extraction</div><div class="value" style="color:%s">%.0f%%%%</div></div>
+		<div><div class="label">Injection</div><div class="value" style="color:%s">%.0f%%%%</div></div>
+		<div><div class="label">Evasion</div><div class="value" style="color:%s">%.0f%%%%</div></div>
+		<div><div class="label">Consistency</div><div class="value" style="color:%s">%.0f%%%%</div></div>
+	</div>
+</div>
+
+<div class="stats">
+	<div class="stat"><div class="stat-label">Total</div><div class="stat-value">%d</div></div>
+	<div class="stat"><div class="stat-label">Defended</div><div class="stat-value green">%d</div></div>
+	<div class="stat"><div class="stat-label">Degraded</div><div class="stat-value amber">%d</div></div>
+	<div class="stat"><div class="stat-label">Exposed</div><div class="stat-value red">%d</div></div>
+	<div class="stat"><div class="stat-label">Error</div><div class="stat-value gray">%d</div></div>
+</div>
+
+<section>
+<h2>Resilience Breakdown</h2>
+%s
+</section>
+
+%s
+
+%s
+
+<footer>Powered by <a href="https://inkog.io">Inkog Red</a> v%s</footer>
+</body>
+</html>`,
+		escapeHTML(scanTier),
+		currentTimestamp(),
+		scoreColor, float64(resilienceScore)/100.0*327.0, resilienceScore,
+		scoreColor, escapeHTML(resilienceGrade),
+		escapeHTML(targetURL),
+		total,
+		barColor(extRes), extRes,
+		barColor(injRes), injRes,
+		barColor(evaRes), evaRes,
+		barColor(consistency), consistency,
+		total, def, deg, exp, errs,
+		generateRedBreakdownBars(extRes, injRes, evaRes, consistency),
+		generateRedOwaspSection(owaspHTML),
+		generateRedExposuresSection(exposuresHTML),
+		AppVersion,
+	)
+
+	fmt.Println(html)
+}
+
+func barColor(pct float64) string {
+	if pct >= 80 {
+		return "#22c55e"
+	}
+	if pct >= 60 {
+		return "#f59e0b"
+	}
+	return "#ef4444"
+}
+
+func generateRedBreakdownBars(ext, inj, eva, con float64) string {
+	bars := ""
+	for _, item := range []struct {
+		label string
+		value float64
+	}{
+		{"Extraction Resilience", ext},
+		{"Injection Resilience", inj},
+		{"Evasion Resilience", eva},
+		{"Consistency", con},
+	} {
+		bars += fmt.Sprintf(`<div class="bar-row">
+			<span class="bar-label">%s</span>
+			<div class="bar-bg"><div class="bar-fill" style="width:%.0f%%;background:%s"></div></div>
+			<span class="bar-pct" style="color:%s">%.0f%%</span>
+		</div>`, item.label, item.value, barColor(item.value), barColor(item.value), item.value)
+	}
+	return bars
+}
+
+func generateRedOwaspSection(rows string) string {
+	if rows == "" {
+		return ""
+	}
+	return fmt.Sprintf(`<section><h2>OWASP LLM Top 10</h2>%s</section>`, rows)
+}
+
+func generateRedExposuresSection(rows string) string {
+	if rows == "" {
+		return ""
+	}
+	return fmt.Sprintf(`<section><h2>Exposures</h2><table><thead><tr><th>Severity</th><th>Probe</th><th>Description</th></tr></thead><tbody>%s</tbody></table></section>`, rows)
 }
 
 // runMCPScan handles the "mcp-scan" subcommand.
@@ -645,11 +1488,13 @@ Usage:
   inkog [OPTIONS] [PATH]
   inkog skill-scan [OPTIONS] <TARGET>
   inkog mcp-scan [OPTIONS] <SERVER-NAME>
+  inkog red [OPTIONS] <TARGET-URL>
 
 Commands:
   scan                Scan agent code for vulnerabilities (default)
   skill-scan          Scan SKILL.md packages and agent tools
   mcp-scan            Scan MCP servers from registry or by URL
+  red                 Red team your AI agent with adversarial probes
 
 Skill Scan Examples:
   inkog skill-scan .                                     Scan current directory as skill package
@@ -662,6 +1507,16 @@ MCP Scan Examples:
   inkog mcp-scan github                                  Scan MCP server from registry
   inkog mcp-scan github --repo https://github.com/...    With explicit repo for deep
   inkog mcp-scan --deep --repo https://github.com/...    Deep scan from repository
+
+Red Scan Examples:
+  inkog red http://localhost:8000/chat                    Red team your AI agent
+  inkog red http://localhost:8000/chat --deep             Deep adversarial scan
+  inkog red http://localhost:8000/chat --system-prompt "You are a helpful assistant"
+  inkog red http://localhost:8000/chat --system-prompt-file ./prompt.txt
+  inkog red http://localhost:8000/chat --name "My Agent" --model gpt-4o
+  inkog red http://localhost:8000/chat --compliance       Include bias & safety testing
+  inkog red http://localhost:8000/chat --output json      JSON output
+  inkog red openai:gpt-4o --system-prompt "..."           Test provider directly (no relay)
 
 Options:
   -path string        Source path to scan (default: .)
@@ -869,6 +1724,16 @@ func main() {
 		}
 		skillQuiet := *outputFlag == "json" || os.Getenv("CI") != ""
 		runMCPScan(args[1:], skillServerURL, *outputFlag, *policyFlag, *deepFlag, skillQuiet)
+		return
+	}
+	if len(args) > 0 && args[0] == "red" {
+		// Handle "inkog red [options] <target-url>" subcommand
+		redServerURL := *serverFlag
+		if redServerURL == "" {
+			redServerURL = ServerURL
+		}
+		redQuiet := *outputFlag == "json" || os.Getenv("CI") != ""
+		runRedScan(args[1:], redServerURL, *outputFlag, redQuiet)
 		return
 	}
 	if len(args) > 0 && args[0] == "scan" {
@@ -2705,21 +3570,21 @@ type sarifTool struct {
 }
 
 type sarifDriver struct {
-	Name            string            `json:"name"`
-	Version         string            `json:"version"`
-	InformationURI  string            `json:"informationUri"`
-	SemanticVersion string            `json:"semanticVersion"`
-	Rules           []sarifRule       `json:"rules"`
+	Name            string      `json:"name"`
+	Version         string      `json:"version"`
+	InformationURI  string      `json:"informationUri"`
+	SemanticVersion string      `json:"semanticVersion"`
+	Rules           []sarifRule `json:"rules"`
 }
 
 type sarifRule struct {
-	ID               string                 `json:"id"`
-	Name             string                 `json:"name"`
-	ShortDescription sarifMessage           `json:"shortDescription"`
-	FullDescription  sarifMessage           `json:"fullDescription,omitempty"`
-	HelpURI          string                 `json:"helpUri,omitempty"`
-	DefaultConfiguration sarifConfiguration `json:"defaultConfiguration"`
-	Properties       sarifRuleProperties    `json:"properties,omitempty"`
+	ID                   string              `json:"id"`
+	Name                 string              `json:"name"`
+	ShortDescription     sarifMessage        `json:"shortDescription"`
+	FullDescription      sarifMessage        `json:"fullDescription,omitempty"`
+	HelpURI              string              `json:"helpUri,omitempty"`
+	DefaultConfiguration sarifConfiguration  `json:"defaultConfiguration"`
+	Properties           sarifRuleProperties `json:"properties,omitempty"`
 }
 
 type sarifConfiguration struct {
@@ -2727,8 +3592,8 @@ type sarifConfiguration struct {
 }
 
 type sarifRuleProperties struct {
-	Tags         []string `json:"tags,omitempty"`
-	SecuritySeverity string `json:"security-severity,omitempty"`
+	Tags             []string `json:"tags,omitempty"`
+	SecuritySeverity string   `json:"security-severity,omitempty"`
 }
 
 type sarifMessage struct {
@@ -2736,10 +3601,10 @@ type sarifMessage struct {
 }
 
 type sarifResult struct {
-	RuleID    string            `json:"ruleId"`
-	Level     string            `json:"level"`
-	Message   sarifMessage      `json:"message"`
-	Locations []sarifLocation   `json:"locations"`
+	RuleID    string          `json:"ruleId"`
+	Level     string          `json:"level"`
+	Message   sarifMessage    `json:"message"`
+	Locations []sarifLocation `json:"locations"`
 }
 
 type sarifLocation struct {

@@ -273,11 +273,11 @@ func APIKeyRequiredMessage() string {
 
 // AnonymousPreviewResponse mirrors the server's AnonymousScanResponse
 type AnonymousPreviewResponse struct {
-	FileName      string                `json:"file_name"`
-	TotalFindings int                   `json:"total_findings"`
-	Counts        map[string]int        `json:"counts"`  // severity -> count
-	Preview       []AnonymousFinding    `json:"preview"` // first 2 findings
-	ScanID        string                `json:"scan_id"`
+	FileName      string             `json:"file_name"`
+	TotalFindings int                `json:"total_findings"`
+	Counts        map[string]int     `json:"counts"`  // severity -> count
+	Preview       []AnonymousFinding `json:"preview"` // first 2 findings
+	ScanID        string             `json:"scan_id"`
 }
 
 // AnonymousFinding is a summary of a finding from the anonymous endpoint
@@ -703,6 +703,272 @@ func (c *InkogClient) ScanSkillRepo(repoURL string) (*SkillScanResponse, error) 
 	}
 
 	return &result, nil
+}
+
+// --- Inkog Red (relay) types and methods ---
+
+// RedScanTriggerResponse is returned by POST /v1/red/scan with relay: true.
+type RedScanTriggerResponse struct {
+	ScanID     string `json:"scan_id"`
+	Status     string `json:"status"`
+	RelayToken string `json:"relay_token"`
+}
+
+// RedProbeResponse is returned by GET /v1/red/scan/{id}/probe.
+type RedProbeResponse struct {
+	Status string          `json:"status"` // "probe", "waiting", "done"
+	Probe  json.RawMessage `json:"probe,omitempty"`
+}
+
+// RedScanStatusResponse is returned by GET /v1/red/scan/{id}.
+type RedScanStatusResponse struct {
+	ScanID string                 `json:"scan_id"`
+	Status string                 `json:"status"`
+	Scan   map[string]interface{} `json:"scan"`
+}
+
+// RedScanOptions holds all options for triggering a Red scan.
+type RedScanOptions struct {
+	TargetURL         string
+	TargetName        string
+	TargetModel       string
+	SystemPrompt      string
+	ScanTier          string
+	Relay             bool
+	CustomProbes      string   // base64-encoded YAML
+	Datasets          []string // dataset names
+	ProviderType      string   // openai, anthropic, ollama
+	ProviderModel     string
+	ProviderAPIKey    string
+	ProviderBaseURL   string
+	ComplianceEnabled bool
+}
+
+// TriggerRedScan starts a Red scan in relay mode.
+func (c *InkogClient) TriggerRedScan(targetURL, name, model, systemPrompt, scanTier string) (*RedScanTriggerResponse, error) {
+	return c.TriggerRedScanWithOptions(RedScanOptions{
+		TargetURL:    targetURL,
+		TargetName:   name,
+		TargetModel:  model,
+		SystemPrompt: systemPrompt,
+		ScanTier:     scanTier,
+		Relay:        true,
+	})
+}
+
+// TriggerRedScanWithOptions starts a Red scan with full options.
+func (c *InkogClient) TriggerRedScanWithOptions(opts RedScanOptions) (*RedScanTriggerResponse, error) {
+	reqBody := struct {
+		TargetURL         string   `json:"target_url"`
+		TargetName        string   `json:"target_name,omitempty"`
+		TargetModel       string   `json:"target_model,omitempty"`
+		SystemPrompt      string   `json:"system_prompt,omitempty"`
+		ScanTier          string   `json:"scan_tier"`
+		Relay             bool     `json:"relay"`
+		CustomProbes      string   `json:"custom_probes,omitempty"`
+		Datasets          []string `json:"datasets,omitempty"`
+		ProviderType      string   `json:"provider_type,omitempty"`
+		ProviderModel     string   `json:"provider_model,omitempty"`
+		ProviderAPIKey    string   `json:"provider_api_key,omitempty"`
+		ProviderBaseURL   string   `json:"provider_base_url,omitempty"`
+		ComplianceEnabled bool     `json:"compliance_enabled,omitempty"`
+	}{
+		TargetURL:         opts.TargetURL,
+		TargetName:        opts.TargetName,
+		TargetModel:       opts.TargetModel,
+		SystemPrompt:      opts.SystemPrompt,
+		ScanTier:          opts.ScanTier,
+		Relay:             opts.Relay,
+		CustomProbes:      opts.CustomProbes,
+		Datasets:          opts.Datasets,
+		ProviderType:      opts.ProviderType,
+		ProviderModel:     opts.ProviderModel,
+		ProviderAPIKey:    opts.ProviderAPIKey,
+		ProviderBaseURL:   opts.ProviderBaseURL,
+		ComplianceEnabled: opts.ComplianceEnabled,
+	}
+
+	data, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", c.BaseURL+"/v1/red/scan", bytes.NewBuffer(data))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "inkog-cli/"+CLIVersion)
+	if c.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	}
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("network error: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode == http.StatusUnauthorized {
+		return nil, fmt.Errorf(APIKeyRequiredMessage())
+	}
+
+	if resp.StatusCode != http.StatusAccepted {
+		var serverErr ServerError
+		if json.Unmarshal(body, &serverErr) == nil && serverErr.Message != "" {
+			return nil, fmt.Errorf("Red scan failed: %s", serverErr.Message)
+		}
+		return nil, fmt.Errorf("Red scan failed (HTTP %d)", resp.StatusCode)
+	}
+
+	var result RedScanTriggerResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return &result, nil
+}
+
+// PollRedProbe long-polls for the next probe from the relay.
+func (c *InkogClient) PollRedProbe(scanID, relayToken string) (*RedProbeResponse, error) {
+	reqURL := fmt.Sprintf("%s/v1/red/scan/%s/probe?relay_token=%s", c.BaseURL, scanID, relayToken)
+	req, err := http.NewRequest("GET", reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("User-Agent", "inkog-cli/"+CLIVersion)
+	if c.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	}
+
+	// Use a longer timeout for long-polling (35s > server's 30s timeout)
+	longPollClient := &http.Client{Timeout: 35 * time.Second}
+	resp, err := longPollClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("network error: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("probe poll failed (HTTP %d): %s", resp.StatusCode, string(body))
+	}
+
+	var result RedProbeResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse probe response: %w", err)
+	}
+	return &result, nil
+}
+
+// SendRedResponse sends the target's response back to the relay.
+func (c *InkogClient) SendRedResponse(scanID, relayToken string, responseBody []byte, statusCode int, targetError string) error {
+	// Ensure body is valid JSON; if not, wrap it as a JSON string
+	body := json.RawMessage(responseBody)
+	if len(responseBody) > 0 && !json.Valid(responseBody) {
+		body, _ = json.Marshal(string(responseBody))
+	}
+
+	payload := struct {
+		Body       json.RawMessage `json:"body"`
+		StatusCode int             `json:"status_code"`
+		Error      string          `json:"error,omitempty"`
+	}{
+		Body:       body,
+		StatusCode: statusCode,
+		Error:      targetError,
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal response: %w", err)
+	}
+
+	reqURL := fmt.Sprintf("%s/v1/red/scan/%s/response?relay_token=%s", c.BaseURL, scanID, relayToken)
+	req, err := http.NewRequest("POST", reqURL, bytes.NewBuffer(data))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "inkog-cli/"+CLIVersion)
+	if c.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	}
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("network error: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("send response failed (HTTP %d): %s", resp.StatusCode, string(body))
+	}
+	return nil
+}
+
+// GetRedScanStatus retrieves the current status and results of a Red scan.
+func (c *InkogClient) GetRedScanStatus(scanID string) (*RedScanStatusResponse, error) {
+	req, err := http.NewRequest("GET", c.BaseURL+"/v1/red/scan/"+scanID, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("User-Agent", "inkog-cli/"+CLIVersion)
+	if c.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	}
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("network error: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("status check failed (HTTP %d): %s", resp.StatusCode, string(body))
+	}
+
+	var result RedScanStatusResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse status response: %w", err)
+	}
+	return &result, nil
+}
+
+// SendToTarget sends a probe to the actual target and returns the raw response.
+func (c *InkogClient) SendToTarget(targetURL string, probeBody []byte) ([]byte, int, error) {
+	req, err := http.NewRequest("POST", targetURL, bytes.NewReader(probeBody))
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to create target request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, 0, fmt.Errorf("target request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20)) // 1MB limit
+	if err != nil {
+		return nil, resp.StatusCode, fmt.Errorf("failed to read target response: %w", err)
+	}
+	return body, resp.StatusCode, nil
 }
 
 // ScanMCPServer scans an MCP server from the registry by name.
