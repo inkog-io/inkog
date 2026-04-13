@@ -100,7 +100,7 @@ inkog .
     sarif-upload: true   # Shows findings in GitHub Security tab
 ```
 
-[Full CI/CD docs →](https://docs.inkog.io/ci-cd/github-action)
+[Full CI/CD docs →](https://docs.inkog.io/ci-cd/github-action) | [Complete workflow example →](examples/ci/github-actions.yml)
 
 <details>
 <summary><strong>Deep scan</strong></summary>

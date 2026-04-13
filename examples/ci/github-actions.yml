@@ -1,0 +1,41 @@
+# Inkog AI Agent Security Scan
+#
+# Scans your AI agent code for security vulnerabilities on every PR and push.
+# Findings appear in the GitHub Security tab (SARIF) and as PR comments.
+#
+# Setup:
+#   1. Get a free API key at https://app.inkog.io
+#   2. Add it as a repository secret named INKOG_API_KEY
+#   3. Copy this file to .github/workflows/inkog.yml
+
+name: Inkog Security Scan
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write        # Baseline file updates on main
+  pull-requests: write   # PR comments
+  security-events: write # SARIF upload to Security tab
+
+jobs:
+  security-scan:
+    name: AI Agent Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Inkog
+        uses: inkog-io/inkog@v1
+        with:
+          api-key: ${{ secrets.INKOG_API_KEY }}
+          sarif-upload: true
+          comment-on-pr: true
+
+          # On PRs: only flag new findings (diff mode)
+          diff: ${{ github.event_name == 'pull_request' }}
+
+          # On main: update baseline so future PRs diff against it
+          update-baseline: ${{ github.ref == 'refs/heads/main' }}
