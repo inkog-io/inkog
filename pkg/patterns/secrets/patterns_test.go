@@ -1018,3 +1018,188 @@ func TestIsDefaultDatabasePassword_NoDevHost_NotFiltered(t *testing.T) {
 		t.Error("Should NOT filter when host is not a dev/Docker host")
 	}
 }
+
+// =============================================================================
+// V12 TESTS: Modern AI Provider Secret Detection
+// =============================================================================
+
+func TestDetectSecrets_FindsAnthropicKey(t *testing.T) {
+	// Real Anthropic key shape: sk-ant-api03- followed by 93+ chars ending in AA
+	content := `api_key = "sk-ant-api03-` + strings.Repeat("Ab1Cd2Ef3Gh4Ij5Kl6Mn7Op8Qr9St0Uv", 3) + `AA"`
+	findings := DetectSecrets("config.py", []byte(content))
+	found := false
+	for _, f := range findings {
+		if f.Type == "anthropic_api_key" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("Expected anthropic_api_key finding")
+	}
+}
+
+func TestDetectSecrets_FindsAnthropicAdminKey(t *testing.T) {
+	content := `key = "sk-ant-admin01-` + strings.Repeat("Ab1Cd2Ef3Gh4Ij5Kl6Mn7Op8Qr9St0Uv", 3) + `AA"`
+	findings := DetectSecrets("config.py", []byte(content))
+	found := false
+	for _, f := range findings {
+		if f.Type == "anthropic_api_key" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("Expected anthropic_api_key finding for admin key")
+	}
+}
+
+func TestDetectSecrets_SkipsAnthropicPlaceholder(t *testing.T) {
+	content := `api_key = "sk-ant-api03-..."`
+	findings := DetectSecrets("config.py", []byte(content))
+	for _, f := range findings {
+		if f.Type == "anthropic_api_key" {
+			t.Error("Should NOT flag truncated Anthropic key placeholder")
+		}
+	}
+}
+
+func TestDetectSecrets_FindsOpenAIProjectKey(t *testing.T) {
+	content := `key = "sk-proj-Ab1Cd2Ef3Gh4Ij5Kl6Mn7Op8Qr9St0UvWx1Yz2"`
+	findings := DetectSecrets("config.py", []byte(content))
+	found := false
+	for _, f := range findings {
+		if f.Type == "openai_api_key" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("Expected openai_api_key finding for project key")
+	}
+}
+
+func TestDetectSecrets_FindsOpenAIServiceAccountKey(t *testing.T) {
+	content := `key = "sk-svcacct-Ab1Cd2Ef3Gh4Ij5Kl6Mn7Op8Qr9St0UvWx1Yz2"`
+	findings := DetectSecrets("config.py", []byte(content))
+	found := false
+	for _, f := range findings {
+		if f.Type == "openai_api_key" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("Expected openai_api_key finding for service account key")
+	}
+}
+
+func TestDetectSecrets_SkipsOpenAIPlaceholder(t *testing.T) {
+	content := `api_key = "sk-proj-..."`
+	findings := DetectSecrets("config.py", []byte(content))
+	for _, f := range findings {
+		if f.Type == "openai_api_key" {
+			t.Error("Should NOT flag truncated OpenAI key placeholder")
+		}
+	}
+}
+
+func TestDetectSecrets_FindsGoogleAPIKey(t *testing.T) {
+	content := `key = "AIzaSyC1a2b3c4d5e6f7g8h9i0j1k2l3m4n5o6p"`
+	findings := DetectSecrets("config.py", []byte(content))
+	found := false
+	for _, f := range findings {
+		if f.Type == "google_api_key" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("Expected google_api_key finding")
+	}
+}
+
+func TestDetectSecrets_FindsGroqKey(t *testing.T) {
+	content := `key = "gsk_Ab1Cd2Ef3Gh4Ij5Kl6Mn7Op8Qr9St0UvWx1Yz2Ab1Cd2Ef3Gh4Ij5K"`
+	findings := DetectSecrets("config.py", []byte(content))
+	found := false
+	for _, f := range findings {
+		if f.Type == "groq_api_key" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("Expected groq_api_key finding")
+	}
+}
+
+func TestDetectSecrets_FindsHuggingFaceToken(t *testing.T) {
+	content := `token = "hf_Ab1Cd2Ef3Gh4Ij5Kl6Mn7Op8Qr9St0UvWx1Y"`
+	findings := DetectSecrets("config.py", []byte(content))
+	found := false
+	for _, f := range findings {
+		if f.Type == "huggingface_token" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("Expected huggingface_token finding")
+	}
+}
+
+func TestDetectSecrets_FindsReplicateToken(t *testing.T) {
+	content := `token = "r8_Ab1Cd2Ef3Gh4Ij5Kl6Mn7Op8Qr9St0UvWx1Yz2Ab"`
+	findings := DetectSecrets("config.py", []byte(content))
+	found := false
+	for _, f := range findings {
+		if f.Type == "replicate_api_token" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("Expected replicate_api_token finding")
+	}
+}
+
+// Verify redaction path also catches the new patterns
+func TestDetectSecretsForRedaction_FindsAIProviderKeys(t *testing.T) {
+	content := `key1 = "sk-proj-Ab1Cd2Ef3Gh4Ij5Kl6Mn7Op8Qr9St0UvWx1Yz2"
+key2 = "hf_Ab1Cd2Ef3Gh4Ij5Kl6Mn7Op8Qr9St0UvWx1Y"
+key3 = "gsk_Ab1Cd2Ef3Gh4Ij5Kl6Mn7Op8Qr9St0UvWx1Yz2Ab1Cd2Ef3Gh4Ij5K"`
+	findings := DetectSecretsForRedaction("config.py", []byte(content))
+	types := map[string]bool{}
+	for _, f := range findings {
+		types[f.Type] = true
+	}
+	if !types["openai_api_key"] {
+		t.Error("Redaction path should find OpenAI key")
+	}
+	if !types["huggingface_token"] {
+		t.Error("Redaction path should find HuggingFace token")
+	}
+	if !types["groq_api_key"] {
+		t.Error("Redaction path should find Groq key")
+	}
+}
+
+// Regression: existing patterns still work after adding new ones
+func TestDetectSecrets_ExistingPatternsStillWork(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		wantType string
+	}{
+		{"AWS key", `key = "AKIA1234567890123456"`, "aws_access_key"},
+		{"GitHub token", `token = "ghp_abcdefghij1234567890abcdefghij123456"`, "github_token"},
+		{"Slack token", `token = "xoxp-0000000000-0000000000000-AbCdEfGhIjKlMnOpQrStUvWxYz"`, "slack_token"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			findings := DetectSecrets("config.py", []byte(tc.content))
+			found := false
+			for _, f := range findings {
+				if f.Type == tc.wantType {
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("REGRESSION: %s (%s) no longer detected", tc.name, tc.wantType)
+			}
+		})
+	}
+}

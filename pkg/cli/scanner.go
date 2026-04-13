@@ -566,9 +566,15 @@ func (hs *HybridScanner) sendToServer(redactedFiles map[string][]byte, localSecr
 	part.Write(jsonData)
 
 	// Add each redacted file as a form field
+	totalFiles := len(redactedFiles)
+	fileIdx := 0
 	for fieldName, content := range redactedFiles {
 		part, _ := writer.CreateFormField(fieldName)
 		part.Write(content)
+		fileIdx++
+		if fileIdx%10 == 0 || fileIdx == totalFiles {
+			hs.progress.Update(fmt.Sprintf("Uploading %d/%d files...", fileIdx, totalFiles))
+		}
 	}
 
 	writer.Close()

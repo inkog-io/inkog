@@ -166,6 +166,74 @@ var PatternDefinitions = map[string]*SecretPattern{
 		CWE:        "CWE-798",
 		OWASP:      "A02:2021",
 	},
+	"anthropic_api_key": {
+		Name:        "anthropic_api_key",
+		Description: "Anthropic API Key",
+		Patterns: []*regexp.Regexp{
+			regexp.MustCompile(`sk-ant-api03-[A-Za-z0-9_-]{80,}`),
+			regexp.MustCompile(`sk-ant-admin01-[A-Za-z0-9_-]{80,}`),
+		},
+		Severity:   "CRITICAL",
+		Confidence: 0.99,
+		CWE:        "CWE-798",
+		OWASP:      "A02:2021",
+	},
+	"openai_api_key": {
+		Name:        "openai_api_key",
+		Description: "OpenAI API Key (Project or Service Account)",
+		Patterns: []*regexp.Regexp{
+			regexp.MustCompile(`sk-proj-[A-Za-z0-9_-]{20,}`),
+			regexp.MustCompile(`sk-svcacct-[A-Za-z0-9_-]{20,}`),
+		},
+		Severity:   "CRITICAL",
+		Confidence: 0.99,
+		CWE:        "CWE-798",
+		OWASP:      "A02:2021",
+	},
+	"google_api_key": {
+		Name:        "google_api_key",
+		Description: "Google API Key (Gemini / Cloud AI)",
+		Patterns: []*regexp.Regexp{
+			regexp.MustCompile(`AIza[0-9A-Za-z_-]{35}`),
+		},
+		Severity:   "CRITICAL",
+		Confidence: 0.98,
+		CWE:        "CWE-798",
+		OWASP:      "A02:2021",
+	},
+	"groq_api_key": {
+		Name:        "groq_api_key",
+		Description: "Groq Cloud API Key",
+		Patterns: []*regexp.Regexp{
+			regexp.MustCompile(`gsk_[A-Za-z0-9]{48,}`),
+		},
+		Severity:   "CRITICAL",
+		Confidence: 0.99,
+		CWE:        "CWE-798",
+		OWASP:      "A02:2021",
+	},
+	"huggingface_token": {
+		Name:        "huggingface_token",
+		Description: "HuggingFace Hub Token",
+		Patterns: []*regexp.Regexp{
+			regexp.MustCompile(`hf_[A-Za-z0-9]{34,}`),
+		},
+		Severity:   "CRITICAL",
+		Confidence: 0.99,
+		CWE:        "CWE-798",
+		OWASP:      "A02:2021",
+	},
+	"replicate_api_token": {
+		Name:        "replicate_api_token",
+		Description: "Replicate API Token",
+		Patterns: []*regexp.Regexp{
+			regexp.MustCompile(`r8_[A-Za-z0-9]{37,}`),
+		},
+		Severity:   "CRITICAL",
+		Confidence: 0.99,
+		CWE:        "CWE-798",
+		OWASP:      "A02:2021",
+	},
 	"entropy_secret": {
 		Name:        "entropy_secret",
 		Description: "High-Entropy String (Potential Secret)",
@@ -639,7 +707,7 @@ func isHumanReadableIdentifier(value string) bool {
 	}
 
 	// Known secret key prefixes — never treat as identifiers
-	secretPrefixes := []string{"sk_", "pk_", "ghp_", "gho_", "xoxb", "xoxp", "akia"}
+	secretPrefixes := []string{"sk_", "pk_", "ghp_", "gho_", "xoxb", "xoxp", "akia", "sk-ant-", "sk-proj-", "sk-svcacct-", "gsk_", "hf_", "r8_", "aiza"}
 	lowerVal := strings.ToLower(value)
 	for _, prefix := range secretPrefixes {
 		if strings.HasPrefix(lowerVal, prefix) {

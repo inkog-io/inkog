@@ -1453,8 +1453,9 @@ func convertSkillFindings(resp *cli.SkillScanResponse) []contract.Finding {
 // go build -ldflags "-X main.AppVersion=1.2.3"
 var AppVersion = "1.0.1"
 
-const (
-	// ANSI color codes for terminal output
+// ANSI color codes for terminal output — declared as var so they can be
+// cleared to "" when color output is disabled (NO_COLOR, --no-color, non-TTY).
+var (
 	colorReset    = "\033[0m"
 	colorCritical = "\033[91m" // bright red
 	colorHigh     = "\033[93m" // bright yellow
@@ -1470,12 +1471,50 @@ const (
 	colorGovernance    = "\033[95m" // magenta for governance
 	colorCheck         = "\033[92m" // green for checkmark
 	colorCross         = "\033[91m" // red for cross
+)
+
+// disableColors zeroes out all ANSI color codes so text output is plain.
+func disableColors() {
+	colorReset = ""
+	colorCritical = ""
+	colorHigh = ""
+	colorMedium = ""
+	colorLow = ""
+	colorGray = ""
+	colorCyan = ""
+	colorTierVuln = ""
+	colorTierRisk = ""
+	colorTierHardening = ""
+	colorGovernance = ""
+	colorCheck = ""
+	colorCross = ""
+}
+
+const (
 
 	// Security grading point values (Snyk-style)
 	PointsCritical = 30
 	PointsHigh     = 10
 	PointsMedium   = 5
 	PointsLow      = 1
+)
+
+// shouldDisableColors returns true when color output should be suppressed.
+// Respects: --no-color flag, NO_COLOR env var (https://no-color.org), non-TTY stdout.
+func shouldDisableColors() bool {
+	if os.Getenv("NO_COLOR") != "" {
+		return true
+	}
+	if !term.IsTerminal(int(os.Stdout.Fd())) {
+		return true
+	}
+	return false
+}
+
+// noColor is set once at startup (overridden by --no-color flag in main).
+var noColor = shouldDisableColors()
+
+const (
 
 	HelpText = `Inkog - Ship Safe Agents
 
@@ -1532,6 +1571,7 @@ Options:
   -baseline string    Path to baseline file (default: .inkog-baseline.json)
   -update-baseline    Update the baseline after scanning
   -verbose            Enable verbose output
+  -no-color           Disable colored output (also honors NO_COLOR env var)
   -version            Show version information
   -help               Show this help message
 
@@ -1664,8 +1704,8 @@ func main() {
 	pathFlag := flag.String("path", ".", "Source path to scan")
 	serverFlag := flag.String("server", "", "Inkog server URL")
 	outputFlag := flag.String("output", "text", "Output format: text, json, html, sarif")
-	policyFlag := flag.String("policy", contract.PolicyBalanced, "Security policy: low-noise, balanced, comprehensive")
-	severityFlag := flag.String("severity", "low", "Minimum severity level")
+	policyFlag := flag.String("policy", contract.PolicyBalanced, "Security policy preset:\n      low-noise       Tier 1 only. Highest signal. Use for CI/CD pass/fail gates.\n      balanced        Vulnerabilities + risk patterns (default). Use for PR review.\n      comprehensive   All findings including hardening. Use for full audits.\n      governance      Governance-only: Article 14 oversight, authorization, audit trails.\n      eu-ai-act       EU AI Act compliance: Articles 12, 14, 15 readiness report.")
+	severityFlag := flag.String("severity", "low", "Minimum severity to report:\n      critical  Only CRITICAL findings. Use for release gates.\n      high      CRITICAL + HIGH. Use for PR blocking.\n      medium    CRITICAL + HIGH + MEDIUM. Use for code review.\n      low       All findings (default).")
 	diffFlag := flag.Bool("diff", false, "Show only new findings since baseline")
 	baselineFlag := flag.String("baseline", ".inkog-baseline.json", "Path to baseline file")
 	updateBaselineFlag := flag.Bool("update-baseline", false, "Update baseline after scanning")
@@ -1673,10 +1713,19 @@ func main() {
 	agentNameFlag := flag.String("agent-name", "", "Explicit agent name (overrides auto-detection from path)")
 	maxFilesFlag := flag.Int("max-files", cli.DefaultMaxFiles, "Maximum files to upload (default 500)")
 	verboseFlag := flag.Bool("verbose", false, "Enable verbose output")
+	noColorFlag := flag.Bool("no-color", false, "Disable colored output (also honors NO_COLOR env var)")
 	versionFlag := flag.Bool("version", false, "Show version information")
 	helpFlag := flag.Bool("help", false, "Show help message")
 
 	flag.Parse()
+
+	// Apply --no-color flag (additive with env/TTY detection)
+	if *noColorFlag {
+		noColor = true
+	}
+	if noColor {
+		disableColors()
+	}
 
 	// Validate policy flag
 	validPolicies := map[string]bool{
