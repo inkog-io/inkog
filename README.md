@@ -45,6 +45,20 @@ Findings map directly to **EU AI Act Article 14 / 15**, **NIST AI RMF**, **ISO 4
 
 [**Try it on a public repo →**](https://inkog.io/scan)  ·  no signup, results in 60 seconds.
 
+## State of AI Agent Security 2026
+
+**We scanned 500+ open-source AI agents. 85% had at least one vulnerability.**
+
+Other findings from the data:
+
+- **63%** of findings were CRITICAL or HIGH severity
+- **25%** failed EU AI Act Article 14 (human oversight)
+- **11,705** total findings across LangChain · CrewAI · AutoGen · pydantic-ai · LangGraph · MCP servers · OpenAI Agents · n8n · Flowise · DSPy
+
+The largest security analysis of the AI agent ecosystem — original data from automated static analysis, not surveys.
+
+[**Read the full report →**](https://inkog.io/report)
+
 ## Quick start
 
 ```bash
