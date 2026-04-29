@@ -187,11 +187,15 @@ npx -y @inkog-io/mcp
 
 7 tools including MCP server auditing, Skill package scanning, and multi-agent topology analysis. [MCP docs →](https://docs.inkog.io/integrations/mcp)
 
-## Inkog Red — Coming Soon
+## Inkog Red — Adversarial testing
 
-Automated adversarial testing for AI agents. Inkog Red probes your running agents with prompt injection, jailbreaks, and tool misuse attacks to validate that defenses hold under real-world conditions.
+Probe your running agents with prompt injection, jailbreaks, and tool-misuse attacks to validate defenses hold under real-world conditions.
 
-[Join the waitlist →](https://inkog.io/red)
+```bash
+inkog red --target https://your-agent.example.com
+```
+
+[Inkog Red docs →](https://docs.inkog.io/red)
 
 ## Community
 
