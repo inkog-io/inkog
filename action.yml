@@ -119,29 +119,59 @@ runs:
         fi
         echo "API key configured ✓"
 
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: '1.21'
-        cache: false
-
-    - name: Build Inkog CLI
+    - name: Download Inkog CLI
       id: download
       shell: bash
+      env:
+        INKOG_VERSION: ${{ inputs.version }}
+        GITHUB_TOKEN: ${{ github.token }}
       run: |
-        echo "Building Inkog CLI from source..."
+        set -euo pipefail
 
-        # Build from the action's source code
-        cd "${{ github.action_path }}"
-        go build -o inkog ./cmd/inkog/main.go
-        chmod +x inkog
+        # Detect OS
+        case "$(uname -s)" in
+          Linux*)  OS=linux ;;
+          Darwin*) OS=darwin ;;
+          MINGW*|MSYS*|CYGWIN*) OS=windows ;;
+          *) echo "::error::Unsupported OS: $(uname -s)"; exit 1 ;;
+        esac
 
-        # Move to workspace
-        mv inkog "${{ github.workspace }}/inkog"
-        cd "${{ github.workspace }}"
+        # Detect arch
+        case "$(uname -m)" in
+          x86_64|amd64) ARCH=amd64 ;;
+          arm64|aarch64) ARCH=arm64 ;;
+          *) echo "::error::Unsupported arch: $(uname -m)"; exit 1 ;;
+        esac
 
-        echo "inkog_path=${{ github.workspace }}/inkog" >> $GITHUB_OUTPUT
-        ./inkog -version || echo "Inkog CLI built successfully"
+        BINARY="inkog-${OS}-${ARCH}"
+        if [ "$OS" = "windows" ]; then BINARY="${BINARY}.exe"; fi
+
+        # Resolve "latest" via GitHub API
+        VERSION="$INKOG_VERSION"
+        if [ "$VERSION" = "latest" ] || [ -z "$VERSION" ]; then
+          VERSION=$(curl -sSfL \
+            -H "Accept: application/vnd.github+json" \
+            ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} \
+            https://api.github.com/repos/inkog-io/inkog/releases/latest \
+            | grep -m1 '"tag_name"' | sed -E 's/.*"tag_name":\s*"([^"]+)".*/\1/')
+          if [ -z "$VERSION" ]; then
+            echo "::error::Could not resolve latest Inkog release"; exit 1
+          fi
+          echo "Resolved 'latest' to ${VERSION}"
+        fi
+
+        URL="https://github.com/inkog-io/inkog/releases/download/${VERSION}/${BINARY}"
+        echo "Downloading ${URL}"
+
+        DEST="${{ github.workspace }}/inkog"
+        if [ "$OS" = "windows" ]; then DEST="${DEST}.exe"; fi
+
+        curl -sSfL --retry 3 --retry-delay 2 -o "$DEST" "$URL" \
+          || { echo "::error::Failed to download $URL — does the release contain $BINARY?"; exit 1; }
+        chmod +x "$DEST"
+
+        echo "inkog_path=$DEST" >> $GITHUB_OUTPUT
+        "$DEST" -version || echo "Inkog CLI ${VERSION} ready"
 
     - name: Run Security Scan
       id: scan

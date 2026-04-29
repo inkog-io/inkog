@@ -35,7 +35,20 @@
 
 AI agents can loop forever, drain your API budget in minutes, execute arbitrary code from user input, or make high-stakes decisions with zero human oversight. Most of these flaws pass code review because they look like normal code — the danger is in the runtime behavior.
 
-Inkog scans your agent code statically and catches these problems before deployment. One command, works across 20+ frameworks, maps findings to EU AI Act and OWASP LLM Top 10.
+Inkog scans your agent code statically and catches these problems before deployment. One command, works across **21 frameworks**, maps findings to EU AI Act and OWASP LLM Top 10.
+
+> **Want to try it without installing anything?** Drop a repo URL into the [free scanner at inkog.io](https://inkog.io/scan) — no signup required.
+
+## What's New in v1.2.0
+
+- **Deep scan** (`inkog -deep`) — orchestrator-driven analysis that catches subtle logic flaws pattern matching misses
+- **Skill & MCP scanning** — audit `SKILL.md` packages and MCP servers for tool poisoning, command injection, excessive permissions
+- **MLBOM generation** — Machine Learning Bill of Materials for your agent
+- **AG2 + Azure AI Foundry** support
+- **AI provider secret detection** — Anthropic, Gemini, Groq, HuggingFace
+- **CI/CD templates** — GitLab CI, Azure DevOps, Jenkins (alongside the existing GitHub Action)
+
+See the full [CHANGELOG](CHANGELOG.md).
 
 ## When to Use Inkog
 
@@ -51,7 +64,9 @@ Inkog scans your agent code statically and catches these problems before deploym
 
 ## Quick Start
 
-No install needed:
+Try it on a repo from your browser — [inkog.io/scan](https://inkog.io/scan). No signup, no install.
+
+For local scans, no install needed:
 
 ```bash
 npx -y @inkog-io/cli scan .
@@ -176,6 +191,7 @@ Automated adversarial testing for AI agents. Inkog Red probes your running agent
 - [Slack](https://join.slack.com/t/inkog-io/shared_invite/zt-3jrzztm28-cXyokCXO8KjKC6nBI0l4Gw) — Questions, feedback, feature requests
 - [Issues](https://github.com/inkog-io/inkog/issues) — Bug reports and feature requests
 - [Contributing](CONTRIBUTING.md) — We welcome PRs
+- [Changelog](CHANGELOG.md) — Release history
 
 ## Star History
 

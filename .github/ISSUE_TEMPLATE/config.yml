@@ -1,0 +1,14 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Slack Community
+    url: https://join.slack.com/t/inkog-io/shared_invite/zt-3jrzztm28-cXyokCXO8KjKC6nBI0l4Gw
+    about: Quick questions, feedback, and discussion
+  - name: Documentation
+    url: https://docs.inkog.io
+    about: CLI reference, detection patterns, integration guides
+  - name: Security Issues
+    url: https://github.com/inkog-io/inkog/security/policy
+    about: Report a security vulnerability privately (do not open a public issue)
+  - name: Free Web Scanner
+    url: https://inkog.io/scan
+    about: Try Inkog on a public repo without installing anything
