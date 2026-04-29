@@ -2,21 +2,10 @@
   <img src="logo.png" width="200" alt="Inkog">
 </p>
 
-<h3 align="center">The security co-pilot for AI agent development.</h3>
+<h3 align="center">The pre-flight check for AI agents.</h3>
 
 <p align="center">
-  Build secure AI agents from the start. Scan for logic bugs, prompt injection, missing guardrails, and compliance gaps — before they reach production.
-</p>
-
-<p align="center">
-  <a href="README.md">English</a> ·
-  <a href="docs/i18n/README.zh-CN.md">简体中文</a> ·
-  <a href="docs/i18n/README.ja.md">日本語</a> ·
-  <a href="docs/i18n/README.ko.md">한국어</a> ·
-  <a href="docs/i18n/README.es.md">Español</a> ·
-  <a href="docs/i18n/README.pt-BR.md">Português</a> ·
-  <a href="docs/i18n/README.de.md">Deutsch</a> ·
-  <a href="docs/i18n/README.fr.md">Français</a>
+  Static analysis that catches the bugs only agent code can have — token bombing, prompt injection, missing oversight, compliance gaps — before they ship.
 </p>
 
 <p align="center">
@@ -24,7 +13,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License"></a>
   <a href="https://goreportcard.com/report/github.com/inkog-io/inkog"><img src="https://goreportcard.com/badge/github.com/inkog-io/inkog" alt="Go Report Card"></a>
   <a href="https://github.com/inkog-io/inkog/actions/workflows/ci.yml"><img src="https://github.com/inkog-io/inkog/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://join.slack.com/t/inkog-io/shared_invite/zt-3jrzztm28-cXyokCXO8KjKC6nBI0l4Gw"><img src="https://img.shields.io/badge/Slack-Join%20us-4A154B?logo=slack&logoColor=white" alt="Slack"></a>
+  <a href="https://discord.gg/NuG4SSGRH"><img src="https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white" alt="Discord"></a>
 </p>
 
 <p align="center">
@@ -33,86 +22,45 @@
 
 <p align="center">
   <a href="https://app.inkog.io/report/83556081-478e-4c64-af52-126b8c83eb6d">
-    <img src="docs/screenshots/dashboard-report.png" width="800" alt="Inkog dashboard report — findings, code-level analysis, and EU AI Act / NIST / OWASP compliance mapping">
+    <img src="docs/screenshots/dashboard-report.png" width="800" alt="Inkog dashboard report — findings, code-level analysis, EU AI Act / NIST / OWASP compliance mapping">
   </a>
   <br>
-  <sub><i>Every scan is shareable as a report → <a href="https://app.inkog.io/report/83556081-478e-4c64-af52-126b8c83eb6d">view this one live</a></i></sub>
+  <sub><i>Every scan is a shareable report — <a href="https://app.inkog.io/report/83556081-478e-4c64-af52-126b8c83eb6d">view this one live</a></i></sub>
 </p>
 
 ---
 
-AI agents can loop forever, drain your API budget in minutes, execute arbitrary code from user input, or make high-stakes decisions with zero human oversight. Most of these flaws pass code review because they look like normal code — the danger is in the runtime behavior.
+## Why Inkog
 
-Inkog scans your agent code statically and catches these problems before deployment. One command, works across **21 frameworks**, maps findings to EU AI Act and OWASP LLM Top 10.
+Most security tools find SQL injection. Inkog finds the things that **only break in agent code**:
 
-> **Want to try it without installing anything?** Drop a repo URL into the [free scanner at inkog.io](https://inkog.io/scan) — no signup required.
+- **Token bombing** — loops where the LLM controls termination, draining your API budget
+- **Recursive tool calling** — one user request fans out into 10,000 LLM invocations
+- **Prompt injection sinks** — RAG output flowing into a `system` prompt no one reviewed
+- **Missing oversight** — destructive tools (refunds, deletes, money) firing without human approval
+- **Cross-tenant leakage** — global state shared between agent invocations
+- **MCP tool poisoning** — malicious tool descriptions hijacking your agent
 
-## What's New in v1.2.0
+Findings map directly to **EU AI Act Article 14 / 15**, **NIST AI RMF**, **ISO 42001**, and **OWASP LLM Top 10** — at the article level, not just bucket labels.
 
-- **Deep scan** (`inkog -deep`) — orchestrator-driven analysis that catches subtle logic flaws pattern matching misses
-- **Skill & MCP scanning** — audit `SKILL.md` packages and MCP servers for tool poisoning, command injection, excessive permissions
-- **MLBOM generation** — Machine Learning Bill of Materials for your agent
-- **AG2 + Azure AI Foundry** support
-- **AI provider secret detection** — Anthropic, Gemini, Groq, HuggingFace
-- **CI/CD templates** — GitLab CI, Azure DevOps, Jenkins (alongside the existing GitHub Action)
+[**Try it on a public repo →**](https://inkog.io/scan)  ·  no signup, results in 60 seconds.
 
-See the full [CHANGELOG](CHANGELOG.md).
-
-## When to Use Inkog
-
-- **Building an AI agent** — Scan during development to catch infinite loops, prompt injection, and missing guardrails before they ship
-- **Adding security to CI/CD** — Add `inkog-io/inkog@v1` to GitHub Actions for automated security gates on every PR
-- **Preparing for EU AI Act** — Generate compliance reports mapping your agent to Article 14, NIST AI RMF, OWASP LLM Top 10
-- **Reviewing agent code** — Use from Claude Code, Cursor, or any MCP client to get security analysis while you code
-- **Auditing MCP servers** — Check any MCP server for tool poisoning, privilege escalation, or data exfiltration before installing
-- **Verifying AGENTS.md** — Validate that governance declarations match actual code behavior
-- **Scanning Skill packages** — Audit SKILL.md packages for tool poisoning, command injection, and excessive permissions before adding to your agent
-- **Generating an MLBOM** — Create a Machine Learning Bill of Materials documenting your agent's components, tools, and data flows
-- **Building multi-agent systems** — Detect delegation loops, privilege escalation, and unauthorized handoffs between agents (A2A audit)
-
-## Quick Start
-
-Try it on a repo from your browser — [inkog.io/scan](https://inkog.io/scan). No signup, no install.
-
-For local scans, no install needed:
+## Quick start
 
 ```bash
+# No install
 npx -y @inkog-io/cli scan .
+
+# Or install permanently
+brew tap inkog-io/inkog && brew install inkog
+go install github.com/inkog-io/inkog/cmd/inkog@latest
 ```
 
-Or install permanently:
-
-| Method | Command |
-|--------|---------|
-| **Install script** | `curl -fsSL https://inkog.io/install.sh \| sh` |
-| **Homebrew** | `brew tap inkog-io/inkog && brew install inkog` |
-| **Go** | `go install github.com/inkog-io/inkog/cmd/inkog@latest` |
-| **Binary** | [Download from Releases](https://github.com/inkog-io/inkog/releases) |
-
 ```bash
-# Get your free API key at https://app.inkog.io
+# Get a free API key at app.inkog.io
 export INKOG_API_KEY=sk_live_...
-
 inkog .
 ```
-
-## What It Catches
-
-| Category | Examples | Why it matters |
-|----------|----------|----------------|
-| **Infinite loops** | Agent re-calls itself with no exit condition, LLM output fed back as input without a cap | Your agent runs forever and racks up API costs |
-| **Prompt injection** | User input flows into system prompt unsanitized, tainted data reaches tool calls | Attackers can hijack your agent's behavior |
-| **Missing guardrails** | No human-in-the-loop for destructive actions, no rate limits on LLM calls, unconstrained tool access | One bad decision and your agent goes rogue |
-| **Hardcoded secrets** | API keys, tokens, and passwords in source code (detected locally, never uploaded) | Credentials leak when you push to GitHub |
-| **Compliance gaps** | Missing human oversight (EU AI Act Article 14), no audit logging, missing authorization checks | You're legally required to have these controls by August 2026 |
-
-[Full detection catalog →](https://docs.inkog.io/vulnerabilities)
-
-## Supported Frameworks
-
-**Code-first:** LangChain · LangGraph · CrewAI · AutoGen · AG2 · OpenAI Agents · Semantic Kernel · Azure AI Foundry · LlamaIndex · Haystack · DSPy · Phidata · Smolagents · PydanticAI · Google ADK
-
-**No-code:** n8n · Flowise · Langflow · Dify · Microsoft Copilot Studio · Salesforce Agentforce
 
 ## GitHub Actions
 
@@ -120,101 +68,112 @@ inkog .
 - uses: inkog-io/inkog@v1
   with:
     api-key: ${{ secrets.INKOG_API_KEY }}
-    sarif-upload: true   # Shows findings in GitHub Security tab
+    sarif-upload: true   # findings show in the GitHub Security tab
 ```
 
-[Full CI/CD docs →](https://docs.inkog.io/ci-cd/github-action) | [Complete workflow example →](examples/ci/github-actions.yml)
+[Workflow example](examples/ci/github-actions.yml) · [GitLab / Azure / Jenkins templates](docs/CI_CD_INTEGRATION.md)
 
-<details>
-<summary><strong>Deep scan</strong></summary>
+## How Inkog compares
 
-Run an advanced orchestrator-based analysis with enriched findings, an agent profile, compliance coverage, and a premium HTML report:
+The closest direct alternative to Inkog is **[SplxAI Agentic Radar](https://github.com/splx-ai/agentic-radar)** — also OSS, also static analysis of agent code. Honest side-by-side:
 
-```bash
-inkog -deep .
-inkog -deep -output html . > deep-report.html
-```
+|  | **Inkog** | SplxAI Agentic Radar |
+|---|---|---|
+| Approach | Static code analysis | Static code analysis |
+| Frameworks supported | 21 (Python · TS · no-code) | 4 (CrewAI · LangGraph · OpenAI Agents · n8n) |
+| Compliance mapping | Article-level (EU AI Act, NIST, ISO 42001, OWASP) | Generic risk taxonomy |
+| MCP server auditing | ✓ | – |
+| AGENTS.md governance verification | ✓ | – |
+| Topology visualization | – | ✓ (interactive graph) |
+| GitHub stars | 28 | 956 |
+| License | Apache 2.0 CLI · proprietary engine | Fully OSS |
 
-Requires the Inkog Deep role. [Deep scan docs →](https://docs.inkog.io/cli/deep-scan)
+**Different problem, complementary tools** — use Inkog *with* one of these, not instead of:
 
-</details>
+- **Dev-environment scanning** — [Snyk Agent Scan](https://github.com/snyk/agent-scan), [AgentShield](https://github.com/affaan-m/agentshield) audit installed MCP servers and editor configs on your laptop (different scan target — your laptop, not your repo)
+- **Runtime adversarial probing** — [Lakera](https://www.lakera.ai/ai-red-teaming), [Straiker](https://www.straiker.ai/), [Crucible](https://crucible-security.github.io/crucible-website/), [MS Red Teaming Agent](https://learn.microsoft.com/en-us/azure/foundry/concepts/ai-red-teaming-agent), [NVIDIA Garak](https://github.com/NVIDIA/garak) test deployed agents at the API boundary
+- **Quality / hallucination evaluation** — [Giskard](https://github.com/Giskard-AI/giskard-oss), [Patronus AI](https://www.patronus.ai/) test answer correctness and safety, not code-level security
 
-<details>
-<summary><strong>Skill & MCP scan</strong></summary>
+[Detailed comparison →](docs/comparisons.md)
 
-Scan SKILL.md packages, agent tools, and MCP servers for vulnerabilities:
+## Frameworks
 
-```bash
-# Scan a skill package
-inkog skill-scan .
-inkog skill-scan --repo https://github.com/org/repo
+**Code-first:** LangChain · LangGraph · CrewAI · AutoGen · AG2 · OpenAI Agents · Semantic Kernel · Azure AI Foundry · LlamaIndex · Haystack · DSPy · Phidata · Smolagents · PydanticAI · Google ADK
 
-# Scan an MCP server by registry name
-inkog mcp-scan github
-inkog mcp-scan github --repo https://github.com/org/mcp-server
+**No-code:** n8n · Flowise · Langflow · Dify · Microsoft Copilot Studio · Salesforce Agentforce
 
-# Deep scan either
-inkog skill-scan --deep .
-inkog mcp-scan --deep --repo https://github.com/org/mcp-server
-```
-
-[Skill & MCP scan docs →](https://docs.inkog.io/cli/skill-scan)
-
-</details>
-
-<details>
-<summary><strong>Scan policies</strong></summary>
-
-```bash
-inkog . --policy low-noise        # Only proven vulnerabilities
-inkog . --policy balanced          # Vulnerabilities + risk patterns (default)
-inkog . --policy comprehensive     # Everything including hardening tips
-inkog . --policy governance        # Article 14 controls, authorization, audit trails
-inkog . --policy eu-ai-act         # EU AI Act compliance report
-```
-
-[Policy reference →](https://docs.inkog.io/cli/policies)
-
-</details>
-
-## MCP Server
-
-Scan agent code directly from Claude, ChatGPT, or Cursor:
+## Use from your editor
 
 ```bash
 npx -y @inkog-io/mcp
 ```
 
-7 tools including MCP server auditing, Skill package scanning, and multi-agent topology analysis. [MCP docs →](https://docs.inkog.io/integrations/mcp)
+Adds Inkog as an MCP server in Claude Code, Cursor, ChatGPT — 7 tools including MCP server auditing, Skill package scanning, multi-agent topology analysis. [MCP integration →](https://docs.inkog.io/integrations/mcp)
 
-## Inkog Red — Adversarial testing
+## More features
 
-Probe your running agents with prompt injection, jailbreaks, and tool-misuse attacks to validate defenses hold under real-world conditions.
+<details><summary><strong>Deep scan</strong> — orchestrator-driven analysis with enriched findings, agent profile, HTML report</summary>
+
+```bash
+inkog -deep .
+inkog -deep -output html . > report.html
+```
+
+[Deep scan docs →](https://docs.inkog.io/cli/deep-scan)
+</details>
+
+<details><summary><strong>Skill & MCP scan</strong> — audit SKILL.md packages and MCP servers</summary>
+
+```bash
+inkog skill-scan .
+inkog mcp-scan github
+inkog skill-scan --deep --repo https://github.com/org/repo
+```
+
+[Skill & MCP scan docs →](https://docs.inkog.io/cli/skill-scan)
+</details>
+
+<details><summary><strong>Inkog Red</strong> — adversarial testing of running agents</summary>
 
 ```bash
 inkog red --target https://your-agent.example.com
 ```
 
-[Inkog Red docs →](https://docs.inkog.io/red)
+Probes prompt injection, jailbreaks, and tool misuse against live endpoints. [Inkog Red docs →](https://docs.inkog.io/red)
+</details>
+
+<details><summary><strong>Scan policies</strong> — five presets from low-noise to full-audit</summary>
+
+```bash
+inkog . --policy low-noise        # only proven vulnerabilities
+inkog . --policy balanced         # default — vulnerabilities + risk patterns
+inkog . --policy comprehensive    # everything including hardening tips
+inkog . --policy governance       # Article 14 controls, authorization, audit trails
+inkog . --policy eu-ai-act        # EU AI Act compliance report
+```
+
+[Policy reference →](https://docs.inkog.io/cli/policies)
+</details>
 
 ## Community
 
-- [Documentation](https://docs.inkog.io) — CLI reference, detection patterns, integrations
-- [Slack](https://join.slack.com/t/inkog-io/shared_invite/zt-3jrzztm28-cXyokCXO8KjKC6nBI0l4Gw) — Questions, feedback, feature requests
-- [Issues](https://github.com/inkog-io/inkog/issues) — Bug reports and feature requests
-- [Contributing](CONTRIBUTING.md) — We welcome PRs
-- [Changelog](CHANGELOG.md) — Release history
+- 💬 [Discord](https://discord.gg/NuG4SSGRH) — questions, feedback, feature requests
+- 📚 [Documentation](https://docs.inkog.io)
+- 🐛 [Issues](https://github.com/inkog-io/inkog/issues)
+- 🤝 [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md)
 
-## Star History
+<details><summary>Translations</summary>
 
-<a href="https://star-history.com/#inkog-io/inkog&Date">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=inkog-io/inkog&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=inkog-io/inkog&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=inkog-io/inkog&type=Date" />
- </picture>
-</a>
+<a href="docs/i18n/README.zh-CN.md">简体中文</a> ·
+<a href="docs/i18n/README.ja.md">日本語</a> ·
+<a href="docs/i18n/README.ko.md">한국어</a> ·
+<a href="docs/i18n/README.es.md">Español</a> ·
+<a href="docs/i18n/README.pt-BR.md">Português</a> ·
+<a href="docs/i18n/README.de.md">Deutsch</a> ·
+<a href="docs/i18n/README.fr.md">Français</a>
+
+</details>
 
 ## License
 
-Apache 2.0 — See [LICENSE](LICENSE)
+Apache 2.0 — see [LICENSE](LICENSE).
