@@ -31,6 +31,14 @@
   <img src="demo.gif" width="800" alt="Inkog scanning AI agent code for vulnerabilities">
 </p>
 
+<p align="center">
+  <a href="https://app.inkog.io/report/83556081-478e-4c64-af52-126b8c83eb6d">
+    <img src="docs/screenshots/dashboard-report.png" width="800" alt="Inkog dashboard report — findings, code-level analysis, and EU AI Act / NIST / OWASP compliance mapping">
+  </a>
+  <br>
+  <sub><i>Every scan is shareable as a report → <a href="https://app.inkog.io/report/83556081-478e-4c64-af52-126b8c83eb6d">view this one live</a></i></sub>
+</p>
+
 ---
 
 AI agents can loop forever, drain your API budget in minutes, execute arbitrary code from user input, or make high-stakes decisions with zero human oversight. Most of these flaws pass code review because they look like normal code — the danger is in the runtime behavior.
