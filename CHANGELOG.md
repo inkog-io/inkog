@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.2.1] — 2026-04-29
+
+Documentation refresh and quality-of-life patch. No changes to detection logic — scan results are identical to v1.2.0.
+
+### Added
+- **Dependabot** — weekly automated updates for Go modules and GitHub Actions.
+- **Framework support issue template** — dedicated checklist for requesting new framework detection, alongside refreshed bug report, feature request, and PR templates.
+
+### Changed
+- **Faster GitHub Action** — `inkog-io/inkog@v1` now downloads pre-built binaries instead of building from source (~60s → ~5s; cross-platform: macOS/Linux/Windows, amd64/arm64).
+- **CONTRIBUTING.md** — rewritten with a Universal IR primer and clearer adapter-contribution guide.
+- **SECURITY.md** — adds supported versions table, GitHub Security Advisories link, and expanded scope covering the MCP server and GitHub Action.
+
 ## [1.2.0] — 2026-04-13
 
 ### Added
@@ -68,7 +81,8 @@ Initial public release.
 - **Multi-framework support** — LangChain, LangGraph, CrewAI, AutoGen, OpenAI Agents, Semantic Kernel, LlamaIndex, Haystack, DSPy, Phidata, Smolagents, PydanticAI, Google ADK, n8n, Flowise, Langflow, Dify, Microsoft Copilot Studio, Salesforce Agentforce.
 - **Cross-platform builds** — darwin (amd64, arm64), linux (amd64, arm64), windows (amd64).
 
-[Unreleased]: https://github.com/inkog-io/inkog/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/inkog-io/inkog/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/inkog-io/inkog/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/inkog-io/inkog/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/inkog-io/inkog/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/inkog-io/inkog/releases/tag/v1.0.0
