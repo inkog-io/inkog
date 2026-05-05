@@ -3,12 +3,37 @@
   "_description": "Public scan corpus — the live dataset behind State of AI Agent Security 2026. Refreshed weekly by an automated routine.",
   "_methodology": "See data/scan-corpus-readme.md for methodology, included repo criteria, and rotation cadence.",
   "aggregates": {
-    "total_scans": 0,
-    "total_findings_observed": 0,
-    "average_governance_score": null,
-    "frameworks_covered": [],
-    "last_refreshed": null,
-    "first_scan_date": null
+    "total_scans": 1,
+    "total_findings_observed": 3,
+    "average_governance_score": 27.0,
+    "finding_categories_aggregated": [
+      "sql_injection",
+      "injection",
+      "missing_audit_logging",
+      "governance"
+    ],
+    "last_refreshed": "2026-05-04T12:10:06Z",
+    "first_scan_date": "2026-05-04T12:10:06Z"
   },
-  "scans": []
+  "scans": [
+    {
+      "timestamp": "2026-05-04T12:10:06Z",
+      "repo": "ReversecLabs/damn-vulnerable-llm-agent",
+      "report_id": "c4c651c5-658b-4626-936b-882bcb37db16",
+      "findings_count": 3,
+      "critical_count": 0,
+      "high_count": 2,
+      "medium_count": 1,
+      "low_count": 0,
+      "governance_score": 27,
+      "risk_score": 22,
+      "eu_ai_act_readiness": "PARTIAL",
+      "top_finding_categories": [
+        "sql_injection",
+        "injection",
+        "missing_audit_logging",
+        "governance"
+      ]
+    }
+  ]
 }
