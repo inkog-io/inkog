@@ -6,7 +6,7 @@
     "total_scans": 1,
     "total_findings_observed": 3,
     "average_governance_score": 27.0,
-    "frameworks_covered": [
+    "finding_categories_aggregated": [
       "sql_injection",
       "injection",
       "missing_audit_logging",
