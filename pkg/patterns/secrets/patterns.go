@@ -234,6 +234,80 @@ var PatternDefinitions = map[string]*SecretPattern{
 		CWE:        "CWE-798",
 		OWASP:      "A02:2021",
 	},
+	"cohere_api_key": {
+		Name:        "cohere_api_key",
+		Description: "Cohere API Key",
+		Patterns: []*regexp.Regexp{
+			// Cohere uses 40-char alphanumeric tokens. They don't publish a
+			// universal prefix, so we look for the credential-context form:
+			// COHERE_API_KEY="<token>" or Cohere SDK init with bearer token.
+			regexp.MustCompile(`(?i)cohere[_-]?api[_-]?key["'\s:=]+([A-Za-z0-9]{40})`),
+			regexp.MustCompile(`(?i)co\.client\(["']([A-Za-z0-9]{40})["']`),
+		},
+		Severity:   "CRITICAL",
+		Confidence: 0.95,
+		CWE:        "CWE-798",
+		OWASP:      "A02:2021",
+	},
+	"mistral_api_key": {
+		Name:        "mistral_api_key",
+		Description: "Mistral AI API Key",
+		Patterns: []*regexp.Regexp{
+			// Mistral uses 32-char base62 tokens, typically with a context prefix.
+			regexp.MustCompile(`(?i)mistral[_-]?api[_-]?key["'\s:=]+([A-Za-z0-9]{32})`),
+			regexp.MustCompile(`(?i)MISTRAL_API_KEY=["']?([A-Za-z0-9]{32})["']?`),
+		},
+		Severity:   "CRITICAL",
+		Confidence: 0.95,
+		CWE:        "CWE-798",
+		OWASP:      "A02:2021",
+	},
+	"azure_openai_key": {
+		Name:        "azure_openai_key",
+		Description: "Azure OpenAI API Key",
+		Patterns: []*regexp.Regexp{
+			// Azure OpenAI uses 32-char hex keys (header `api-key:` or
+			// `AZURE_OPENAI_API_KEY` env var) and deployment endpoints
+			// matching `*.openai.azure.com`.
+			regexp.MustCompile(`(?i)AZURE_OPENAI_API_KEY["'\s:=]+([a-f0-9]{32})`),
+			regexp.MustCompile(`api-key["'\s:]+([a-f0-9]{32})`),
+			regexp.MustCompile(`https://[a-zA-Z0-9-]+\.openai\.azure\.com/[^"\s]*[?&]api-key=([a-f0-9]{32})`),
+		},
+		Severity:   "CRITICAL",
+		Confidence: 0.95,
+		CWE:        "CWE-798",
+		OWASP:      "A02:2021",
+	},
+	"vertex_ai_key": {
+		Name:        "vertex_ai_key",
+		Description: "Google Vertex AI Service Account / API Key",
+		Patterns: []*regexp.Regexp{
+			// Vertex AI uses Google service account JSON or API keys.
+			// Detect the embedded `private_key` field from a leaked
+			// service-account JSON, plus VERTEX_API_KEY env var pattern.
+			regexp.MustCompile(`"private_key":\s*"-----BEGIN PRIVATE KEY-----[^"]+-----END PRIVATE KEY-----`),
+			regexp.MustCompile(`(?i)VERTEX(_AI)?_API_KEY["'\s:=]+([A-Za-z0-9_-]{30,})`),
+		},
+		Severity:   "CRITICAL",
+		Confidence: 0.98,
+		CWE:        "CWE-798",
+		OWASP:      "A02:2021",
+	},
+	"stripe_restricted_key": {
+		Name:        "stripe_restricted_key",
+		Description: "Stripe Restricted API Key (rk_live / rk_test)",
+		Patterns: []*regexp.Regexp{
+			// Stripe restricted keys are scoped by API permission and often
+			// used in agents that take payment actions. Different risk profile
+			// than the `sk_live_` covered in stripe_key.
+			regexp.MustCompile(`rk_live_[a-zA-Z0-9]{24,}`),
+			regexp.MustCompile(`rk_test_[a-zA-Z0-9]{24,}`),
+		},
+		Severity:   "CRITICAL",
+		Confidence: 0.99,
+		CWE:        "CWE-798",
+		OWASP:      "A02:2021",
+	},
 	"entropy_secret": {
 		Name:        "entropy_secret",
 		Description: "High-Entropy String (Potential Secret)",
