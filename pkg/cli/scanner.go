@@ -156,6 +156,13 @@ type ScanResult struct {
 	CapabilityScanID  string                      `json:"capability_scan_id,omitempty"`
 	CapabilitySummary *contract.CapabilitySummary `json:"capability_summary,omitempty"`
 
+	// CapabilitySurfaceActive is true when the server already removed
+	// legacy governance findings that overlap with capability gaps. The
+	// CLI uses this to hide the legacy Governance Status block so the
+	// same concept doesn't appear twice (capability block + legacy block).
+	CapabilitySurfaceActive bool   `json:"capability_surface_active,omitempty"`
+	CapabilitySurfaceNote   string `json:"capability_surface_note,omitempty"`
+
 	DeepReport       *DeepReport                        `json:"deep_report,omitempty"`
 	IsSkillScan      bool                               `json:"-"` // rendering hint only
 	IsMCPScan        bool                               `json:"-"` // rendering hint: MCP server scan
@@ -318,8 +325,10 @@ func (hs *HybridScanner) Scan() (*ScanResult, error) {
 		Strengths:        serverResult.Strengths,
 
 		// Forward capability surface summary (silent no-op against legacy servers).
-		CapabilityScanID:  serverResult.CapabilityScanID,
-		CapabilitySummary: serverResult.CapabilitySummary,
+		CapabilityScanID:        serverResult.CapabilityScanID,
+		CapabilitySummary:       serverResult.CapabilitySummary,
+		CapabilitySurfaceActive: serverResult.CapabilitySurfaceActive,
+		CapabilitySurfaceNote:   serverResult.CapabilitySurfaceNote,
 	}, nil
 }
 

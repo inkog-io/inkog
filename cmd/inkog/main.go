@@ -2772,8 +2772,16 @@ func displayTieredSummary(findings []contract.Finding, policy string, isDeep boo
 	}
 }
 
-// displayGovernanceStatus shows governance control status
+// displayGovernanceStatus shows governance control status.
+//
+// When the capability surface is active (server replaced overlapping legacy
+// governance findings with capability gaps), this block is suppressed so the
+// same concept does not appear twice: the dedicated Agent Capability Surface
+// block below is the authoritative view.
 func displayGovernanceStatus(result *cli.ScanResult) {
+	if result.CapabilitySurfaceActive {
+		return
+	}
 	// Only show if we have governance data
 	if result.TopologyMap == nil && result.GovernanceScore == 0 {
 		return

@@ -166,6 +166,13 @@ type ScanResult struct {
 	// output backward-compatible.
 	CapabilityScanID  string             `json:"capability_scan_id,omitempty"`
 	CapabilitySummary *CapabilitySummary `json:"capability_summary,omitempty"`
+
+	// CapabilitySurfaceActive is true when the server replaced overlapping
+	// legacy governance findings with capability gaps for this scan. The
+	// CLI uses this flag to hide the legacy "Governance Status" block so
+	// the same concept isn't reported twice.
+	CapabilitySurfaceActive bool   `json:"capability_surface_active,omitempty"`
+	CapabilitySurfaceNote   string `json:"capability_surface_note,omitempty"`
 }
 
 // SecurityStrength represents a positive security signal detected during scanning
