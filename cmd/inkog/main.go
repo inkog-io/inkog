@@ -2599,7 +2599,7 @@ func displayCapabilitySurface(result *cli.ScanResult) {
 	}
 	dashboard := s.DashboardURL
 	if dashboard == "" && result.CapabilityScanID != "" {
-		dashboard = "https://app.inkog.io/agents/" + result.CapabilityScanID
+		dashboard = "https://app.inkog.io/dashboard/agents/" + result.CapabilityScanID
 	}
 
 	govColor := colorReset
