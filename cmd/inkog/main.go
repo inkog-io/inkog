@@ -2579,10 +2579,63 @@ func outputText(result *cli.ScanResult, minSeverity, policy string, verbose bool
 	// Display governance status (if available)
 	displayGovernanceStatus(result)
 
+	// Display capability surface (if forwarded from server)
+	displayCapabilitySurface(result)
+
 	// Display strengths (if available)
 	displayStrengths(result)
 
 	return nil
+}
+
+// displayCapabilitySurface prints the one-paragraph Agent Capability Surface
+// summary the server attaches when ENABLE_CAPABILITY_SURFACE is on. Silently
+// no-ops when the field is absent (older server, flag off) so the block is
+// backward-compatible.
+func displayCapabilitySurface(result *cli.ScanResult) {
+	s := result.CapabilitySummary
+	if s == nil {
+		return
+	}
+	dashboard := s.DashboardURL
+	if dashboard == "" && result.CapabilityScanID != "" {
+		dashboard = "https://app.inkog.io/agents/" + result.CapabilityScanID
+	}
+
+	govColor := colorReset
+	switch {
+	case s.GovernanceScore >= 85:
+		govColor = colorLow // green
+	case s.GovernanceScore >= 50:
+		govColor = colorMedium // yellow
+	default:
+		govColor = colorCritical // red
+	}
+
+	critStr := ""
+	if s.GapCountCritical > 0 {
+		critStr = fmt.Sprintf("%s%d critical%s", colorCritical, s.GapCountCritical, colorReset)
+	}
+	highStr := ""
+	if s.GapCountHigh > 0 {
+		if critStr != "" {
+			highStr = ", "
+		}
+		highStr += fmt.Sprintf("%s%d high%s", colorHigh, s.GapCountHigh, colorReset)
+	}
+	gapBreakdown := ""
+	if critStr != "" || highStr != "" {
+		gapBreakdown = " (" + critStr + highStr + ")"
+	}
+
+	fmt.Println()
+	fmt.Printf("%s🔍 Agent Capability Surface%s\n", colorGovernance, colorReset)
+	fmt.Printf("   Agents: %d │ Tools: %d │ Gaps: %d%s\n",
+		s.AgentCount, s.ToolCount, s.GapCount, gapBreakdown)
+	fmt.Printf("   Governance Score: %s%d/100%s\n", govColor, s.GovernanceScore, colorReset)
+	if dashboard != "" {
+		fmt.Printf("   View full surface: %s%s%s\n", colorCyan, dashboard, colorReset)
+	}
 }
 
 // displayTierSection displays a section of findings for a specific tier

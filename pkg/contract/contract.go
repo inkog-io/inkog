@@ -160,12 +160,37 @@ type ScanResult struct {
 
 	// Strengths detected in the codebase
 	Strengths []SecurityStrength `json:"strengths,omitempty"`
+
+	// Capability Surface — light summary forwarded from the server. Both
+	// fields are nil/empty against legacy server versions, keeping the JSON
+	// output backward-compatible.
+	CapabilityScanID  string             `json:"capability_scan_id,omitempty"`
+	CapabilitySummary *CapabilitySummary `json:"capability_summary,omitempty"`
 }
 
 // SecurityStrength represents a positive security signal detected during scanning
 type SecurityStrength struct {
 	Title   string `json:"title"`
 	Message string `json:"message"`
+}
+
+// CapabilitySummary mirrors the inline summary attached by the server when
+// the Capability Surface feature flag is on. Full surface (capabilities,
+// gaps, controls, declarations) is fetched on demand via
+// GET /v1/capabilities/{scan_id}.
+type CapabilitySummary struct {
+	AgentCount       int    `json:"agent_count"`
+	ToolCount        int    `json:"tool_count"`
+	MCPServerCount   int    `json:"mcp_server_count,omitempty"`
+	CapabilityCount  int    `json:"capability_count"`
+	GapCount         int    `json:"gap_count"`
+	GapCountCritical int    `json:"gap_count_critical"`
+	GapCountHigh     int    `json:"gap_count_high"`
+	GapCountMedium   int    `json:"gap_count_medium"`
+	GapCountLow      int    `json:"gap_count_low"`
+	GovernanceScore  int    `json:"governance_score"`
+	EUAIActReadiness int    `json:"eu_ai_act_readiness"`
+	DashboardURL     string `json:"dashboard_url,omitempty"`
 }
 
 // ArticleStatus represents compliance status for a specific EU AI Act article

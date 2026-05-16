@@ -149,6 +149,13 @@ type ScanResult struct {
 	FrameworkMapping map[string]contract.FrameworkStatus `json:"framework_mapping,omitempty"`
 	TopologyMap      *contract.TopologyMap             `json:"topology_map,omitempty"`
 	Strengths        []contract.SecurityStrength        `json:"strengths,omitempty"`
+
+	// Capability Surface — forwarded from server when ENABLE_CAPABILITY_SURFACE
+	// is on. Both fields are nil/empty when running against older servers,
+	// keeping the JSON output backward-compatible.
+	CapabilityScanID  string                      `json:"capability_scan_id,omitempty"`
+	CapabilitySummary *contract.CapabilitySummary `json:"capability_summary,omitempty"`
+
 	DeepReport       *DeepReport                        `json:"deep_report,omitempty"`
 	IsSkillScan      bool                               `json:"-"` // rendering hint only
 	IsMCPScan        bool                               `json:"-"` // rendering hint: MCP server scan
@@ -309,6 +316,10 @@ func (hs *HybridScanner) Scan() (*ScanResult, error) {
 		FrameworkMapping: serverResult.FrameworkMapping,
 		TopologyMap:      serverResult.TopologyMap,
 		Strengths:        serverResult.Strengths,
+
+		// Forward capability surface summary (silent no-op against legacy servers).
+		CapabilityScanID:  serverResult.CapabilityScanID,
+		CapabilitySummary: serverResult.CapabilitySummary,
 	}, nil
 }
 
