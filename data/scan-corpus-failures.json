@@ -1,0 +1,10 @@
+{
+  "_description": "Log of failed public scan attempts by the weekly corpus-refresh routine.",
+  "failures": [
+    {
+      "timestamp": "2026-05-24T19:33:08Z",
+      "repo": "szybnev/DVLA",
+      "reason": "no_agent_code: repository contains no LLM agent code scannable by Inkog (HTTP 400, error code: no_agent_code)"
+    }
+  ]
+}
