@@ -1,0 +1,10 @@
+{
+  "_description": "Log of scan attempts that failed during corpus refresh routines.",
+  "failures": [
+    {
+      "timestamp": "2026-05-31T19:37:23Z",
+      "repo": "szybnev/DVLA",
+      "reason": "no_agent_code: repository contains no AI agent code detectable by the scanner (HTTP 400)"
+    }
+  ]
+}
