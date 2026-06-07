@@ -2604,7 +2604,7 @@ func displayCapabilitySurface(result *cli.ScanResult) {
 		dashboard = "https://app.inkog.io/dashboard/agents/" + result.CapabilityScanID
 	}
 
-	govColor := colorReset
+	var govColor string
 	switch {
 	case s.GovernanceScore >= 85:
 		govColor = colorLow // green
