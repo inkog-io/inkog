@@ -177,6 +177,61 @@ type DeepReport struct {
 	Methodology       *DeepMethodology       `json:"methodology,omitempty"`
 	ReportMeta        *DeepReportMeta        `json:"report,omitempty"`
 	SeveritySummary   *DeepSeveritySummary   `json:"severity_summary,omitempty"`
+
+	// Copilot Studio-specific sections (present only for scan_type=copilot_studio)
+	ScanType                  string                     `json:"scan_type,omitempty"`
+	CopilotStudioProfile      *DeepCopilotProfile        `json:"copilot_studio_profile,omitempty"`
+	CopilotStudioCompleteness *DeepCopilotCompleteness   `json:"copilot_studio_completeness,omitempty"`
+}
+
+// DeepCopilotProfile mirrors the agent's copilot_studio_profile.
+type DeepCopilotProfile struct {
+	Platform                 string                 `json:"platform"`
+	Orchestration            string                 `json:"orchestration"`
+	GeneralKnowledgeFallback string                 `json:"general_knowledge_fallback"`
+	ModerationLevel          string                 `json:"moderation_level"`
+	InstructionsSummary      string                 `json:"instructions_summary"`
+	AuthMode                 string                 `json:"auth_mode"`
+	Topics                   []string               `json:"topics,omitempty"`
+	KnowledgeSources         []string               `json:"knowledge_sources,omitempty"`
+	UntrustedInputChannels   []string               `json:"untrusted_input_channels,omitempty"`
+	ChildAgents              []string               `json:"child_agents,omitempty"`
+	Channels                 []string               `json:"channels,omitempty"`
+	Actions                  []DeepCopilotAction    `json:"actions,omitempty"`
+	HTTPNodes                []DeepCopilotHTTPNode  `json:"http_nodes,omitempty"`
+	Triggers                 []DeepCopilotTrigger   `json:"triggers,omitempty"`
+}
+
+type DeepCopilotAction struct {
+	Name             string `json:"name"`
+	Connector        string `json:"connector"`
+	Access           string `json:"access"`
+	HasHumanApproval bool   `json:"has_human_approval"`
+}
+
+type DeepCopilotHTTPNode struct {
+	Location          string `json:"location"`
+	URL               string `json:"url"`
+	URLIsVariableBound bool  `json:"url_is_variable_bound"`
+}
+
+type DeepCopilotTrigger struct {
+	Name           string `json:"name"`
+	Type           string `json:"type"`
+	Autonomous     bool   `json:"autonomous"`
+	SenderFiltered bool   `json:"sender_filtered"`
+}
+
+// DeepCopilotCompleteness mirrors the agent's copilot_studio_completeness.
+type DeepCopilotCompleteness struct {
+	Subtype            string   `json:"subtype"`
+	Tier               string   `json:"tier"`
+	ArtifactsExtracted int      `json:"artifacts_extracted"`
+	Provided           []string `json:"provided,omitempty"`
+	Missing            []string `json:"missing,omitempty"`
+	ConfigProvided     bool     `json:"config_provided"`
+	Notes              []string `json:"notes,omitempty"`
+	CoverageStatement  string   `json:"coverage_statement"`
 }
 
 type DeepAgentProfile struct {

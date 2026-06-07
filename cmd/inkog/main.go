@@ -2081,6 +2081,11 @@ func convertDeepFindings(aiResult *cli.DeepScanResult) []contract.Finding {
 			finding.ComplianceMapping = cm
 		}
 
+		// Discrete CWE / OWASP fields (populated deterministically by the agent
+		// from the rule definitions; surfaced in HTML/SARIF/text output).
+		finding.CWE = deepStr(f, "cwe")
+		finding.OWASP = deepStr(f, "owasp_category")
+
 		// False positive assessment from orchestrator
 		if fpRisk := deepStr(f, "false_positive_risk"); fpRisk != "" {
 			finding.FPRisk = fpRisk
@@ -2512,6 +2517,25 @@ func extractDeepReport(scan map[string]interface{}) *cli.DeepReport {
 			Medium:   deepScanInt(m, "medium"),
 			Low:      deepScanInt(m, "low"),
 			NA:       deepScanInt(m, "na"),
+		}
+	}
+
+	if s, ok := reportMap["scan_type"].(string); ok && s != "" {
+		report.ScanType = s
+		hasData = true
+	}
+	if m := resolve("copilot_studio_profile"); m != nil {
+		var p cli.DeepCopilotProfile
+		if b, err := json.Marshal(m); err == nil && json.Unmarshal(b, &p) == nil {
+			report.CopilotStudioProfile = &p
+			hasData = true
+		}
+	}
+	if m := resolve("copilot_studio_completeness"); m != nil {
+		var c cli.DeepCopilotCompleteness
+		if b, err := json.Marshal(m); err == nil && json.Unmarshal(b, &c) == nil {
+			report.CopilotStudioCompleteness = &c
+			hasData = true
 		}
 	}
 
@@ -6030,6 +6054,7 @@ const htmlDeepReportCSS = `
 
 .deep-finding-meta-grid .meta-item {
     font-size: 0.8125rem;
+    min-width: 0;
 }
 
 .deep-finding-meta-grid .meta-label {
@@ -6044,6 +6069,8 @@ const htmlDeepReportCSS = `
 
 .deep-finding-meta-grid .meta-value {
     color: var(--text-primary);
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 /* Category + Risk Tier Tags */
@@ -6421,6 +6448,28 @@ const htmlDeepReportCSS = `
     font-size: 0.6875rem;
     color: var(--text-muted);
 }
+.cs-table { width:100%; border-collapse:collapse; margin-top:8px; font-size:13px; }
+.cs-table th, .cs-table td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--border); }
+.cs-table th { color:var(--text-muted); font-weight:600; text-transform:uppercase; font-size:11px; letter-spacing:.04em; }
+.cs-good { color:#16a34a; font-weight:600; }
+.cs-bad { color:#ea580c; font-weight:600; }
+.cs-tag-warn { background:rgba(234,88,12,.15); color:#ea580c; padding:1px 7px; border-radius:6px; font-size:11px; }
+.cs-tag-ok { background:rgba(127,127,127,.12); color:var(--text-muted); padding:1px 7px; border-radius:6px; font-size:11px; }
+.cs-list { list-style:none; padding:0; margin:8px 0; }
+.cs-list li { margin:4px 0; }
+.cs-list code { background:rgba(127,127,127,.12); padding:1px 6px; border-radius:5px; }
+.cs-tier { font-size:12px; font-weight:600; background:rgba(124,58,237,.15); color:#7c3aed; padding:2px 10px; border-radius:999px; vertical-align:middle; margin-left:8px; }
+.compliance-card .finding-indices span.tooltip { position:relative; cursor:help; }
+.finding-tooltip { position:absolute; bottom:140%; left:50%; transform:translateX(-50%); min-width:230px; max-width:330px; background:#15151f; border:1px solid var(--border); border-radius:10px; padding:10px 12px; box-shadow:0 12px 30px rgba(0,0,0,.5); opacity:0; visibility:hidden; transition:opacity .15s ease; z-index:60; text-align:left; white-space:normal; pointer-events:none; }
+.compliance-card .finding-indices span.tooltip:hover .finding-tooltip { opacity:1; visibility:visible; }
+.tooltip-finding-title { display:block; font-size:.78rem; font-weight:600; color:var(--text-primary); margin-bottom:5px; line-height:1.35; }
+.tooltip-finding-title .tooltip-num { display:inline-block; background:rgba(124,58,237,.22); color:#a78bfa; border-radius:5px; padding:0 6px; margin-right:6px; font-size:.7rem; }
+.tooltip-severity { display:block; font-size:.7rem; font-weight:700; }
+.tooltip-severity.critical { color:#ef4444; } .tooltip-severity.high { color:#f97316; } .tooltip-severity.medium { color:#f59e0b; } .tooltip-severity.low { color:#3b82f6; }
+.tooltip-divider { height:1px; background:rgba(255,255,255,.08); margin:7px 0; }
+.tooltip-articles { display:flex; flex-direction:column; gap:4px; }
+.tooltip-article { font-size:.68rem; padding:2px 7px; border-radius:6px; align-self:flex-start; line-height:1.3; }
+.tooltip-article.eu { background:rgba(59,130,246,.15); color:#93c5fd; } .tooltip-article.nist { background:rgba(34,197,94,.12); color:#86efac; } .tooltip-article.owasp { background:rgba(249,115,22,.12); color:#fdba74; } .tooltip-article.cwe { background:rgba(234,179,8,.12); color:#fde68a; } .tooltip-article.gdpr { background:rgba(168,85,247,.12); color:#d8b4fe; }
 `
 
 // generateAgentProfileHTML builds the Agent Profile section.
@@ -6558,6 +6607,201 @@ func generateAgentProfileHTML(report *cli.DeepReport, result *cli.ScanResult) st
 	return sb.String()
 }
 
+func csPlatformLabel(p string) string {
+	switch p {
+	case "power_platform":
+		return "Power Platform"
+	case "m365_declarative":
+		return "Microsoft 365 Declarative"
+	case "mixed":
+		return "Mixed"
+	}
+	return p
+}
+
+func prettyCoverageKey(k string) string {
+	m := map[string]string{
+		"instructions": "Instructions", "topics": "Topics", "actions": "Actions",
+		"knowledge": "Knowledge sources", "triggers": "Triggers",
+		"connection_references": "Connection references", "workflows": "Workflows",
+		"env_variables": "Environment variables", "auth_config": "Authentication",
+		"channel_config": "Channels", "dlp_config": "DLP policy",
+		"conversation_starters": "Conversation starters",
+	}
+	if v, ok := m[k]; ok {
+		return v
+	}
+	return k
+}
+
+// generateCopilotConfigHTML builds the Copilot Studio Configuration section.
+func generateCopilotConfigHTML(report *cli.DeepReport) string {
+	cs := report.CopilotStudioProfile
+	if cs == nil {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString(`<section><h2>Copilot Studio Configuration</h2><div class="profile-hero"><div class="profile-hero-body" style="padding-top:1.5rem;">`)
+
+	sb.WriteString(`<div class="profile-tags">`)
+	addTag := func(label, val string) {
+		if val != "" {
+			sb.WriteString(fmt.Sprintf(`<span class="profile-tag">%s: %s</span>`, escapeHTML(label), escapeHTML(val)))
+		}
+	}
+	addTag("Platform", csPlatformLabel(cs.Platform))
+	addTag("Orchestration", cs.Orchestration)
+	addTag("Auth", cs.AuthMode)
+	addTag("Moderation", cs.ModerationLevel)
+	addTag("General-Knowledge Fallback", cs.GeneralKnowledgeFallback)
+	sb.WriteString(`</div>`)
+
+	if cs.InstructionsSummary != "" {
+		sb.WriteString(`<div class="profile-section-label">Instructions Summary</div>`)
+		sb.WriteString(fmt.Sprintf(`<p class="profile-text">%s</p>`, escapeHTML(cs.InstructionsSummary)))
+	}
+
+	if len(cs.Actions) > 0 {
+		sb.WriteString(`<div class="profile-section-label">Actions / Tools</div>`)
+		sb.WriteString(`<table class="cs-table"><thead><tr><th>Action</th><th>Connector</th><th>Access</th><th>Approval</th></tr></thead><tbody>`)
+		for _, a := range cs.Actions {
+			approval := `<span class="cs-bad">None</span>`
+			if a.HasHumanApproval {
+				approval = `<span class="cs-good">Required</span>`
+			}
+			sb.WriteString(fmt.Sprintf(`<tr><td>%s</td><td><code>%s</code></td><td>%s</td><td>%s</td></tr>`,
+				escapeHTML(a.Name), escapeHTML(a.Connector), escapeHTML(a.Access), approval))
+		}
+		sb.WriteString(`</tbody></table>`)
+	}
+
+	if len(cs.HTTPNodes) > 0 {
+		sb.WriteString(`<div class="profile-section-label">HTTP Endpoints</div><ul class="cs-list">`)
+		for _, h := range cs.HTTPNodes {
+			tag := `<span class="cs-tag-ok">fixed</span>`
+			if h.URLIsVariableBound {
+				tag = `<span class="cs-tag-warn">variable-bound</span>`
+			}
+			u := h.URL
+			if u == "" {
+				u = h.Location
+			}
+			sb.WriteString(fmt.Sprintf(`<li><code>%s</code> %s</li>`, escapeHTML(u), tag))
+		}
+		sb.WriteString(`</ul>`)
+	}
+
+	if len(cs.Triggers) > 0 {
+		sb.WriteString(`<div class="profile-section-label">Triggers</div><div class="profile-tags">`)
+		for _, t := range cs.Triggers {
+			name := t.Name
+			if name == "" {
+				name = t.Type
+			}
+			extra := ""
+			if t.Autonomous {
+				extra = " · autonomous"
+			}
+			sb.WriteString(fmt.Sprintf(`<span class="profile-tag">%s%s</span>`, escapeHTML(name), extra))
+		}
+		sb.WriteString(`</div>`)
+	}
+
+	type lc struct {
+		class string
+		title string
+		items []string
+	}
+	cards := []lc{
+		{"sources", "Knowledge Sources", cs.KnowledgeSources},
+		{"risk", "Untrusted Input Channels", cs.UntrustedInputChannels},
+		{"integrations", "Topics", cs.Topics},
+		{"boundaries", "Child / Connected Agents", cs.ChildAgents},
+		{"sinks", "Channels", cs.Channels},
+	}
+	hasAny := false
+	for _, c := range cards {
+		if len(c.items) > 0 {
+			hasAny = true
+			break
+		}
+	}
+	if hasAny {
+		sb.WriteString(`<div class="profile-grid">`)
+		for _, c := range cards {
+			if len(c.items) == 0 {
+				continue
+			}
+			sb.WriteString(fmt.Sprintf(`<div class="profile-subcard %s"><h4>%s</h4><ul>`, c.class, c.title))
+			for _, it := range c.items {
+				sb.WriteString(fmt.Sprintf(`<li>%s</li>`, escapeHTML(it)))
+			}
+			sb.WriteString(`</ul></div>`)
+		}
+		sb.WriteString(`</div>`)
+	}
+
+	sb.WriteString(`</div></div></section>`)
+	return sb.String()
+}
+
+// generateCopilotCoverageHTML builds the Scan Coverage section (completeness gating).
+func generateCopilotCoverageHTML(report *cli.DeepReport) string {
+	c := report.CopilotStudioCompleteness
+	if c == nil {
+		return ""
+	}
+	tierLabel := map[string]string{
+		"near_complete":     "Near-complete coverage",
+		"design_time":       "Design-time coverage",
+		"instructions_only": "Instructions only",
+		"minimal":           "Minimal coverage",
+	}[c.Tier]
+	if tierLabel == "" {
+		tierLabel = c.Tier
+	}
+
+	var sb strings.Builder
+	sb.WriteString(`<section><h2>Scan Coverage`)
+	if tierLabel != "" {
+		sb.WriteString(fmt.Sprintf(`<span class="cs-tier">%s</span>`, escapeHTML(tierLabel)))
+	}
+	sb.WriteString(`</h2><div class="profile-hero"><div class="profile-hero-body" style="padding-top:1.5rem;">`)
+
+	if c.CoverageStatement != "" {
+		sb.WriteString(fmt.Sprintf(`<p class="profile-text">%s</p>`, escapeHTML(c.CoverageStatement)))
+	}
+
+	if len(c.Provided) > 0 || len(c.Missing) > 0 {
+		sb.WriteString(`<div class="profile-grid">`)
+		if len(c.Provided) > 0 {
+			sb.WriteString(`<div class="profile-subcard sources"><h4>Assessed</h4><ul>`)
+			for _, p := range c.Provided {
+				sb.WriteString(fmt.Sprintf(`<li>%s</li>`, escapeHTML(prettyCoverageKey(p))))
+			}
+			sb.WriteString(`</ul></div>`)
+		}
+		if len(c.Missing) > 0 {
+			sb.WriteString(`<div class="profile-subcard risk"><h4>Not Assessed</h4><ul>`)
+			for _, m := range c.Missing {
+				sb.WriteString(fmt.Sprintf(`<li>%s</li>`, escapeHTML(m)))
+			}
+			sb.WriteString(`</ul></div>`)
+		}
+		sb.WriteString(`</div>`)
+	}
+
+	if len(c.Notes) > 0 {
+		sb.WriteString(`<div class="profile-section-label">Notes</div>`)
+		for _, n := range c.Notes {
+			sb.WriteString(fmt.Sprintf(`<p class="profile-text">• %s</p>`, escapeHTML(n)))
+		}
+	}
+
+	sb.WriteString(`</div></div></section>`)
+	return sb.String()
+}
+
 // generateSeverityOverviewHTML builds the Scan Overview section with metric cards and stacked bar.
 // Falls back to counting from actual findings when orchestrator SeveritySummary is absent.
 func generateSeverityOverviewHTML(report *cli.DeepReport, findings []contract.Finding) string {
@@ -6658,7 +6902,7 @@ func generateCleanDetectionsHTML(report *cli.DeepReport) string {
 }
 
 // generateComplianceSummaryHTML builds the Compliance Coverage section.
-func generateComplianceSummaryHTML(report *cli.DeepReport) string {
+func generateComplianceSummaryHTML(report *cli.DeepReport, findings []contract.Finding) string {
 	if len(report.ComplianceSummary) == 0 {
 		return ""
 	}
@@ -6669,7 +6913,13 @@ func generateComplianceSummaryHTML(report *cli.DeepReport) string {
 		if len(ce.RelevantFindings) > 0 {
 			sb.WriteString(`<div class="finding-indices">Relevant findings: `)
 			for _, idx := range ce.RelevantFindings {
-				sb.WriteString(fmt.Sprintf(`<span>#%d</span>`, idx))
+				// Hover shows what finding #idx actually is (title, severity,
+				// and its mappings for this framework).
+				if idx >= 1 && idx <= len(findings) {
+					sb.WriteString(fmt.Sprintf(`<span class="tooltip">#%d%s</span>`, idx, complianceTooltipHTML(idx, &findings[idx-1], ce.Framework)))
+				} else {
+					sb.WriteString(fmt.Sprintf(`<span>#%d</span>`, idx))
+				}
 			}
 			sb.WriteString(`</div>`)
 		} else {
@@ -6679,6 +6929,76 @@ func generateComplianceSummaryHTML(report *cli.DeepReport) string {
 	}
 	sb.WriteString(`</div></section>`)
 	return sb.String()
+}
+
+// complianceTooltipHTML builds the hover card for a finding index in a compliance card.
+func complianceTooltipHTML(idx int, f *contract.Finding, framework string) string {
+	title := f.DisplayTitle
+	if title == "" {
+		title = f.Pattern
+	}
+	sev := strings.ToUpper(f.Severity)
+	var sb strings.Builder
+	sb.WriteString(`<span class="finding-tooltip">`)
+	sb.WriteString(fmt.Sprintf(`<span class="tooltip-finding-title"><span class="tooltip-num">#%d</span>%s</span>`, idx, escapeHTML(title)))
+	if sev != "" {
+		sb.WriteString(fmt.Sprintf(`<span class="tooltip-severity %s">&#9679; %s</span>`, strings.ToLower(sev), sev))
+	}
+	if arts := complianceArticles(f, framework); len(arts) > 0 {
+		sb.WriteString(`<span class="tooltip-divider"></span><span class="tooltip-articles">`)
+		cls := frameworkTagClass(framework)
+		for _, a := range arts {
+			sb.WriteString(fmt.Sprintf(`<span class="tooltip-article %s">%s</span>`, cls, escapeHTML(a)))
+		}
+		sb.WriteString(`</span>`)
+	}
+	sb.WriteString(`</span>`)
+	return sb.String()
+}
+
+// complianceArticles returns a finding's mappings relevant to the given framework.
+func complianceArticles(f *contract.Finding, framework string) []string {
+	fw := strings.ToLower(framework)
+	if f.ComplianceMapping != nil {
+		switch {
+		case strings.Contains(fw, "eu ai act"):
+			return f.ComplianceMapping.EUAIActArticles
+		case strings.Contains(fw, "nist"):
+			return f.ComplianceMapping.NISTCategories
+		case strings.Contains(fw, "owasp"):
+			if len(f.ComplianceMapping.OWASPItems) > 0 {
+				return f.ComplianceMapping.OWASPItems
+			}
+		case strings.Contains(fw, "cwe"):
+			if len(f.ComplianceMapping.CWEIDs) > 0 {
+				return f.ComplianceMapping.CWEIDs
+			}
+		}
+	}
+	if strings.Contains(fw, "owasp") && f.OWASP != "" {
+		return []string{f.OWASP}
+	}
+	if strings.Contains(fw, "cwe") && f.CWE != "" {
+		return []string{f.CWE}
+	}
+	return nil
+}
+
+func frameworkTagClass(framework string) string {
+	fw := strings.ToLower(framework)
+	switch {
+	case strings.Contains(fw, "eu ai act"):
+		return "eu"
+	case strings.Contains(fw, "nist"):
+		return "nist"
+	case strings.Contains(fw, "owasp"):
+		return "owasp"
+	case strings.Contains(fw, "cwe"):
+		return "cwe"
+	case strings.Contains(fw, "gdpr"):
+		return "gdpr"
+	}
+	return "eu"
 }
 
 // generateMethodologyHTML builds the Methodology section.
@@ -7096,11 +7416,13 @@ func outputDeepHTML(result *cli.ScanResult, minSeverity string) error {
 
 	// Section generators
 	agentProfileHTML := generateAgentProfileHTML(report, result)
+	copilotConfigHTML := generateCopilotConfigHTML(report)
+	copilotCoverageHTML := generateCopilotCoverageHTML(report)
 	severityOverviewHTML := generateSeverityOverviewHTML(report, filtered)
 	riskAssessmentHTML := generateRiskAssessmentHTML(filtered)
 	governanceStatusHTML := generateGovernanceStatusHTML(result)
 	cleanDetectionsHTML := generateCleanDetectionsHTML(report)
-	complianceSummaryHTML := generateComplianceSummaryHTML(report)
+	complianceSummaryHTML := generateComplianceSummaryHTML(report, result.AllFindings)
 	methodologyHTML := generateMethodologyHTML(report)
 
 	// Report title from metadata
@@ -7152,6 +7474,8 @@ func outputDeepHTML(result *cli.ScanResult, minSeverity string) error {
     %s
     %s
     %s
+    %s
+    %s
 
     <!-- Detailed Findings -->
     <section>
@@ -7185,6 +7509,8 @@ func outputDeepHTML(result *cli.ScanResult, minSeverity string) error {
 		statusClass, statusText,
 		totalCount,
 		agentProfileHTML,
+		copilotConfigHTML,
+		copilotCoverageHTML,
 		severityOverviewHTML,
 		riskAssessmentHTML,
 		governanceStatusHTML,
