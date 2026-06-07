@@ -687,6 +687,10 @@ func shouldScanFile(path string) bool {
 		return false
 	}
 
+	if filename == "data" && strings.Contains(path, "botcomponents") {
+		return true
+	}
+
 	// Check supported extensions
 	ext := filepath.Ext(path)
 	return DefaultScanExtensions[ext]
