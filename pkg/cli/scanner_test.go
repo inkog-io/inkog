@@ -363,3 +363,178 @@ func TestScanResult_NilSlicesMarshalAsNull(t *testing.T) {
 		t.Skip("Go behavior changed: nil slices no longer marshal as null")
 	}
 }
+
+func writeTree(t *testing.T, files map[string]string) string {
+	t.Helper()
+	root := t.TempDir()
+	for rel, content := range files {
+		abs := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+			t.Fatalf("mkdir for %s: %v", rel, err)
+		}
+		if err := os.WriteFile(abs, []byte(content), 0o644); err != nil {
+			t.Fatalf("write %s: %v", rel, err)
+		}
+	}
+	return root
+}
+
+func TestDetectCopilotStudioExport_Positive(t *testing.T) {
+	cases := []struct {
+		name  string
+		files map[string]string
+	}{
+		{
+			"power platform solution export tree",
+			map[string]string{
+				"bots/cr123_assistant/bot.xml":                                  "<bot />",
+				"bots/cr123_assistant/configuration.json":                       `{"BotConfiguration":{}}`,
+				"botcomponents/cr123_assistant.topic.Greeting/data":             "kind: AdaptiveDialog\n",
+				"botcomponents/cr123_assistant.topic.Greeting/botcomponent.xml": "<botcomponent />",
+				"solution.xml":       "<ImportExportXml />",
+				"customizations.xml": "<ImportExportXml><botcomponent></botcomponent></ImportExportXml>",
+			},
+		},
+		{
+			"botcomponents data file alone",
+			map[string]string{
+				"botcomponents/x.topic.Foo/data": "beginDialog: {}\n",
+			},
+		},
+		{
+			"botcomponent.xml alone",
+			map[string]string{
+				"some/path/botcomponent.xml": "<botcomponent />",
+			},
+		},
+		{
+			"agent-as-code .mcs.yaml",
+			map[string]string{
+				"agent.mcs.yaml": "kind: GptComponentMetadata\n",
+			},
+		},
+		{
+			"agent-as-code .mcs.yml suffix",
+			map[string]string{
+				"topics/greeting.topic.mcs.yml": "kind: AdaptiveDialog\n",
+			},
+		},
+		{
+			"m365 declarative agent",
+			map[string]string{
+				"declarativeAgent.json": `{"name":"x","instructions":"y"}`,
+				"manifest.json":         `{"copilotAgents":{"declarativeAgents":[]}}`,
+			},
+		},
+		{
+			"teams manifest referencing copilot agents (no declarativeAgent.json)",
+			map[string]string{
+				"manifest.json": `{"name":{"short":"X"},"copilotAgents":{"declarativeAgents":[{"file":"da.json"}]}}`,
+			},
+		},
+		{
+			"configuration.json with bot config markers",
+			map[string]string{
+				"bots/x/configuration.json": `{"GptSettings":{"GenerativeActionsEnabled":true}}`,
+			},
+		},
+		{
+			"customizations.xml with bot marker (solution wrapper present)",
+			map[string]string{
+				"solution.xml":       "<ImportExportXml />",
+				"customizations.xml": "<ImportExportXml><CustomControls/><bot >x</bot></ImportExportXml>",
+			},
+		},
+		{
+			"arbitrary xml carrying adaptivedialog content",
+			map[string]string{
+				"export/dialogs.xml": "<root><AdaptiveDialog>hello</AdaptiveDialog></root>",
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			root := writeTree(t, tc.files)
+			if !DetectCopilotStudioExport(root) {
+				t.Errorf("expected %q to be detected as a Copilot Studio export", tc.name)
+			}
+		})
+	}
+}
+
+func TestDetectCopilotStudioExport_Negative(t *testing.T) {
+	cases := []struct {
+		name  string
+		files map[string]string
+	}{
+		{
+			"plain python agent repo",
+			map[string]string{
+				"main.py":          "import openai\n",
+				"agents/agent.py":  "class Agent: pass\n",
+				"config.yaml":      "key: value\n",
+				"requirements.txt": "openai\n",
+			},
+		},
+		{
+			"plain dataverse solution without bot content",
+			map[string]string{
+				"solution.xml":        "<ImportExportXml><SolutionManifest/></ImportExportXml>",
+				"customizations.xml":  "<ImportExportXml><Entities><Entity>Account</Entity></Entities></ImportExportXml>",
+				"[Content_Types].xml": `<Types/>`,
+			},
+		},
+		{
+			"generic json/xml without copilot markers",
+			map[string]string{
+				"manifest.json":      `{"name":"my-app","version":"1.0.0"}`,
+				"configuration.json": `{"server":{"port":8080}}`,
+				"data.xml":           "<records><r>1</r></records>",
+			},
+		},
+		{
+			"stray bot.xml outside bots/ with no bot content",
+			map[string]string{
+				"misc/bot.xml": "<robot><wheels>4</wheels></robot>",
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			root := writeTree(t, tc.files)
+			if DetectCopilotStudioExport(root) {
+				t.Errorf("did NOT expect %q to be detected as a Copilot Studio export", tc.name)
+			}
+		})
+	}
+}
+
+func TestDetectCopilotStudioExport_SkipsIgnoredDirs(t *testing.T) {
+	root := writeTree(t, map[string]string{
+		"node_modules/somepkg/botcomponents/x/data": "kind: AdaptiveDialog\n",
+		"src/index.ts": "console.log('hi')\n",
+	})
+	if DetectCopilotStudioExport(root) {
+		t.Errorf("marker inside node_modules should be ignored")
+	}
+}
+
+func TestDetectCopilotStudioExport_EdgeCases(t *testing.T) {
+	if DetectCopilotStudioExport(filepath.Join(t.TempDir(), "does-not-exist")) {
+		t.Errorf("nonexistent path must return false")
+	}
+
+	f := filepath.Join(t.TempDir(), "bot.xml")
+	if err := os.WriteFile(f, []byte("<bot />"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if DetectCopilotStudioExport(f) {
+		t.Errorf("a file path must return false")
+	}
+
+	if DetectCopilotStudioExport(t.TempDir()) {
+		t.Errorf("empty directory must return false")
+	}
+}

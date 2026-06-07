@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"mime/multipart"
 	"net/url"
 	"os"
@@ -131,25 +132,25 @@ type HybridScanner struct {
 }
 
 const (
-	DefaultMaxFiles   = 500
-	MaxUploadSizeMB   = 95 // Client-side limit (server is 100MB, leave margin)
+	DefaultMaxFiles = 500
+	MaxUploadSizeMB = 95 // Client-side limit (server is 100MB, leave margin)
 )
 
 // ScanResult contains both local and remote findings
 type ScanResult struct {
-	LocalSecrets      []contract.Finding         `json:"local_secrets"`
-	ServerFindings    []contract.Finding         `json:"server_findings"`
-	AllFindings       []contract.Finding         `json:"all_findings"`
-	ComplianceReport  *contract.ComplianceReport `json:"compliance_report,omitempty"`
-	Report            string                     `json:"report"`
+	LocalSecrets     []contract.Finding         `json:"local_secrets"`
+	ServerFindings   []contract.Finding         `json:"server_findings"`
+	AllFindings      []contract.Finding         `json:"all_findings"`
+	ComplianceReport *contract.ComplianceReport `json:"compliance_report,omitempty"`
+	Report           string                     `json:"report"`
 
 	// Governance fields (forwarded from server)
-	GovernanceScore  int                               `json:"governance_score"`
-	EUAIActReadiness string                            `json:"eu_ai_act_readiness"`
-	ArticleMapping   map[string]contract.ArticleStatus `json:"article_mapping,omitempty"`
+	GovernanceScore  int                                 `json:"governance_score"`
+	EUAIActReadiness string                              `json:"eu_ai_act_readiness"`
+	ArticleMapping   map[string]contract.ArticleStatus   `json:"article_mapping,omitempty"`
 	FrameworkMapping map[string]contract.FrameworkStatus `json:"framework_mapping,omitempty"`
-	TopologyMap      *contract.TopologyMap             `json:"topology_map,omitempty"`
-	Strengths        []contract.SecurityStrength        `json:"strengths,omitempty"`
+	TopologyMap      *contract.TopologyMap               `json:"topology_map,omitempty"`
+	Strengths        []contract.SecurityStrength         `json:"strengths,omitempty"`
 
 	// Capability Surface — forwarded from server when ENABLE_CAPABILITY_SURFACE
 	// is on. Both fields are nil/empty when running against older servers,
@@ -164,42 +165,42 @@ type ScanResult struct {
 	CapabilitySurfaceActive bool   `json:"capability_surface_active,omitempty"`
 	CapabilitySurfaceNote   string `json:"capability_surface_note,omitempty"`
 
-	DeepReport       *DeepReport                        `json:"deep_report,omitempty"`
-	IsSkillScan      bool                               `json:"-"` // rendering hint only
-	IsMCPScan        bool                               `json:"-"` // rendering hint: MCP server scan
+	DeepReport  *DeepReport `json:"deep_report,omitempty"`
+	IsSkillScan bool        `json:"-"` // rendering hint only
+	IsMCPScan   bool        `json:"-"` // rendering hint: MCP server scan
 }
 
 // DeepReport contains orchestrator metadata from a deep scan.
 type DeepReport struct {
-	AgentProfile      *DeepAgentProfile      `json:"agent_profile,omitempty"`
-	CleanDetections   []DeepCleanDetection   `json:"clean_detections,omitempty"`
-	ComplianceSummary []DeepComplianceEntry  `json:"compliance_summary,omitempty"`
-	Methodology       *DeepMethodology       `json:"methodology,omitempty"`
-	ReportMeta        *DeepReportMeta        `json:"report,omitempty"`
-	SeveritySummary   *DeepSeveritySummary   `json:"severity_summary,omitempty"`
+	AgentProfile      *DeepAgentProfile     `json:"agent_profile,omitempty"`
+	CleanDetections   []DeepCleanDetection  `json:"clean_detections,omitempty"`
+	ComplianceSummary []DeepComplianceEntry `json:"compliance_summary,omitempty"`
+	Methodology       *DeepMethodology      `json:"methodology,omitempty"`
+	ReportMeta        *DeepReportMeta       `json:"report,omitempty"`
+	SeveritySummary   *DeepSeveritySummary  `json:"severity_summary,omitempty"`
 
 	// Copilot Studio-specific sections (present only for scan_type=copilot_studio)
-	ScanType                  string                     `json:"scan_type,omitempty"`
-	CopilotStudioProfile      *DeepCopilotProfile        `json:"copilot_studio_profile,omitempty"`
-	CopilotStudioCompleteness *DeepCopilotCompleteness   `json:"copilot_studio_completeness,omitempty"`
+	ScanType                  string                   `json:"scan_type,omitempty"`
+	CopilotStudioProfile      *DeepCopilotProfile      `json:"copilot_studio_profile,omitempty"`
+	CopilotStudioCompleteness *DeepCopilotCompleteness `json:"copilot_studio_completeness,omitempty"`
 }
 
 // DeepCopilotProfile mirrors the agent's copilot_studio_profile.
 type DeepCopilotProfile struct {
-	Platform                 string                 `json:"platform"`
-	Orchestration            string                 `json:"orchestration"`
-	GeneralKnowledgeFallback string                 `json:"general_knowledge_fallback"`
-	ModerationLevel          string                 `json:"moderation_level"`
-	InstructionsSummary      string                 `json:"instructions_summary"`
-	AuthMode                 string                 `json:"auth_mode"`
-	Topics                   []string               `json:"topics,omitempty"`
-	KnowledgeSources         []string               `json:"knowledge_sources,omitempty"`
-	UntrustedInputChannels   []string               `json:"untrusted_input_channels,omitempty"`
-	ChildAgents              []string               `json:"child_agents,omitempty"`
-	Channels                 []string               `json:"channels,omitempty"`
-	Actions                  []DeepCopilotAction    `json:"actions,omitempty"`
-	HTTPNodes                []DeepCopilotHTTPNode  `json:"http_nodes,omitempty"`
-	Triggers                 []DeepCopilotTrigger   `json:"triggers,omitempty"`
+	Platform                 string                `json:"platform"`
+	Orchestration            string                `json:"orchestration"`
+	GeneralKnowledgeFallback string                `json:"general_knowledge_fallback"`
+	ModerationLevel          string                `json:"moderation_level"`
+	InstructionsSummary      string                `json:"instructions_summary"`
+	AuthMode                 string                `json:"auth_mode"`
+	Topics                   []string              `json:"topics,omitempty"`
+	KnowledgeSources         []string              `json:"knowledge_sources,omitempty"`
+	UntrustedInputChannels   []string              `json:"untrusted_input_channels,omitempty"`
+	ChildAgents              []string              `json:"child_agents,omitempty"`
+	Channels                 []string              `json:"channels,omitempty"`
+	Actions                  []DeepCopilotAction   `json:"actions,omitempty"`
+	HTTPNodes                []DeepCopilotHTTPNode `json:"http_nodes,omitempty"`
+	Triggers                 []DeepCopilotTrigger  `json:"triggers,omitempty"`
 }
 
 type DeepCopilotAction struct {
@@ -210,9 +211,9 @@ type DeepCopilotAction struct {
 }
 
 type DeepCopilotHTTPNode struct {
-	Location          string `json:"location"`
-	URL               string `json:"url"`
-	URLIsVariableBound bool  `json:"url_is_variable_bound"`
+	Location           string `json:"location"`
+	URL                string `json:"url"`
+	URLIsVariableBound bool   `json:"url_is_variable_bound"`
 }
 
 type DeepCopilotTrigger struct {
@@ -749,6 +750,117 @@ func shouldScanFile(path string) bool {
 	// Check supported extensions
 	ext := filepath.Ext(path)
 	return DefaultScanExtensions[ext]
+}
+
+var copilotDetectSkipDirs = map[string]bool{
+	"node_modules": true, ".git": true, "__pycache__": true, ".venv": true,
+	"venv": true, "env": true, "dist": true, "build": true, ".next": true,
+	".cache": true, "vendor": true, ".tox": true, ".eggs": true,
+	".mypy_cache": true, ".pytest_cache": true, ".ruff_cache": true,
+	"coverage": true, "target": true, "bin": true, "obj": true,
+	".idea": true, ".vscode": true,
+}
+
+const (
+	copilotPeekBytes       = 64 * 1024
+	copilotMarkerScanBytes = 8 * 1024 * 1024
+)
+
+func peekLowerFile(path string, limit int) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	data, err := io.ReadAll(io.LimitReader(f, int64(limit)))
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(string(data))
+}
+
+func containsAny(haystack string, needles ...string) bool {
+	for _, n := range needles {
+		if strings.Contains(haystack, n) {
+			return true
+		}
+	}
+	return false
+}
+
+func DetectCopilotStudioExport(rootPath string) bool {
+	info, err := os.Stat(rootPath)
+	if err != nil || !info.IsDir() {
+		return false
+	}
+
+	found := false
+	_ = filepath.Walk(rootPath, func(path string, fi os.FileInfo, walkErr error) error {
+		if walkErr != nil || fi == nil {
+			return nil
+		}
+		if fi.IsDir() {
+			if copilotDetectSkipDirs[fi.Name()] {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if fi.Mode()&os.ModeSymlink != 0 {
+			return nil
+		}
+
+		name := strings.ToLower(fi.Name())
+		rel, relErr := filepath.Rel(rootPath, path)
+		if relErr != nil {
+			rel = path
+		}
+		relLower := strings.ToLower(filepath.ToSlash(rel))
+
+		switch {
+		case strings.HasSuffix(name, ".mcs.yaml"), strings.HasSuffix(name, ".mcs.yml"):
+			found = true
+		case name == "declarativeagent.json":
+			found = true
+		case name == "bot.xml" && strings.Contains(relLower, "bots/"):
+			found = true
+		case name == "botcomponent.xml":
+			found = true
+		case name == "data" && strings.Contains(relLower, "botcomponents"):
+			found = true
+		}
+		if found {
+			return filepath.SkipAll
+		}
+
+		switch {
+		case name == "manifest.json":
+			if containsAny(peekLowerFile(path, copilotPeekBytes),
+				"copilotagents", "declarativeagents", "declarativeagent") {
+				found = true
+			}
+		case name == "configuration.json":
+			if containsAny(peekLowerFile(path, copilotPeekBytes),
+				"botconfiguration", "gptsettings", "generativeactionsenabled") {
+				found = true
+			}
+		case name == "customizations.xml":
+			if containsAny(peekLowerFile(path, copilotMarkerScanBytes),
+				"<bot ", "<bot>", "botcomponent", "<copilot", "adaptivedialog") {
+				found = true
+			}
+		case strings.HasSuffix(name, ".xml") && name != "solution.xml":
+			if containsAny(peekLowerFile(path, copilotPeekBytes),
+				"botcomponent", "<copilot", "adaptivedialog") {
+				found = true
+			}
+		}
+		if found {
+			return filepath.SkipAll
+		}
+		return nil
+	})
+
+	return found
 }
 
 // anonymousSupportedExtensions are the file types accepted by the anonymous scan endpoint.

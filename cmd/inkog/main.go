@@ -1515,7 +1515,6 @@ func shouldDisableColors() bool {
 var noColor = shouldDisableColors()
 
 const (
-
 	HelpText = `Inkog - Ship Safe Agents
 
 Scan. Ship. Comply.
@@ -1567,6 +1566,7 @@ Options:
   -max-files int      Maximum files to upload (default: 500)
   -repo string        Repository URL to scan (github.com, gitlab.com, bitbucket.org)
   -deep               Inkog Deep scan — advanced security analysis (requires Inkog Deep role)
+  -type string        Deep scan target override: agent | copilot_studio (default: auto-detect; requires --deep)
   -diff               Show only new findings since baseline (for CI/CD)
   -baseline string    Path to baseline file (default: .inkog-baseline.json)
   -update-baseline    Update the baseline after scanning
@@ -1619,6 +1619,9 @@ Examples:
 
   # Inkog Deep scan — advanced security analysis (requires Inkog Deep role)
   inkog --deep ./my-agent
+
+  # Deep scan a Microsoft Copilot Studio export (type auto-detected; --type optional)
+  inkog --deep ./CopilotStudioExport
 
 Environment Variables:
   INKOG_SERVER_URL     Override default server URL (highest priority)
@@ -1800,6 +1803,16 @@ func main() {
 		log.Fatalf("❌ Error: path '%s' does not exist\n", *pathFlag)
 	}
 
+	if *typeFlag != "" {
+		validTypes := map[string]bool{"agent": true, "copilot_studio": true}
+		if !validTypes[*typeFlag] {
+			log.Fatalf("❌ Error: invalid --type '%s'. Valid options: agent, copilot_studio (omit to auto-detect).\n", *typeFlag)
+		}
+		if !*deepFlag {
+			log.Fatalf("❌ Error: --type only applies to deep scans. Add --deep, or omit --type for a standard scan.\n")
+		}
+	}
+
 	// Use ServerURL as default if no server flag provided
 	// Priority: command-line flag > env var > ServerURL variable (can be set via init or -ldflags)
 	serverURL := *serverFlag
@@ -1935,6 +1948,14 @@ func main() {
 			os.Exit(1)
 		}
 		os.Exit(0)
+	}
+
+	if cli.DetectCopilotStudioExport(*pathFlag) {
+		fmt.Fprintln(os.Stderr, "⚠️  This looks like a Microsoft Copilot Studio agent export.")
+		fmt.Fprintln(os.Stderr, "   A standard scan inspects files by type and will not analyze the agent's")
+		fmt.Fprintln(os.Stderr, "   topics, actions, knowledge, or settings — results may look clean but are")
+		fmt.Fprintln(os.Stderr, "   incomplete. Run a deep scan for full Copilot Studio analysis:")
+		fmt.Fprintf(os.Stderr, "      inkog --deep %s\n\n", *pathFlag)
 	}
 
 	result, err = scanner.Scan()
