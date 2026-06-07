@@ -1,0 +1,12 @@
+{
+  "_description": "Failed scan attempts during corpus refresh routines. Each entry records the attempted target, timestamp, and failure reason.",
+  "failures": [
+    {
+      "timestamp": "2026-06-07T19:34:31Z",
+      "repo": "szybnev/DVLA",
+      "reason": "no_agent_code",
+      "http_status": 400,
+      "detail": "API returned error code 'no_agent_code' — repository contains no detectable LLM agent code. Skipped; fallback target used."
+    }
+  ]
+}
