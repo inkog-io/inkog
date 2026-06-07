@@ -1711,6 +1711,7 @@ func main() {
 	updateBaselineFlag := flag.Bool("update-baseline", false, "Update baseline after scanning")
 	deepFlag := flag.Bool("deep", false, "Inkog Deep scan — advanced security analysis (requires Inkog Deep role)")
 	agentNameFlag := flag.String("agent-name", "", "Explicit agent name (overrides auto-detection from path)")
+	typeFlag := flag.String("type", "", "Deep scan target type override (default auto-detect):\n      agent           Generic code agent (default behavior).\n      copilot_studio  Microsoft Copilot Studio agent (Power Platform or M365 declarative).\n      Leave unset to auto-detect from the exported files.")
 	maxFilesFlag := flag.Int("max-files", cli.DefaultMaxFiles, "Maximum files to upload (default 500)")
 	verboseFlag := flag.Bool("verbose", false, "Enable verbose output")
 	noColorFlag := flag.Bool("no-color", false, "Disable colored output (also honors NO_COLOR env var)")
@@ -1849,6 +1850,7 @@ func main() {
 
 	scanner := cli.NewHybridScanner(*pathFlag, serverURL, *policyFlag, *verboseFlag, isQuietMode)
 	scanner.AgentName = *agentNameFlag
+	scanner.ScanType = *typeFlag
 	scanner.MaxFiles = *maxFilesFlag
 
 	if *deepFlag {

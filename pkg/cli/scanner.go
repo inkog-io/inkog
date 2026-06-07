@@ -122,6 +122,7 @@ type HybridScanner struct {
 	SourcePath string
 	Policy     string // Security policy to send to server
 	AgentName  string // Explicit agent name (overrides auto-detection from path)
+	ScanType   string // Optional deep-scan target type override: "" (auto), agent, skill, copilot_studio
 	MaxFiles   int    // Maximum files to upload (0 = default 500)
 	Verbose    bool
 	Quiet      bool // Disable spinners/colors (for JSON output or CI)
@@ -884,6 +885,7 @@ func (hs *HybridScanner) DeepScan() (*DeepScanResult, error) {
 		SecretsVersion:  secrets.SecretsVersionHash(),
 		AgentName:       hs.resolveAgentName(),
 		AgentPath:       hs.SourcePath,
+		ScanType:        hs.ScanType, // "" => backend/agent auto-detects (incl. Copilot Studio)
 	}
 
 	var buf bytes.Buffer

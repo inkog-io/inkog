@@ -292,6 +292,7 @@ type ScanRequest struct {
 	ScanPolicy        string `json:"scan_policy,omitempty"` // Policy: low-noise, balanced, comprehensive, governance, eu-ai-act
 	AgentName         string `json:"agent_name,omitempty"`  // Agent name derived from source path
 	AgentPath         string `json:"agent_path,omitempty"`  // Original scanned path
+	ScanType          string `json:"scan_type,omitempty"`   // Deep scan target type: "" (auto), agent, skill, copilot_studio
 	// File content is sent as multipart form (binary zip)
 }
 
