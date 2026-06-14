@@ -1,0 +1,13 @@
+{
+  "_description": "Log of public scan attempts that failed during the weekly corpus refresh routine.",
+  "failures": [
+    {
+      "timestamp": "2026-06-14T19:32:16Z",
+      "repo": "szybnev/DVLA",
+      "reason": "no_agent_code",
+      "detail": "API returned HTTP 400: {\"error\":\"no_agent_code\",\"code\":\"no_agent_code\"} — repository contains no scannable agent code",
+      "routine_run": "Routine 6 — 2026-06-14",
+      "fallback_target": "merlvintan/damn-vulnerable-llm-agent"
+    }
+  ]
+}
