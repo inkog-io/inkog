@@ -1,0 +1,12 @@
+{
+  "_description": "Log of public scan attempts that failed during corpus refresh. Used to avoid re-queuing known-bad targets.",
+  "failures": [
+    {
+      "timestamp": "2026-06-21T19:35:33Z",
+      "repo": "szybnev/DVLA",
+      "reason": "no_agent_code",
+      "http_status": 400,
+      "notes": "API returned {\"error\":\"no_agent_code\"} — repository contains no detectable LLM agent code. Skipped from rotation."
+    }
+  ]
+}
