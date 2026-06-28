@@ -1,0 +1,9 @@
+[
+  {
+    "timestamp": "2026-06-28T19:34:00Z",
+    "repo": "szybnev/DVLA",
+    "reason": "API returned HTTP 400: no_agent_code — repository does not contain agent/LLM code",
+    "routine_attempt": 1,
+    "fallback_target": "merlvintan/damn-vulnerable-llm-agent"
+  }
+]
