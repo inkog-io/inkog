@@ -1,0 +1,12 @@
+{
+  "_description": "Failed scan attempts during corpus refresh. Each entry records the repo, timestamp, HTTP status, and error reason.",
+  "failures": [
+    {
+      "timestamp": "2026-05-17T19:31:58Z",
+      "repo": "szybnev/DVLA",
+      "http_status": 400,
+      "reason": "no_agent_code",
+      "error_response": {"error": "no_agent_code", "code": "no_agent_code"}
+    }
+  ]
+}
