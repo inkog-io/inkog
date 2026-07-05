@@ -1,0 +1,10 @@
+{
+  "_description": "Scan attempt failures logged by the automated corpus refresh routine.",
+  "failures": [
+    {
+      "timestamp": "2026-07-05T19:34:00Z",
+      "repo": "szybnev/DVLA",
+      "reason": "no_agent_code — API returned 400: no LLM agent code detected in repository"
+    }
+  ]
+}
