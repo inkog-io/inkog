@@ -1,0 +1,12 @@
+{
+  "_description": "Failed scan attempts logged by the automated scan-corpus routine.",
+  "failures": [
+    {
+      "timestamp": "2026-07-12T19:35:00Z",
+      "repo": "szybnev/DVLA",
+      "reason": "no_agent_code — repository contains no LLM agent code detectable by the scanner (HTTP 400: {\"error\":\"no_agent_code\",\"code\":\"no_agent_code\"})",
+      "routine_run": "Routine 6 — 2026-07-12",
+      "action_taken": "Skipped; fell back to merlvintan/damn-vulnerable-llm-agent which scanned successfully."
+    }
+  ]
+}
