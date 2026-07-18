@@ -3,7 +3,7 @@ module github.com/inkog-io/inkog
 go 1.21
 
 require (
-	github.com/briandowns/spinner v1.23.0
+	github.com/briandowns/spinner v1.23.2
 	golang.org/x/term v0.1.0
 )
 
