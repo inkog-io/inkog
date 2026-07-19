@@ -1,0 +1,19 @@
+{
+  "_description": "Scan failures log — entries added when a public scan attempt returns a non-2xx response or scan engine error.",
+  "failures": [
+    {
+      "timestamp": "2026-07-19T19:33:54Z",
+      "repo": "szybnev/DVLA",
+      "reason": "no_agent_code",
+      "http_status": 400,
+      "detail": "Scanner returned error code 'no_agent_code' — repository contains no detectable LLM agent code."
+    },
+    {
+      "timestamp": "2026-07-19T19:33:54Z",
+      "repo": "KavinduMW/DamnVulnerableLLMProject",
+      "reason": "clone_failed",
+      "http_status": 400,
+      "detail": "Repository not found or private. Only public GitHub repositories are supported."
+    }
+  ]
+}
