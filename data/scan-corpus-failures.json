@@ -1,0 +1,10 @@
+{
+  "_description": "Failed scan attempts logged by the weekly corpus-refresh routine.",
+  "failures": [
+    {
+      "timestamp": "2026-07-26T19:35:13Z",
+      "repo": "szybnev/DVLA",
+      "reason": "HTTP 400 no_agent_code — repository contains no LLM agent code recognizable by the scanner"
+    }
+  ]
+}
