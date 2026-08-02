@@ -5,6 +5,18 @@
       "timestamp": "2026-07-26T19:35:13Z",
       "repo": "szybnev/DVLA",
       "reason": "HTTP 400 no_agent_code — repository contains no LLM agent code recognizable by the scanner"
+    },
+    {
+      "timestamp": "2026-08-02T19:36:46Z",
+      "repo": "szybnev/DVLA",
+      "reason": "HTTP 400 no_agent_code — repository contains no LLM agent code recognizable by the scanner (second attempt, same result)",
+      "routine_run": "2026-08-02"
+    },
+    {
+      "timestamp": "2026-08-02T19:36:57Z",
+      "repo": "KavinduMW/DamnVulnerableLLMProject",
+      "reason": "HTTP 400 clone_failed — repository not found or private",
+      "routine_run": "2026-08-02"
     }
   ]
 }
