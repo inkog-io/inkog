@@ -3,9 +3,9 @@
   "_description": "Public scan corpus — the live dataset behind State of AI Agent Security 2026. Refreshed weekly by an automated routine.",
   "_methodology": "See data/scan-corpus-readme.md for methodology, included repo criteria, and rotation cadence.",
   "aggregates": {
-    "total_scans": 2,
-    "total_findings_observed": 9,
-    "average_governance_score": 16.0,
+    "total_scans": 3,
+    "total_findings_observed": 11,
+    "average_governance_score": 19.67,
     "finding_categories_aggregated": [
       "sql_injection",
       "injection",
@@ -13,9 +13,11 @@
       "governance",
       "code_execution",
       "resource_exhaustion",
-      "code_injection"
+      "code_injection",
+      "missing_authorization",
+      "unbounded_loop"
     ],
-    "last_refreshed": "2026-05-10T19:35:03Z",
+    "last_refreshed": "2026-08-09T19:35:48Z",
     "first_scan_date": "2026-05-04T12:10:06Z"
   },
   "scans": [
@@ -56,6 +58,27 @@
         "code_injection",
         "governance"
       ]
+    },
+    {
+      "timestamp": "2026-08-09T19:35:48Z",
+      "repo": "merlvintan/damn-vulnerable-llm-agent",
+      "report_id": "e9e9d1d3-ca46-42f4-af93-43d0ea7834d1",
+      "findings_count": 2,
+      "critical_count": 0,
+      "high_count": 2,
+      "medium_count": 0,
+      "low_count": 0,
+      "governance_score": 27,
+      "risk_score": 22,
+      "eu_ai_act_readiness": "PARTIAL",
+      "top_finding_categories": [
+        "sql_injection",
+        "injection",
+        "missing_audit_logging",
+        "missing_authorization",
+        "unbounded_loop"
+      ],
+      "frameworks_covered": ["langchain"]
     }
   ]
 }
