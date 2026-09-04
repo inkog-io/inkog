@@ -142,6 +142,8 @@ type ScanResult struct {
 	LinesOfCode      int      `json:"lines_of_code"`
 	PatternsChecked  int      `json:"patterns_checked"`
 	SkippedFiles     int      `json:"skipped_files"`
+	FixtureFiles     int      `json:"fixture_files"`          // Files treated as test/example fixtures (no findings reported)
+	FixtureDirs      []string `json:"fixture_dirs,omitempty"` // Top-level directories those files live in
 	FailedFilesCount int      `json:"failed_files_count"`
 	FailedFiles      []string `json:"failed_files"`
 	PanicedDetectors []string `json:"panicked_detectors"`
@@ -150,10 +152,10 @@ type ScanResult struct {
 	ComplianceReport *ComplianceReport `json:"compliance_report,omitempty"`
 
 	// Governance fields (EU AI Act compliance)
-	GovernanceScore  int                        `json:"governance_score"`             // 0-100 score
-	EUAIActReadiness string                     `json:"eu_ai_act_readiness"`          // "READY", "PARTIAL", "NOT_READY"
-	ArticleMapping   map[string]ArticleStatus   `json:"article_mapping,omitempty"`    // Per-article status
-	FrameworkMapping map[string]FrameworkStatus `json:"framework_mapping,omitempty"`  // Per-framework status
+	GovernanceScore  int                        `json:"governance_score"`            // 0-100 score
+	EUAIActReadiness string                     `json:"eu_ai_act_readiness"`         // "READY", "PARTIAL", "NOT_READY"
+	ArticleMapping   map[string]ArticleStatus   `json:"article_mapping,omitempty"`   // Per-article status
+	FrameworkMapping map[string]FrameworkStatus `json:"framework_mapping,omitempty"` // Per-framework status
 
 	// Agent topology visualization
 	TopologyMap *TopologyMap `json:"topology_map,omitempty"` // Visual topology of agent structure
@@ -217,11 +219,11 @@ type FrameworkStatus struct {
 
 // TopologyMetadata contains metadata about the topology map
 type TopologyMetadata struct {
-	Framework  string `json:"framework"`
-	FilePath   string `json:"file_path"`
-	InputType  string `json:"input_type"`
-	NodeCount  int    `json:"node_count"`
-	EdgeCount  int    `json:"edge_count"`
+	Framework string `json:"framework"`
+	FilePath  string `json:"file_path"`
+	InputType string `json:"input_type"`
+	NodeCount int    `json:"node_count"`
+	EdgeCount int    `json:"edge_count"`
 }
 
 // TopologyNodeLocation represents a source code location
@@ -269,17 +271,17 @@ type TopologyMap struct {
 
 // LocalSecretResult represents secrets detected locally on the CLI
 type LocalSecretResult struct {
-	Findings      []Finding       `json:"findings"`      // Local secret findings
-	RedactedFiles map[string]bool `json:"redacted_files"` // Which files were redacted
-	RedactionCount int            `json:"redaction_count"`
+	Findings       []Finding       `json:"findings"`       // Local secret findings
+	RedactedFiles  map[string]bool `json:"redacted_files"` // Which files were redacted
+	RedactionCount int             `json:"redaction_count"`
 }
 
 // MergedResult combines local CLI findings with server findings
 type MergedResult struct {
-	LocalSecrets      []Finding `json:"local_secrets"`       // From CLI
-	ServerFindings    []Finding `json:"server_findings"`     // From server
-	AllFindings       []Finding `json:"all_findings"`        // Merged + deduplicated
-	TotalFindingsCount int      `json:"total_findings_count"`
+	LocalSecrets       []Finding `json:"local_secrets"`   // From CLI
+	ServerFindings     []Finding `json:"server_findings"` // From server
+	AllFindings        []Finding `json:"all_findings"`    // Merged + deduplicated
+	TotalFindingsCount int       `json:"total_findings_count"`
 }
 
 // ScanRequest is sent by CLI to the server
@@ -298,12 +300,12 @@ type ScanRequest struct {
 
 // ScanResponse is returned by server
 type ScanResponse struct {
-	ContractVersion  string             `json:"contract_version"`
-	ServerVersion    string             `json:"server_version"`
-	ScanResult       ScanResult         `json:"scan_result"`
-	ComplianceReport *ComplianceReport  `json:"compliance_report,omitempty"`
-	Success          bool               `json:"success"`
-	Error            string             `json:"error,omitempty"`
+	ContractVersion  string            `json:"contract_version"`
+	ServerVersion    string            `json:"server_version"`
+	ScanResult       ScanResult        `json:"scan_result"`
+	ComplianceReport *ComplianceReport `json:"compliance_report,omitempty"`
+	Success          bool              `json:"success"`
+	Error            string            `json:"error,omitempty"`
 }
 
 // ErrorResponse represents a structured error from the server API
@@ -317,11 +319,11 @@ type ErrorResponse struct {
 
 // ComplianceReport provides compliance-focused summary
 type ComplianceReport struct {
-	Title          string `json:"title"`
-	Organization   string `json:"organization,omitempty"`
-	ScanDate       string `json:"scan_date"`
-	ScanDuration   string `json:"scan_duration"`
-	ReportVersion  string `json:"report_version"`
+	Title         string `json:"title"`
+	Organization  string `json:"organization,omitempty"`
+	ScanDate      string `json:"scan_date"`
+	ScanDuration  string `json:"scan_duration"`
+	ReportVersion string `json:"report_version"`
 
 	// Compliance Metrics
 	CriticalIssues int `json:"critical_issues"`
@@ -336,9 +338,9 @@ type ComplianceReport struct {
 	RiskLevel      string `json:"risk_level"` // Low, Medium, High, Critical
 
 	// Details
-	AllFindings   []Finding `json:"all_findings"`
-	LocalSecrets  []Finding `json:"local_secrets"`
-	RemoteIssues  []Finding `json:"remote_issues"`
+	AllFindings  []Finding `json:"all_findings"`
+	LocalSecrets []Finding `json:"local_secrets"`
+	RemoteIssues []Finding `json:"remote_issues"`
 }
 
 // SeverityLevel defines severity ordering
@@ -573,10 +575,10 @@ func GetEffectiveFindingType(f Finding) FindingType {
 // isGovernancePattern checks if a pattern ID indicates a governance violation
 func isGovernancePattern(patternID string) bool {
 	governancePatterns := map[string]bool{
-		"missing_human_oversight":  true,
-		"missing_rate_limits":      true,
-		"missing_authorization":    true,
-		"missing_audit_logging":    true,
+		"missing_human_oversight":   true,
+		"missing_rate_limits":       true,
+		"missing_authorization":     true,
+		"missing_audit_logging":     true,
 		"missing_output_validation": true,
 	}
 	return governancePatterns[patternID]
@@ -619,14 +621,14 @@ const (
 
 // DiffSummary contains summary statistics for a diff
 type DiffSummary struct {
-	TotalNew       int            `json:"total_new"`
-	TotalFixed     int            `json:"total_fixed"`
-	TotalUnchanged int            `json:"total_unchanged"`
-	NewBySeverity  map[string]int `json:"new_by_severity"`
+	TotalNew        int            `json:"total_new"`
+	TotalFixed      int            `json:"total_fixed"`
+	TotalUnchanged  int            `json:"total_unchanged"`
+	NewBySeverity   map[string]int `json:"new_by_severity"`
 	FixedBySeverity map[string]int `json:"fixed_by_severity"`
-	BaseRiskScore  int            `json:"base_risk_score"`
-	HeadRiskScore  int            `json:"head_risk_score"`
-	RiskDelta      int            `json:"risk_delta"`
+	BaseRiskScore   int            `json:"base_risk_score"`
+	HeadRiskScore   int            `json:"head_risk_score"`
+	RiskDelta       int            `json:"risk_delta"`
 }
 
 // DiffResult contains the result of comparing two scans

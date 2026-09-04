@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.2.2] — 2026-09-04
+
+Finding suppressions now work end to end, OWASP references move to the 2026 editions, and the Agent Capability Surface summary ships after every scan.
+
+### Added
+- **Agent Capability Surface** — every scan prints agents, tools, and control gaps with a link to the dashboard surface view; the legacy Governance Status block is hidden when the surface is active.
+- **`-type` flag** — override the Deep scan target (`agent` or `copilot_studio`); deep-only exports are steered to `-deep`.
+- **`.inkogignore` upload** — suppression files are now sent with the scan so server-side suppressions (file rules and inline `# inkog:ignore` comments) apply. Previously the file was silently dropped.
+- **Secret patterns** — six additional 2026 AI-provider keys and Stripe restricted keys are redacted client-side.
+- **Fixture notice** — when uploaded files were classified as test or example fixtures (and therefore produce no findings), the scan summary says so and how to scan them directly.
+- **Deep analysis warnings** — Deep rules that could not be evaluated upstream are reported as a warning instead of being listed as strengths; a Deep scan where every rule failed is reported as failed rather than clean.
+
+### Changed
+- **OWASP references** now use the OWASP GenAI LLM Top 10 **2026** ids (`LLM10:2026`) and the OWASP Top 10 for Agentic Applications 2026 (`ASI01`–`ASI10`); the server emits the same ids on every finding.
+- Discrete `cwe` and `owasp_category` fields are populated deterministically from the server response.
+- Dashboard links point to `/dashboard/agents/{id}`.
+- Go toolchain bumped to 1.24 for builds.
+
+### Removed
+- **`make docker-build`** — there is no Dockerfile or published image; use `npx -y @inkog-io/cli scan .`, the install script, Homebrew, or a release binary.
+
 ## [1.2.1] — 2026-04-29
 
 A documentation refresh and infrastructure patch. No changes to detection logic — scan results are identical to v1.2.0.

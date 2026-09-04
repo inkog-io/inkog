@@ -168,6 +168,11 @@ type ScanResult struct {
 	CapabilitySurfaceActive bool   `json:"capability_surface_active,omitempty"`
 	CapabilitySurfaceNote   string `json:"capability_surface_note,omitempty"`
 
+	// Files the server classified as test/example fixtures. Rules do not report on
+	// them, so the CLI explains this instead of leaving the user with a silent zero.
+	FixtureFiles int      `json:"fixture_files,omitempty"`
+	FixtureDirs  []string `json:"fixture_dirs,omitempty"`
+
 	DeepReport  *DeepReport `json:"deep_report,omitempty"`
 	IsSkillScan bool        `json:"-"` // rendering hint only
 	IsMCPScan   bool        `json:"-"` // rendering hint: MCP server scan
@@ -181,6 +186,11 @@ type DeepReport struct {
 	Methodology       *DeepMethodology      `json:"methodology,omitempty"`
 	ReportMeta        *DeepReportMeta       `json:"report,omitempty"`
 	SeveritySummary   *DeepSeveritySummary  `json:"severity_summary,omitempty"`
+
+	// Rules the orchestrator could not evaluate (upstream model errors). Derived from
+	// clean_detections whose reason starts with "Analysis error", or sent by the server.
+	AnalysisErrors      int    `json:"analysis_errors,omitempty"`
+	AnalysisErrorSample string `json:"analysis_error_sample,omitempty"`
 
 	// Copilot Studio-specific sections (present only for scan_type=copilot_studio)
 	ScanType                  string                   `json:"scan_type,omitempty"`
@@ -383,6 +393,8 @@ func (hs *HybridScanner) Scan() (*ScanResult, error) {
 		FrameworkMapping: serverResult.FrameworkMapping,
 		TopologyMap:      serverResult.TopologyMap,
 		Strengths:        serverResult.Strengths,
+		FixtureFiles:     serverResult.FixtureFiles,
+		FixtureDirs:      serverResult.FixtureDirs,
 
 		// Forward capability surface summary (silent no-op against legacy servers).
 		CapabilityScanID:        serverResult.CapabilityScanID,

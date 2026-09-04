@@ -208,6 +208,9 @@ func runSkillScan(args []string, serverURL, outputFormat, policy string, deep, q
 		var strengths []contract.SecurityStrength
 		if len(deepReport.CleanDetections) > 0 {
 			for _, cd := range deepReport.CleanDetections {
+				if isDeepAnalysisError(cd.Reason) {
+					continue // an errored rule is not a strength
+				}
 				strengths = append(strengths, contract.SecurityStrength{
 					Title:   humanizeDetectionID(cd.DetectionID),
 					Message: cd.Reason,
@@ -1242,6 +1245,9 @@ func runMCPScan(args []string, serverURL, outputFormat, policy string, deep, qui
 		var strengths []contract.SecurityStrength
 		if len(deepReport.CleanDetections) > 0 {
 			for _, cd := range deepReport.CleanDetections {
+				if isDeepAnalysisError(cd.Reason) {
+					continue // an errored rule is not a strength
+				}
 				strengths = append(strengths, contract.SecurityStrength{
 					Title:   humanizeDetectionID(cd.DetectionID),
 					Message: cd.Reason,
@@ -1883,6 +1889,9 @@ func main() {
 		var strengths []contract.SecurityStrength
 		if len(deepReport.CleanDetections) > 0 {
 			for _, cd := range deepReport.CleanDetections {
+				if isDeepAnalysisError(cd.Reason) {
+					continue // an errored rule is not a strength
+				}
 				strengths = append(strengths, contract.SecurityStrength{
 					Title:   humanizeDetectionID(cd.DetectionID),
 					Message: cd.Reason,
@@ -2477,6 +2486,20 @@ func extractDeepReport(scan map[string]interface{}) *cli.DeepReport {
 			})
 		}
 	}
+	for _, cd := range report.CleanDetections {
+		if isDeepAnalysisError(cd.Reason) {
+			report.AnalysisErrors++
+			if report.AnalysisErrorSample == "" {
+				report.AnalysisErrorSample = strings.TrimSpace(cd.Reason)
+			}
+		}
+	}
+	if n := deepScanInt(scan, "analysis_errors"); n > report.AnalysisErrors {
+		report.AnalysisErrors = n
+	}
+	if s := deepStr(scan, "analysis_error_sample"); s != "" && report.AnalysisErrorSample == "" {
+		report.AnalysisErrorSample = s
+	}
 
 	// compliance_summary
 	if arr := resolveSlice("compliance_summary"); len(arr) > 0 {
@@ -2597,6 +2620,7 @@ func outputText(result *cli.ScanResult, minSeverity, policy string, verbose bool
 		} else {
 			fmt.Println("✓ No security issues found")
 		}
+		displayScanNotices(result)
 		return nil
 	}
 
@@ -2622,6 +2646,7 @@ func outputText(result *cli.ScanResult, minSeverity, policy string, verbose bool
 
 	// Display tiered summary
 	displayTieredSummary(filtered, policy, isDeep)
+	displayScanNotices(result)
 
 	// Display governance status (if available)
 	displayGovernanceStatus(result)
@@ -2784,6 +2809,48 @@ func displayTieredCodeFrame(f contract.Finding) {
 	// 5. Show taint source if present (key differentiator for Tier 1)
 	if f.InputTainted && f.TaintSource != "" {
 		fmt.Printf("     %sTaint source: %s (user input)%s\n", colorCyan, f.TaintSource, colorReset)
+	}
+}
+
+// isDeepAnalysisError reports whether a Deep "clean" detection is really an upstream
+// analysis failure (the orchestrator records those as "Analysis error: ...").
+func isDeepAnalysisError(reason string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(reason)), "analysis error")
+}
+
+// displayScanNotices prints caveats that change how the result should be read:
+// Deep rules that could not be evaluated, and files the engine treats as test fixtures.
+func displayScanNotices(result *cli.ScanResult) {
+	if result == nil {
+		return
+	}
+	if result.DeepReport != nil && result.DeepReport.AnalysisErrors > 0 {
+		total := 0
+		if result.DeepReport.ReportMeta != nil {
+			total = result.DeepReport.ReportMeta.DetectionRulesTotal
+		}
+		fmt.Println()
+		if total > 0 {
+			fmt.Printf("%s⚠️  Deep analysis incomplete: %d of %d detection rules could not be evaluated.%s\n",
+				colorTierRisk, result.DeepReport.AnalysisErrors, total, colorReset)
+		} else {
+			fmt.Printf("%s⚠️  Deep analysis incomplete: %d detection rules could not be evaluated.%s\n",
+				colorTierRisk, result.DeepReport.AnalysisErrors, colorReset)
+		}
+		if result.DeepReport.AnalysisErrorSample != "" {
+			fmt.Printf("   %s%s%s\n", colorGray, result.DeepReport.AnalysisErrorSample, colorReset)
+		}
+		fmt.Println("   Treat the Deep result as partial. Core findings above are unaffected.")
+	}
+	if result.FixtureFiles > 0 {
+		fmt.Println()
+		where := ""
+		if len(result.FixtureDirs) > 0 {
+			where = " under " + strings.Join(result.FixtureDirs, "/, ") + "/"
+		}
+		fmt.Printf("%sℹ️  %d file(s)%s were treated as test or example fixtures and produce no findings.%s\n",
+			colorGray, result.FixtureFiles, where, colorReset)
+		fmt.Printf("%s   If that is your agent code, scan it directly: inkog -path <that directory>%s\n", colorGray, colorReset)
 	}
 }
 
