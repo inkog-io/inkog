@@ -56,9 +56,6 @@ clean: ## Remove build artifacts
 
 ## Docker
 
-docker-build: ## Build Docker image
-	docker build -t inkog:$(VERSION) .
-
 ## Help
 
 help: ## Show this help
