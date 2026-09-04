@@ -19,7 +19,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version: stable
           check-latest: true
 
       - name: Verify module graph
@@ -46,10 +46,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
-      - uses: golangci/golangci-lint-action@v6
+          go-version: stable
+      - uses: golangci/golangci-lint-action@v8
         with:
           version: latest
+          install-mode: goinstall # built with the same Go as the code, so language-version checks never lag
 
   vuln:
     name: govulncheck
@@ -58,6 +59,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version: stable
       - run: go install golang.org/x/vuln/cmd/govulncheck@latest
       - run: govulncheck ./...
