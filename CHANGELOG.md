@@ -112,7 +112,9 @@ Initial public release.
 - **Multi-framework support** — LangChain, LangGraph, CrewAI, AutoGen, OpenAI Agents, Semantic Kernel, LlamaIndex, Haystack, DSPy, Phidata, Smolagents, PydanticAI, Google ADK, n8n, Flowise, Langflow, Dify, Microsoft Copilot Studio, Salesforce Agentforce.
 - **Cross-platform builds** — darwin (amd64, arm64), linux (amd64, arm64), windows (amd64).
 
-[Unreleased]: https://github.com/inkog-io/inkog/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/inkog-io/inkog/compare/v1.2.3...HEAD
+[1.2.3]: https://github.com/inkog-io/inkog/compare/v1.2.2...v1.2.3
+[1.2.2]: https://github.com/inkog-io/inkog/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/inkog-io/inkog/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/inkog-io/inkog/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/inkog-io/inkog/compare/v1.0.0...v1.1.0
