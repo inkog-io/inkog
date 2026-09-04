@@ -45,14 +45,28 @@ jobs:
           if [ "${{ matrix.goos }}" = "windows" ]; then
             BINARY_NAME="${BINARY_NAME}.exe"
           fi
-          go build -ldflags="-s -w" -o "${BINARY_NAME}" ./cmd/inkog
+          # Never ship a stale file: remove anything matching the output name first.
+          rm -f "${BINARY_NAME}"
+          VERSION="${GITHUB_REF_NAME#v}"
+          BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          GIT_COMMIT="${GITHUB_SHA::7}"
+          go build -trimpath \
+            -ldflags="-s -w -X main.AppVersion=${VERSION} -X main.BuildTime=${BUILD_TIME} -X main.GitCommit=${GIT_COMMIT}" \
+            -o "${BINARY_NAME}" ./cmd/inkog
           chmod +x "${BINARY_NAME}"
+          echo "BINARY_NAME=${BINARY_NAME}" >> "$GITHUB_ENV"
+
+      - name: Verify embedded version
+        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+        run: |
+          ./"${BINARY_NAME}" -version | tee /dev/stderr | grep -q "v${GITHUB_REF_NAME#v}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: inkog-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: inkog-*
+          path: ${{ env.BINARY_NAME }}
+          if-no-files-found: error
 
   release:
     name: Create Release

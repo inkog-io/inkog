@@ -6,7 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.2.3] — 2026-09-04
+
+Release-pipeline fix. Same features as 1.2.2.
+
+### Fixed
+- **Release binaries** — v1.2.2 shipped four stale prebuilt binaries (built 2026-05-15) that had been committed to the repository and swept up by the artifact glob. Binaries are no longer tracked in git, the workflow uploads only the file it just built and verifies the embedded version, and `inkog -version` no longer prints a doubled `v`.
+
 ## [1.2.2] — 2026-09-04
+
+Superseded by 1.2.3 (its macOS and Linux binaries were stale). Changes below are what 1.2.3 delivers.
 
 Finding suppressions now work end to end, OWASP references move to the 2026 editions, and the Agent Capability Surface summary ships after every scan.
 

@@ -1751,7 +1751,7 @@ func main() {
 
 	// Handle version flag
 	if *versionFlag {
-		fmt.Printf("%s v%s\n", AppName, AppVersion)
+		fmt.Printf("%s v%s\n", AppName, strings.TrimPrefix(AppVersion, "v"))
 		os.Exit(0)
 	}
 

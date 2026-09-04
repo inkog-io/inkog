@@ -32,6 +32,8 @@ go.work
 /bin/
 /dist/
 /inkog
+/inkog-*
+!/inkog-cli
 /cli
 /inkog-cli
 inkog-worker
