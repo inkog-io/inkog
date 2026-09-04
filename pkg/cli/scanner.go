@@ -56,6 +56,9 @@ var DefaultScanExtensions = map[string]bool{
 	".env":  true,
 	".conf": true,
 	".cfg":  true,
+
+	// Finding suppressions (.inkogignore, YAML). filepath.Ext(".inkogignore") == ".inkogignore".
+	".inkogignore": true,
 }
 
 // ExcludedDirectories contains paths that should never be scanned.
