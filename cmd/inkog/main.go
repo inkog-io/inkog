@@ -2863,7 +2863,7 @@ func displayGovernanceStatus(result *cli.ScanResult) {
 		if gov.HasRateLimiting {
 			fmt.Printf("  %s✓%s Rate Limiting:   %sPRESENT%s\n", colorCheck, colorReset, colorCheck, colorReset)
 		} else {
-			fmt.Printf("  %s✗%s Rate Limiting:   %sMISSING%s (OWASP LLM04)\n", colorCross, colorReset, colorCross, colorReset)
+			fmt.Printf("  %s✗%s Rate Limiting:   %sMISSING%s (OWASP LLM06:2026)\n", colorCross, colorReset, colorCross, colorReset)
 		}
 
 		// Audit Logging
@@ -7195,7 +7195,7 @@ func generateGovernanceStatusHTML(result *cli.ScanResult) string {
 	controls := []control{
 		{"Human Oversight", hasOversight, "Article 14.1"},
 		{"Authorization", hasAuth, ""},
-		{"Rate Limiting", hasRateLimit, "OWASP LLM04"},
+		{"Rate Limiting", hasRateLimit, "OWASP LLM06:2026"},
 		{"Audit Logging", hasAudit, "Article 12.1"},
 	}
 
