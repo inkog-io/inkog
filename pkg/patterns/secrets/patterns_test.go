@@ -713,15 +713,15 @@ func TestMatchesKnownSecretFormat(t *testing.T) {
 		value string
 		want  bool
 	}{
-		{"AKIA1234567890123456", true},       // AWS
+		{"AKIA1234567890123456", true},              // AWS
 		{"ghp_abc123def456abc123def456abc12", true}, // GitHub
-		{"sk_live_abcdef1234567890", true},   // Stripe
-		{"sk-ant-abcdef1234567890ab", true},  // Anthropic
-		{"xoxb-12345-67890-abcdef", true},    // Slack
-		{"npm_abcdef1234567890", true},       // npm
-		{"SG.abcdef1234567890", true},        // Sendgrid
-		{"random_high_entropy_str", false},   // Not a known format
-		{"just_some_long_string_here", false}, // Not a known format
+		{"sk_live_abcdef1234567890", true},          // Stripe
+		{"sk-ant-abcdef1234567890ab", true},         // Anthropic
+		{"xoxb-12345-67890-abcdef", true},           // Slack
+		{"npm_abcdef1234567890", true},              // npm
+		{"SG.abcdef1234567890", true},               // Sendgrid
+		{"random_high_entropy_str", false},          // Not a known format
+		{"just_some_long_string_here", false},       // Not a known format
 	}
 	for _, tc := range cases {
 		got := matchesKnownSecretFormat(tc.value)
@@ -882,9 +882,9 @@ func TestEntropy_RealSecretsStillDetected(t *testing.T) {
 func TestAdjustConfidence_PythonDocstringContent(t *testing.T) {
 	// Lines inside Python docstrings with :param, :returns:, >>> markers
 	cases := []struct {
-		name     string
-		line     string
-		wantLow  bool
+		name    string
+		line    string
+		wantLow bool
 	}{
 		{"param marker", `:param api_key: The API key to use`, true},
 		{"returns marker", `:returns: api_key value from config`, true},
@@ -1180,8 +1180,8 @@ key3 = "gsk_Ab1Cd2Ef3Gh4Ij5Kl6Mn7Op8Qr9St0UvWx1Yz2Ab1Cd2Ef3Gh4Ij5K"`
 // Regression: existing patterns still work after adding new ones
 func TestDetectSecrets_ExistingPatternsStillWork(t *testing.T) {
 	cases := []struct {
-		name    string
-		content string
+		name     string
+		content  string
 		wantType string
 	}{
 		{"AWS key", `key = "AKIA1234567890123456"`, "aws_access_key"},

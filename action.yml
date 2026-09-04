@@ -168,6 +168,26 @@ runs:
 
         curl -sSfL --retry 3 --retry-delay 2 -o "$DEST" "$URL" \
           || { echo "::error::Failed to download $URL — does the release contain $BINARY?"; exit 1; }
+
+        # Verify integrity against the release's checksums.txt (published by the release workflow).
+        SUMS_URL="https://github.com/inkog-io/inkog/releases/download/${VERSION}/checksums.txt"
+        if curl -sSfL --retry 3 --retry-delay 2 -o "${{ runner.temp }}/inkog-checksums.txt" "$SUMS_URL"; then
+          EXPECTED=$(awk -v f="$BINARY" '$2==f {print $1}' "${{ runner.temp }}/inkog-checksums.txt")
+          if [ -z "$EXPECTED" ]; then
+            echo "::error::checksums.txt for ${VERSION} has no entry for ${BINARY}"; exit 1
+          fi
+          if command -v sha256sum >/dev/null 2>&1; then
+            ACTUAL=$(sha256sum "$DEST" | awk '{print $1}')
+          else
+            ACTUAL=$(shasum -a 256 "$DEST" | awk '{print $1}')
+          fi
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "::error::Checksum mismatch for ${BINARY} (${VERSION}): expected ${EXPECTED}, got ${ACTUAL}"; exit 1
+          fi
+          echo "Checksum verified for ${BINARY} (${VERSION})"
+        else
+          echo "::warning::No checksums.txt published for ${VERSION}; skipping integrity check"
+        fi
         chmod +x "$DEST"
 
         echo "inkog_path=$DEST" >> $GITHUB_OUTPUT

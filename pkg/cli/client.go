@@ -234,14 +234,14 @@ func (c *InkogClient) calculateBackoff(attempt int) time.Duration {
 func (c *InkogClient) formatUserError(serverErr *ServerError) error {
 	// Special handling for authentication errors - show signup CTA
 	if serverErr.Code == "UNAUTHORIZED" || serverErr.Code == "api_key_required" || serverErr.Code == "invalid_api_key" || serverErr.Code == "auth_required" {
-		return fmt.Errorf(APIKeyRequiredMessage())
+		return fmt.Errorf("%s", APIKeyRequiredMessage())
 	}
 
 	msg := fmt.Sprintf("Server Error: %s (Code: %s)", c.humanizeErrorCode(serverErr.Code), serverErr.Code)
 	if serverErr.RequestID != "" {
 		msg += fmt.Sprintf("\n   Request ID: %s (Please quote this in support)", serverErr.RequestID)
 	}
-	return fmt.Errorf(msg)
+	return fmt.Errorf("%s", msg)
 }
 
 // APIKeyRequiredMessage returns a formatted signup CTA message
@@ -410,7 +410,7 @@ func (c *InkogClient) TriggerDeepScan(contentType string, body *bytes.Buffer) (*
 	}
 
 	if resp.StatusCode == http.StatusUnauthorized {
-		return nil, fmt.Errorf(APIKeyRequiredMessage())
+		return nil, fmt.Errorf("%s", APIKeyRequiredMessage())
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -492,7 +492,7 @@ func (c *InkogClient) TriggerSkillDeepScan(scanID string) error {
 	case http.StatusForbidden:
 		return fmt.Errorf("deep scan requires the Inkog Deep role. Contact your admin to enable it at https://app.inkog.io")
 	case http.StatusUnauthorized:
-		return fmt.Errorf(APIKeyRequiredMessage())
+		return fmt.Errorf("%s", APIKeyRequiredMessage())
 	case http.StatusConflict:
 		return nil // already processing — treat as success
 	default:
@@ -815,7 +815,7 @@ func (c *InkogClient) TriggerRedScanWithOptions(opts RedScanOptions) (*RedScanTr
 	}
 
 	if resp.StatusCode == http.StatusUnauthorized {
-		return nil, fmt.Errorf(APIKeyRequiredMessage())
+		return nil, fmt.Errorf("%s", APIKeyRequiredMessage())
 	}
 
 	if resp.StatusCode != http.StatusAccepted {

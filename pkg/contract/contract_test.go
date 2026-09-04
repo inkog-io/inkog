@@ -18,13 +18,13 @@ func TestFilterByPolicy(t *testing.T) {
 		policy   string
 		expected int
 	}{
-		{PolicyLowNoise, 2},       // Only vulnerabilities (2 items)
-		{PolicyBalanced, 4},       // Vulnerabilities + risk patterns
-		{PolicyComprehensive, 5},  // All
-		{PolicyGovernance, 0},     // No governance markers in test data
-		{PolicyEUAIAct, 4},        // EU AI Act policy (Tier 1 + 2 + governance)
-		{"", 4},                   // Default to balanced
-		{"unknown", 4},            // Unknown defaults to balanced
+		{PolicyLowNoise, 2},      // Only vulnerabilities (2 items)
+		{PolicyBalanced, 4},      // Vulnerabilities + risk patterns
+		{PolicyComprehensive, 5}, // All
+		{PolicyGovernance, 0},    // No governance markers in test data
+		{PolicyEUAIAct, 4},       // EU AI Act policy (Tier 1 + 2 + governance)
+		{"", 4},                  // Default to balanced
+		{"unknown", 4},           // Unknown defaults to balanced
 	}
 
 	for _, tt := range tests {

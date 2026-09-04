@@ -651,11 +651,11 @@ func isDefaultDatabasePassword(line string) bool {
 
 // publicKeyPrefixes are key prefixes that indicate public/publishable keys, not secrets.
 var publicKeyPrefixes = []string{
-	"phc_",              // PostHog (public analytics key)
-	"pk_live_",          // Stripe publishable key (live)
-	"pk_test_",          // Stripe publishable key (test)
-	"ALGOLIASEARCH_",    // Algolia search-only key
-	"DOCSEARCH_",        // Algolia DocSearch key
+	"phc_",           // PostHog (public analytics key)
+	"pk_live_",       // Stripe publishable key (live)
+	"pk_test_",       // Stripe publishable key (test)
+	"ALGOLIASEARCH_", // Algolia search-only key
+	"DOCSEARCH_",     // Algolia DocSearch key
 }
 
 // hasPublicKeyPrefix returns true if the value starts with a known public key prefix.

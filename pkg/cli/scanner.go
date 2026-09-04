@@ -1164,7 +1164,7 @@ func (hs *HybridScanner) pollDeepScan(scanID string) (*DeepScanResult, error) {
 					errMsg = "Deep scan failed: " + e
 				}
 			}
-			return nil, fmt.Errorf(errMsg)
+			return nil, fmt.Errorf("%s", errMsg)
 		}
 	}
 

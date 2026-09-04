@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+- **Toolchain** — Go 1.25 (`go.mod` directive), dependencies updated (`golang.org/x/term`, `x/sys`, `spinner`).
+- **CI** — Go version taken from `go.mod`; adds `go mod verify`, `gofmt`, `go vet`, race-enabled tests, golangci-lint v2, and `govulncheck`.
+- **Release** — binaries get SLSA build-provenance attestations and an SPDX SBOM alongside `checksums.txt`.
+- **GitHub Action** — verifies the downloaded binary's SHA-256 against the release's `checksums.txt` before running.
+
 ## [1.2.3] — 2026-09-04
 
 Release-pipeline fix. Same features as 1.2.2.

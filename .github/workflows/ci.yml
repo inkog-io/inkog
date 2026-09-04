@@ -6,8 +6,12 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   test:
+    name: Build and test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,25 +19,45 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version-file: go.mod
+          check-latest: true
 
-      - name: Build
-        run: CGO_ENABLED=0 go build -o inkog ./cmd/inkog
+      - name: Verify module graph
+        run: go mod verify
 
-      - name: Test
-        run: go test -v ./...
+      - name: Build (pure Go, no CGO)
+        run: CGO_ENABLED=0 go build ./...
+
+      - name: gofmt
+        run: |
+          out=$(gofmt -l ./cmd ./pkg)
+          if [ -n "$out" ]; then echo "gofmt needed on:"; echo "$out"; exit 1; fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: Test (race)
+        run: go test -race -short ./...
 
   lint:
+    name: golangci-lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
-
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v4
+          go-version-file: go.mod
+      - uses: golangci/golangci-lint-action@v6
         with:
           version: latest
+
+  vuln:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - run: govulncheck ./...

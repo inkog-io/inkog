@@ -9,10 +9,10 @@ import (
 
 // Entropy detection constants
 const (
-	EntropyThreshold     = 4.5   // Balanced threshold for detection
-	MinStringLength      = 16    // Minimum length for entropy analysis
-	MaxStringLength      = 256   // Maximum length to analyze
-	EntropyConfidence    = 0.75  // Confidence score for entropy findings
+	EntropyThreshold  = 4.5  // Balanced threshold for detection
+	MinStringLength   = 16   // Minimum length for entropy analysis
+	MaxStringLength   = 256  // Maximum length to analyze
+	EntropyConfidence = 0.75 // Confidence score for entropy findings
 )
 
 // stringLiteralRegex matches quoted string literals
@@ -53,7 +53,7 @@ type EntropyFinding struct {
 	Column     int
 	Value      string
 	Entropy    float64
-	HasContext bool   // True if found near credential-related keywords
+	HasContext bool // True if found near credential-related keywords
 	Severity   string
 	Confidence float32
 }

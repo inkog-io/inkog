@@ -1415,7 +1415,7 @@ func pollSkillDeepScan(client *cli.InkogClient, scanID string, progress *cli.Pro
 			if e, ok := resp.Scan["ai_scan_error"].(string); ok && e != "" {
 				errMsg = "deep scan failed: " + e
 			}
-			return nil, fmt.Errorf(errMsg)
+			return nil, fmt.Errorf("%s", errMsg)
 		}
 		// "processing" or any other status → keep polling
 	}

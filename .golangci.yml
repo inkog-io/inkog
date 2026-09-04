@@ -1,32 +1,40 @@
+version: "2"
+
 linters:
+  default: none
   enable:
     - errcheck
     - govet
     - staticcheck
-  disable:
-    - unused      # Many helper functions for future use
-    - ineffassign # Minor issues
+    - ineffassign
+    - unused
+  settings:
+    errcheck:
+      exclude-functions:
+        - (io.Writer).Write
+        - (*bytes.Buffer).Write
+        - (*mime/multipart.Writer).WriteField
+        - fmt.Fprintf
+        - fmt.Printf
+        - fmt.Fprintln
+        - fmt.Println
+  exclusions:
+    generated: lax
+    rules:
+      # Test files can be more relaxed
+      - path: _test\.go
+        linters:
+          - errcheck
+          - unused
+      # Deprecated-API and Printf-with-dynamic-format warnings are tracked separately
+      - linters:
+          - staticcheck
+        text: "SA1019|SA1006"
+      # Helper functions kept for upcoming output formats
+      - linters:
+          - unused
+        path: cmd/inkog/main\.go
 
-linters-settings:
-  errcheck:
-    exclude-functions:
-      - (io.Writer).Write
-      - (*bytes.Buffer).Write
-      - (*mime/multipart.Writer).WriteField
-      - fmt.Fprintf
-      - fmt.Printf
-
-issues:
-  exclude-rules:
-    # Test files can be more relaxed
-    - path: _test\.go
-      linters:
-        - errcheck
-    # Deprecated functions are fine for now
-    - linters:
-        - staticcheck
-      text: "SA1019"
-    # Printf with dynamic format is intentional
-    - linters:
-        - staticcheck
-      text: "SA1006"
+formatters:
+  enable:
+    - gofmt
