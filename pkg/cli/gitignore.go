@@ -30,7 +30,7 @@ func LoadGitIgnore(rootDir string) *GitIgnore {
 	if err != nil {
 		return gi // No .gitignore — return empty matcher
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {

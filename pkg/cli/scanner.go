@@ -470,7 +470,7 @@ func (hs *HybridScanner) scanLocalSecretsAndCollectFiles() ([]contract.Finding, 
 				}
 
 				// Use relative path to match server findings format
-				findingPath := filePath
+				var findingPath string
 				if rel, err := filepath.Rel(hs.SourcePath, filePath); err == nil && rel != "." {
 					findingPath = rel
 				} else {
@@ -669,7 +669,9 @@ func (hs *HybridScanner) sendToServer(redactedFiles map[string][]byte, localSecr
 		}
 	}
 
-	writer.Close()
+	if err := writer.Close(); err != nil {
+		return nil, fmt.Errorf("failed to finalize upload form: %w", err)
+	}
 
 	// Pre-upload size validation (server limit is 100MB, check at 95MB to leave margin)
 	uploadSizeMB := buf.Len() / (1024 * 1024)
@@ -786,7 +788,7 @@ func peekLowerFile(path string, limit int) string {
 	if err != nil {
 		return ""
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	data, err := io.ReadAll(io.LimitReader(f, int64(limit)))
 	if err != nil {
 		return ""
@@ -1086,7 +1088,9 @@ func (hs *HybridScanner) DeepScan() (*DeepScanResult, error) {
 		part.Write(content)
 	}
 
-	writer.Close()
+	if err := writer.Close(); err != nil {
+		return nil, fmt.Errorf("failed to finalize upload form: %w", err)
+	}
 
 	triggerResp, err := hs.client.TriggerDeepScan(writer.FormDataContentType(), &buf)
 	if err != nil {

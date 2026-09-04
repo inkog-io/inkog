@@ -188,7 +188,7 @@ func hasLongLine(filePath string, maxLen int) bool {
 	if err != nil {
 		return false
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	scanner := bufio.NewScanner(f)
 	// Increase scanner buffer to handle long lines

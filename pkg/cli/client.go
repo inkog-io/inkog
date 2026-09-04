@@ -84,7 +84,7 @@ func (c *InkogClient) SendScan(contentType string, body *bytes.Buffer) (*contrac
 			}
 			return nil, lastErr
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		// Handle response based on status code
 		switch {
@@ -319,7 +319,7 @@ func (c *InkogClient) SendAnonymousScan(fileName, content string) (*AnonymousPre
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -398,7 +398,7 @@ func (c *InkogClient) TriggerDeepScan(contentType string, body *bytes.Buffer) (*
 	if err != nil {
 		return nil, fmt.Errorf("network error: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -443,7 +443,7 @@ func (c *InkogClient) PollDeepScanStatus(scanID string) (*DeepScanStatusResponse
 	if err != nil {
 		return nil, fmt.Errorf("network error: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -483,7 +483,7 @@ func (c *InkogClient) TriggerSkillDeepScan(scanID string) error {
 	if err != nil {
 		return fmt.Errorf("network error: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(resp.Body)
 
 	switch resp.StatusCode {
@@ -516,7 +516,7 @@ func (c *InkogClient) GetSkillScan(scanID string) (*SkillScanDetailResponse, err
 	if err != nil {
 		return nil, fmt.Errorf("network error: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -639,7 +639,7 @@ func (c *InkogClient) SendSkillScan(files map[string]string) (*SkillScanResponse
 	if err != nil {
 		return nil, fmt.Errorf("network error: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -686,7 +686,7 @@ func (c *InkogClient) ScanSkillRepo(repoURL string) (*SkillScanResponse, error) 
 	if err != nil {
 		return nil, fmt.Errorf("network error: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -807,7 +807,7 @@ func (c *InkogClient) TriggerRedScanWithOptions(opts RedScanOptions) (*RedScanTr
 	if err != nil {
 		return nil, fmt.Errorf("network error: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -851,7 +851,7 @@ func (c *InkogClient) PollRedProbe(scanID, relayToken string) (*RedProbeResponse
 	if err != nil {
 		return nil, fmt.Errorf("network error: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -907,7 +907,7 @@ func (c *InkogClient) SendRedResponse(scanID, relayToken string, responseBody []
 	if err != nil {
 		return fmt.Errorf("network error: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -931,7 +931,7 @@ func (c *InkogClient) GetRedScanStatus(scanID string) (*RedScanStatusResponse, e
 	if err != nil {
 		return nil, fmt.Errorf("network error: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -962,7 +962,7 @@ func (c *InkogClient) SendToTarget(targetURL string, probeBody []byte) ([]byte, 
 	if err != nil {
 		return nil, 0, fmt.Errorf("target request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20)) // 1MB limit
 	if err != nil {
@@ -1002,7 +1002,7 @@ func (c *InkogClient) ScanMCPServer(serverName, repoURL string) (*SkillScanRespo
 	if err != nil {
 		return nil, fmt.Errorf("network error: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

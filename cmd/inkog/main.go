@@ -96,7 +96,9 @@ func runSkillScan(args []string, serverURL, outputFormat, policy string, deep, q
 		fmt.Fprintf(os.Stderr, "Error: INKOG_API_KEY not set. Get your free key at https://app.inkog.io\n")
 		os.Exit(1)
 	}
-	os.Setenv("INKOG_API_KEY", apiKey)
+	if err := os.Setenv("INKOG_API_KEY", apiKey); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not export INKOG_API_KEY: %v\n", err)
+	}
 
 	// Create client
 	progress := cli.NewProgressReporter(quiet)
@@ -416,7 +418,9 @@ func runRedScan(args []string, serverURL, outputFormat string, quiet bool) {
 		fmt.Fprintf(os.Stderr, "Error: INKOG_API_KEY not set. Get your free key at https://app.inkog.io\n")
 		os.Exit(1)
 	}
-	os.Setenv("INKOG_API_KEY", apiKey)
+	if err := os.Setenv("INKOG_API_KEY", apiKey); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not export INKOG_API_KEY: %v\n", err)
+	}
 
 	progress := cli.NewProgressReporter(quiet)
 	client := cli.NewInkogClient(serverURL, quiet, progress)
@@ -1158,7 +1162,9 @@ func runMCPScan(args []string, serverURL, outputFormat, policy string, deep, qui
 		fmt.Fprintf(os.Stderr, "Error: INKOG_API_KEY not set. Get your free key at https://app.inkog.io\n")
 		os.Exit(1)
 	}
-	os.Setenv("INKOG_API_KEY", apiKey)
+	if err := os.Setenv("INKOG_API_KEY", apiKey); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not export INKOG_API_KEY: %v\n", err)
+	}
 
 	// Create client
 	progress := cli.NewProgressReporter(quiet)
@@ -1834,7 +1840,9 @@ func main() {
 	if apiKey == "" {
 		apiKey = cli.GetSavedAPIKey()
 		if apiKey != "" {
-			os.Setenv("INKOG_API_KEY", apiKey)
+			if err := os.Setenv("INKOG_API_KEY", apiKey); err != nil {
+				fmt.Fprintf(os.Stderr, "warning: could not export INKOG_API_KEY: %v\n", err)
+			}
 		}
 	}
 
@@ -1843,7 +1851,9 @@ func main() {
 		if !isQuietMode && isInteractiveTerminal() {
 			apiKey = runFirstRunExperience(serverURL, *pathFlag)
 			if apiKey != "" {
-				os.Setenv("INKOG_API_KEY", apiKey)
+				if err := os.Setenv("INKOG_API_KEY", apiKey); err != nil {
+					fmt.Fprintf(os.Stderr, "warning: could not export INKOG_API_KEY: %v\n", err)
+				}
 			}
 		}
 
@@ -2733,10 +2743,6 @@ func displayTierSection(findings []contract.Finding, header string, color string
 func displayTieredCodeFrame(f contract.Finding) {
 	// 1. Location line with tier-aware severity
 	severityColor := getSeverityColor(f.Severity)
-	col := f.Column
-	if col == 0 {
-		col = 1
-	}
 
 	// Show tier indicator
 	tierIndicator := ""

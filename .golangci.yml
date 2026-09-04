@@ -9,6 +9,9 @@ linters:
     - ineffassign
     - unused
   settings:
+    staticcheck:
+      # SA (bugs) and S (simplifications) gate CI; ST (style) and QF (quick-fix suggestions) do not.
+      checks: ["all", "-ST*", "-QF*"]
     errcheck:
       exclude-functions:
         - (io.Writer).Write
@@ -29,7 +32,7 @@ linters:
       # Deprecated-API and Printf-with-dynamic-format warnings are tracked separately
       - linters:
           - staticcheck
-        text: "SA1019|SA1006"
+        text: "SA1019"
       # Helper functions kept for upcoming output formats
       - linters:
           - unused
