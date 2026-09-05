@@ -1,0 +1,10 @@
+{
+  "_description": "Failed scan attempts logged by the weekly corpus refresh routine.",
+  "failures": [
+    {
+      "timestamp": "2026-08-30T19:35:03Z",
+      "repo": "szybnev/DVLA",
+      "reason": "HTTP 400 from scan-public API"
+    }
+  ]
+}
