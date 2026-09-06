@@ -1,0 +1,12 @@
+{
+  "_description": "Failed scan attempts for the weekly corpus refresh routine. Each entry records a target that could not be scanned.",
+  "failures": [
+    {
+      "timestamp": "2026-09-06T19:35:02Z",
+      "repo": "szybnev/DVLA",
+      "reason": "no_agent_code",
+      "http_status": 400,
+      "detail": "API returned error code 'no_agent_code' — repository does not contain LLM agent code eligible for scanning. Skipped; next eligible target was used instead."
+    }
+  ]
+}
