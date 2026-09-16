@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.2.4] — 2026-09-16
+
 ### Changed
 - **Toolchain** — Go 1.25 (`go.mod` directive), dependencies updated (`golang.org/x/term`, `x/sys`, `spinner`).
 - **CI** — Go version taken from `go.mod`; adds `go mod verify`, `gofmt`, `go vet`, race-enabled tests, golangci-lint v2, and `govulncheck`.
@@ -119,7 +121,8 @@ Initial public release.
 - **Multi-framework support** — LangChain, LangGraph, CrewAI, AutoGen, OpenAI Agents, Semantic Kernel, LlamaIndex, Haystack, DSPy, Phidata, Smolagents, PydanticAI, Google ADK, n8n, Flowise, Langflow, Dify, Microsoft Copilot Studio, Salesforce Agentforce.
 - **Cross-platform builds** — darwin (amd64, arm64), linux (amd64, arm64), windows (amd64).
 
-[Unreleased]: https://github.com/inkog-io/inkog/compare/v1.2.3...HEAD
+[Unreleased]: https://github.com/inkog-io/inkog/compare/v1.2.4...HEAD
+[1.2.4]: https://github.com/inkog-io/inkog/compare/v1.2.3...v1.2.4
 [1.2.3]: https://github.com/inkog-io/inkog/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/inkog-io/inkog/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/inkog-io/inkog/compare/v1.2.0...v1.2.1
