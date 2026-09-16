@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **CI** — Go version taken from `go.mod`; adds `go mod verify`, `gofmt`, `go vet`, race-enabled tests, golangci-lint v2, and `govulncheck`.
 - **Release** — binaries get SLSA build-provenance attestations and an SPDX SBOM alongside `checksums.txt`.
 - **GitHub Action** — verifies the downloaded binary's SHA-256 against the release's `checksums.txt` before running.
+- **Deep access** — when a Deep scan is refused, the CLI shows the server's message (Inkog Deep is available on request via hello@inkog.io) instead of a hardcoded role hint.
 
 ## [1.2.3] — 2026-09-04
 

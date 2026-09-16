@@ -406,7 +406,7 @@ func (c *InkogClient) TriggerDeepScan(contentType string, body *bytes.Buffer) (*
 	}
 
 	if resp.StatusCode == http.StatusForbidden {
-		return nil, fmt.Errorf("Deep scan requires the Inkog Deep role. Contact your admin to enable it at https://app.inkog.io")
+		return nil, fmt.Errorf("%s", serverErrorMessage(respBody, "Inkog Deep is available on request. Email hello@inkog.io to get access."))
 	}
 
 	if resp.StatusCode == http.StatusUnauthorized {
@@ -490,7 +490,7 @@ func (c *InkogClient) TriggerSkillDeepScan(scanID string) error {
 	case http.StatusOK, http.StatusAccepted:
 		return nil
 	case http.StatusForbidden:
-		return fmt.Errorf("deep scan requires the Inkog Deep role. Contact your admin to enable it at https://app.inkog.io")
+		return fmt.Errorf("%s", serverErrorMessage(body, "Inkog Deep is available on request. Email hello@inkog.io to get access."))
 	case http.StatusUnauthorized:
 		return fmt.Errorf("%s", APIKeyRequiredMessage())
 	case http.StatusConflict:
@@ -1019,4 +1019,23 @@ func (c *InkogClient) ScanMCPServer(serverName, repoURL string) (*SkillScanRespo
 	}
 
 	return &result, nil
+}
+
+// serverErrorMessage extracts the human-readable message from an Inkog API error
+// body ({"error": "...", "code": "..."} or {"message": "..."}), falling back to
+// the given text when the body is not in that shape.
+func serverErrorMessage(body []byte, fallback string) string {
+	var payload struct {
+		Error   string `json:"error"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(body, &payload); err == nil {
+		if payload.Error != "" {
+			return payload.Error
+		}
+		if payload.Message != "" {
+			return payload.Message
+		}
+	}
+	return fallback
 }
