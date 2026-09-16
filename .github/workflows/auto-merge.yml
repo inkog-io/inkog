@@ -26,10 +26,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           BRANCH: ${{ github.event.workflow_run.head_branch }}
         run: |
-          pr=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$BRANCH" --state open --json number,title,author \
-               --jq '.[0]')
+          pr=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$BRANCH" --state open \
+               --json number,title,author,isCrossRepository --jq '.[0]')
           if [ -z "$pr" ] || [ "$pr" = "null" ]; then echo "no open PR for $BRANCH"; exit 0; fi
           number=$(echo "$pr" | jq -r .number); title=$(echo "$pr" | jq -r .title); author=$(echo "$pr" | jq -r .author.login)
+          cross=$(echo "$pr" | jq -r .isCrossRepository)
+          # Only branches pushed to this repository by trusted automation. A fork can name
+          # its branch anything, so the branch prefix alone must never grant a merge.
+          if [ "$cross" != "false" ]; then echo "PR #$number comes from a fork; leaving for a human"; exit 0; fi
+          case "$author" in
+            "dependabot[bot]"|cloakmaster) ;;
+            *) echo "PR #$number by $author is not from trusted automation; leaving for a human"; exit 0 ;;
+          esac
           case "$title" in
             data:*|chore\(changelog\):*|chore\(deps\)*|chore:\ bump*|build\(deps\)*) ;;
             *) echo "PR #$number '$title' is not a routine change; leaving for a human"; exit 0 ;;
