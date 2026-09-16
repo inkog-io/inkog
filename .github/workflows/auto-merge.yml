@@ -1,0 +1,38 @@
+name: Auto-merge routine PRs
+
+# Passive-mode housekeeping: once CI succeeds on a branch pushed by Dependabot or
+# by the Inkog routines (claude/*), squash-merge its pull request. Anything else
+# still needs a human.
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  merge:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      (startsWith(github.event.workflow_run.head_branch, 'dependabot/') ||
+       startsWith(github.event.workflow_run.head_branch, 'claude/'))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Merge the pull request for this branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          pr=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$BRANCH" --state open --json number,title,author \
+               --jq '.[0]')
+          if [ -z "$pr" ] || [ "$pr" = "null" ]; then echo "no open PR for $BRANCH"; exit 0; fi
+          number=$(echo "$pr" | jq -r .number); title=$(echo "$pr" | jq -r .title); author=$(echo "$pr" | jq -r .author.login)
+          case "$title" in
+            data:*|chore\(changelog\):*|chore\(deps\)*|chore:\ bump*|build\(deps\)*) ;;
+            *) echo "PR #$number '$title' is not a routine change; leaving for a human"; exit 0 ;;
+          esac
+          echo "Merging #$number '$title' by $author"
+          gh pr merge "$number" --repo "$GITHUB_REPOSITORY" --squash --delete-branch
