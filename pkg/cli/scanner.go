@@ -517,6 +517,7 @@ func (hs *HybridScanner) scanLocalSecretsAndCollectFiles() ([]contract.Finding, 
 		allFiles = truncateFileMap(allFiles, maxFiles, hs.SourcePath)
 	}
 
+	localFindings = append(localFindings, scanOpenClawFindings(hs.SourcePath, allFiles)...)
 	return localFindings, allFiles, err
 }
 
@@ -758,6 +759,9 @@ func shouldScanFile(path string) bool {
 	filename := filepath.Base(path)
 	if BlockedFiles[filename] {
 		return false
+	}
+	if isOpenClawConfigFile(filename) {
+		return true
 	}
 
 	if filename == "data" && strings.Contains(path, "botcomponents") {
