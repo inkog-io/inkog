@@ -20,13 +20,7 @@
   <img src="demo.gif" width="800" alt="Inkog scanning AI agent code for vulnerabilities">
 </p>
 
-<p align="center">
-  <a href="https://app.inkog.io/report/83556081-478e-4c64-af52-126b8c83eb6d">
-    <img src="docs/screenshots/dashboard-report.png" width="800" alt="Inkog dashboard report — findings, code-level analysis, EU AI Act / NIST / OWASP compliance mapping">
-  </a>
-  <br>
-  <sub><i>Every scan is a shareable report — <a href="https://app.inkog.io/report/83556081-478e-4c64-af52-126b8c83eb6d">view this one live</a></i></sub>
-</p>
+> **Status (October 2026): private beta.** The CLI in this repo is open source, but analysis runs on Inkog's hosted engine, which is currently only switched on for beta scans. [Request a walkthrough →](https://inkog.io/#request)
 
 ---
 
@@ -43,19 +37,15 @@ Most security tools find SQL injection. Inkog finds the things that **only break
 
 Findings map directly to **EU AI Act Article 14 / 15**, **NIST AI RMF**, **ISO 42001**, and **OWASP LLM Top 10** — at the article level, not just bucket labels.
 
-[**Try it on a public repo →**](https://inkog.io/scan)  ·  no signup, results in 60 seconds.
+[**Request a walkthrough →**](https://inkog.io/#request)
 
 ## State of AI Agent Security 2026
 
-**We scanned 500+ open-source AI agents. 85% had at least one vulnerability.**
+**We scanned 561 open-source AI agent repositories (April 2026). 11,705 automated, unreviewed findings; fewer than 7% were exploitable vulnerabilities.**
 
-Other findings from the data:
-
-- **63%** of findings were CRITICAL or HIGH severity
-- **25%** failed EU AI Act Article 14 (human oversight)
-- **11,705** total findings across LangChain · CrewAI · AutoGen · pydantic-ai · LangGraph · MCP servers · OpenAI Agents · n8n · Flowise · DSPy
-
-The largest security analysis of the AI agent ecosystem — original data from automated static analysis, not surveys.
+- **85.6%** of repos had at least one finding; **62.6%** had at least one rated critical or high
+- **25%** had a finding mapped to EU AI Act Article 14 (human oversight)
+- Frameworks include LangChain · CrewAI · AutoGen · pydantic-ai · LangGraph · MCP servers · OpenAI Agents · n8n · Flowise · DSPy
 
 [**Read the full report →**](https://inkog.io/report)
 
@@ -71,7 +61,7 @@ go install github.com/inkog-io/inkog/cmd/inkog@latest
 ```
 
 ```bash
-# Get a free API key at app.inkog.io
+# Needs an API key for the hosted engine (beta partners only right now)
 export INKOG_API_KEY=sk_live_...
 inkog .
 ```
